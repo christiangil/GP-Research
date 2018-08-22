@@ -1,5 +1,5 @@
 using SpecialFunctions
-using JLD
+# using JLD
 
 
 # Linear kernel
@@ -390,13 +390,13 @@ end
 # "true" underlying for the fake observations
 function observations(x, measurement_noise)
     # a phase shifted sine curve with measurement noise and inherent noise
-    measurement_noise += 0.2  # adding a noise component inherent to the activity
+    measurement_noise += 0.2 * ones(length(measurement_noise))  # adding a noise component inherent to the activity
     if length(size(x)) > 1
         shift = 2 * pi * rand(size(x)[2])
-        return [sum(sin.(pi / 2 * x[i,:] + shift)) for i in 1:size(x)[1]] + measurement_noise .^ 2 .* randn(size(x)[1])
+        return [sum(sin.(pi / 2 * x[i,:] + [shift])) for i in 1:size(x)[1]] + measurement_noise .^ 2 .* randn(size(x)[1])
     else
         shift = 2 * pi * rand()
-        return [sum(sin.(pi / 2 * x[i,:] + shift)) for i in 1:length(x)] + measurement_noise .^ 2 .* randn(length(x))
+        return [sum(sin.(pi / 2 * x[i,:] + [shift])) for i in 1:length(x)] + measurement_noise .^ 2 .* randn(length(x))
     end
 end
 
@@ -425,7 +425,7 @@ function get_σ(L_obs, K_obs_samp, K_samp)
     for i in 1:size(K_samp)[1]
         V[i] = K_samp[i, i] - transpose(v[:, i]) * v[:, i]
     end
-    σ = sqrt(V)
+    σ = sqrt.(V)
     return σ
 end
 
@@ -449,7 +449,8 @@ function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return
 
     # actual lower triangular matrix values)
     # L = ridge_chol(K_obs, return_values=true)
-    L = LowerTriangular(L_fact[:L])
+    # L = LowerTriangular(L_fact[:L])  # depreciated in 1.0
+    L = L_fact.L
 
     # these are all equivalent but have different compuatational costs
     # α = inv(L_fact) * y_obs
@@ -477,7 +478,7 @@ function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return
             append!(return_vec, [K_post])
         end
         if return_L
-            L_post = ridge_chol(K_post, return_values=true)
+            L_post = ridge_chol(K_post).L
             append!(return_vec, [L_post])
         end
     end
@@ -503,19 +504,15 @@ function nlogL(hyperparameter_list...)
     # inv_K_obs = inv(K_obs)
     # inv_K_obs = inv(L_fact)  # ~35% faster than inv(K_obs)
     # det_K_obs = det(L_fact)  # ~8% faster than det(K_obs)
-    L_fact = stored_chol(chol_storage, hyperparameters, K_obs; surpress_notification=true)
+    L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
 
     # goodness of fit term
     data_fit = -1 / 2 * (transpose(y_obs) * (L_fact \ y_obs))
-    # println(-data_fit)
     # complexity penalization term
     # penalty = -1 / 2 * log(det_K_obs)
     penalty = -1 / 2 * logdet(L_fact)  # half memory but twice the time
-    # println(-penalty)
     # normalization term (functionally useless)
     normalization = -n / 2 * log(2 * pi)
-    # println(-normalization)
-    # println()
 
     return -1 * (data_fit + penalty + normalization)
 end
@@ -534,7 +531,7 @@ function ∇nlogL(G, hyperparameter_list...)
     # a weirdly necessary dummy variable
     measurement_noise_dummy = measurement_noise
     K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
-    L_fact = stored_chol(chol_storage, hyperparameters, K_obs; surpress_notification=true)
+    L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
     # inv_K_obs = inv(L_fact)
 
 
@@ -542,7 +539,7 @@ function ∇nlogL(G, hyperparameter_list...)
         # derivative of goodness of fit term
         data_fit = 1 / 2 * (transpose(y_obs) * (L_fact \ (dK_dθj * (L_fact \ y_obs))))
         # derivative of complexity penalization term
-        penalty = -1 / 2 * trace(L_fact \ dK_dθj)
+        penalty = -1 / 2 * tr(L_fact \ dK_dθj)
         return -1 * (data_fit + penalty)
     end
 
@@ -556,21 +553,116 @@ function ∇nlogL(G, hyperparameter_list...)
 end
 
 
+# negative log likelihood of the data given the current kernel parameters (as seen on page 19)
+# (negative because scipy has a minimizer instead of a maximizer)
+function nlogL_penalty(hyperparameter_list...)
+
+    hyperparameters = []
+    for i in 1:length(hyperparameter_list)
+        append!(hyperparameters, hyperparameter_list[i])
+    end
+    n=length(y_obs)
+
+    # a weirdly necessary dummy variable
+    measurement_noise_dummy = measurement_noise
+    K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
+
+    # inv_K_obs = inv(K_obs)
+    # inv_K_obs = inv(L_fact)  # ~35% faster than inv(K_obs)
+    # det_K_obs = det(L_fact)  # ~8% faster than det(K_obs)
+    L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
+
+    # goodness of fit term
+    data_fit = -1 / 2 * (transpose(y_obs) * (L_fact \ y_obs))
+    # complexity penalization term
+    # penalty = -1 / 2 * log(det_K_obs)
+    penalty = -1 / 2 * logdet(L_fact)  # half memory but twice the time
+    # normalization term (functionally useless)
+    normalization = -n / 2 * log(2 * pi)
+
+    # lower = zeros(length(hyperparameters))
+    lower = -10 * ones(length(hyperparameters))
+    lower[(total_coefficients + 1):length(hyperparameters)] = 0
+    upper = 10 * ones(length(hyperparameters))
+
+    add_penalty = 0
+    for i in 1:length(hyperparameters)
+        if hyperparameters[i] > upper[i]
+            add_penalty += hyperparameters[i] - upper[i]
+        elseif hyperparameters[i] < lower[i]
+            add_penalty += lower[i] - hyperparameters[i]
+        end
+    end
+
+    return -1 * (data_fit + penalty + normalization) + add_penalty
+end
+
+
+# http://www.gaussianprocess.org/gpml/chapters/RW5.pdf
+# gradient of negative log likelihood of the data given the current kernel parameters (as seen on page 19)
+# (negative because scipy has a minimizer instead of a maximizer)
+function ∇nlogL_penalty(G, hyperparameter_list...)
+
+    hyperparameters = []
+    for i in 1:length(hyperparameter_list)
+        append!(hyperparameters, hyperparameter_list[i])
+    end
+
+    # a weirdly necessary dummy variable
+    measurement_noise_dummy = measurement_noise
+    K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
+    L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
+    # inv_K_obs = inv(L_fact)
+
+    # lower = zeros(length(hyperparameters))
+    lower = -10* ones(length(hyperparameters))
+    lower[(total_coefficients + 1):length(hyperparameters)] = 0
+    upper = 10 * ones(length(hyperparameters))
+
+    function grad(dK_dθj)
+        # derivative of goodness of fit term
+        data_fit = 1 / 2 * (transpose(y_obs) * (L_fact \ (dK_dθj * (L_fact \ y_obs))))
+        # derivative of complexity penalization term
+        penalty = -1 / 2 * tr(L_fact \ dK_dθj)
+
+        add_penalty = 0
+        for i in 1:length(hyperparameters)
+            if hyperparameters[i] > upper[i]
+                add_penalty = 1
+            elseif hyperparameters[i] < lower[i]
+                add_penalty = -1
+            end
+        end
+
+        return -1 * (data_fit + penalty) + add_penalty
+    end
+
+    # taking some burden off of recalculating the coefficient orders used by the automatic differentiation
+    coeff_orders = coefficient_orders(n_out, n_dif)
+
+    for i in 1:(length(hyperparameters))
+        G[i] = grad(total_covariance(x_obs, x_obs, hyperparameters; dKdθ=i, coeff_orders=coeff_orders))
+    end
+
+
+end
+
+
 # creating a Cholesky factorization storage structure
 struct chol_struct
     hyperparameters
-    cholfactor
+    cholesky_object
 end
 
 
 # An effort to avoid recalculating Cholesky factorizations
-function stored_chol(chol_storage, new_hyper, A; return_values=false, surpress_notification=false)
+function stored_chol(chol_storage, new_hyper, A; return_values=false, notification=true)
 
     # if the Cholesky factorization wasn'y just calculated, calculate a new one.
     if chol_storage.hyperparameters != new_hyper
-        chol_storage = chol_struct(new_hyper, ridge_chol(A; return_values=return_values, surpress_notification=surpress_notification))
+        chol_storage = chol_struct(new_hyper, ridge_chol(A; notification=notification))
     end
-    return chol_storage.cholfactor
+    return chol_storage.cholesky_object
 
 end
 
@@ -611,7 +703,7 @@ end
 
 
 # a small function to get indices that make sense from Julia's reshaping routine
-proper_index(i) = 1 + [convert(Int64, rem(i - 1, n_out)), convert(Int64, floor((i -1) / n_out))]
+proper_index(i) = [convert(Int64, rem(i - 1, n_out)) + 1, convert(Int64, floor((i -1) / n_out)) + 1]
 
 
 # getting the coefficients for constructing differentiated versions of the kernel

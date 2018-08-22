@@ -1,4 +1,5 @@
 # include("reusable_code.jl")
+using LinearAlgebra
 
 
 # a generalized version of the built in append!() function
@@ -32,33 +33,32 @@ function symmetric_A(A)
 end
 
 
-# Returns the type of cholesky factorization process that is desired
-# either the raw values of the matrix or the factorization type
-function genernal_chol(A; return_values=false)
-
-    factor = cholfact(A, :L)
-    if return_values
-        return LowerTriangular(factor[:L])
-    else
-        return factor
-    end
-end
+# # Returns the type of cholesky factorization process that is desired
+# # either the raw values of the matrix or the factorization type
+# # depreciated in 1.0
+# function genernal_chol(A; return_values=false)
+#
+#     factor = cholfact(A, :L)
+#     if return_values
+#         return LowerTriangular(factor[:L])
+#     else
+#         return factor
+#     end
+# end
 
 
 # adds a ridge to a Cholesky factorization if necessary
-function ridge_chol(A; return_values=false, surpress_notification=false)
-
-    # an arbitrarily sized ridge
-    ridge = 1e-10
+function ridge_chol(A; notification=true, ridge=1e-10)
 
     # only add a small ridge if necessary
     try
-        factor = genernal_chol(A, return_values=return_values)
+        factor = cholesky(A)
     catch
-        if !surpress_notification
+        if notification
             println("had to add a ridge")
         end
-        factor = genernal_chol(A + ridge * eye(size(A)[1]), return_values=return_values)
+        # factor = genernal_chol(A + ridge * eye(size(A)[1]), return_values=return_values)  # depreciated in 1.0
+        factor = cholesky(A + UniformScaling(ridge))
     end
 
 end
@@ -87,8 +87,11 @@ function product_rule(dorder)
             total_copy[:, 1] = total_copy[:, 1] * binomial(dorder[i], j)
 
             # setting the new dorders for this parameter
-            total_copy[:, i + 1] = dorder[i] - j
-            total_copy[:, i + 1 + length(dorder)] = j
+            # total_copy[:, i + 1] = dorder[i] - j  # depreciated in 1.0
+            # total_copy[:, i + 1 + length(dorder)] = j  # depreciated in 1.0
+            current_length = size(total_copy)[1]
+            total_copy[:, i + 1] = (dorder[i] - j) * ones(current_length)
+            total_copy[:, i + 1 + length(dorder)] = j * ones(current_length)
 
             # add this to the holding matrix
             hold = vcat(hold, total_copy)
@@ -122,11 +125,19 @@ end
 
 # find differences between two arrays and set values smaller than a threshold
 # to be zero
+# use isapprox instead if you care about whether about boolean result
 function signficant_difference(A1, A2, dif)
     A1mA2 = abs.(A1 - A2);
     A1mA2[A1mA2 .< (max(A1, A2) * ones(size(A1mA2)) * dif)] = 0;
     # A1mA2[A1mA2 .< (ones(size(A1mA2)) * sqrt(dif))] = 0;
     return A1mA2
+end
+
+
+# function similar to Mathematica's Chop[]
+function chop_array(A; dif = 1e-6)
+    A[abs.(A) .< dif] = 0;
+    return A
 end
 
 
@@ -139,3 +150,6 @@ end
 function finite_differences(f, x, n, h)
     return sum([(-1) ^ i * binomial(n, i) * f(x + (n / 2 - i) * h) for i in 0:n] / h ^ n)
 end
+
+
+linspace(start, stop, length) = range(start, stop=stop, length=length)

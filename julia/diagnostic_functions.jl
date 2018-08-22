@@ -1,5 +1,7 @@
 # these are all custom diagnostic functions. May help with debugging
 
+# using JLD
+
 # save all of the A matrices calculated in the total covariance function when using
 # multiple GP outputs and GP models that include derivatives of themselves
 function save_A(A)
@@ -36,7 +38,7 @@ function plot_A(;dims=[n_dif, n_dif])
 end
 
 # plot a trace of all of the K sub-matrices
-function plot_K(K_samp)
+function plot_K_trace(K_samp)
 
     # intializing the data matrix as something other than an Any matrix
     data = [1]
@@ -60,10 +62,11 @@ end
 # estimate the gradient of nlogL with forward differences
 # could use code like this to compare the analytical version with the numerical version
 #
-# G = zeros(length(hyperparameters))
-# ∇nlogL(G, hyperparameters)
+# test = rand(length(hyperparameters))
+# G = zeros(length(test))
+# ∇nlogL(G, test)
 # println(G)
-# println(est_grad(hyperparameters; dif=0.0001))
+# println(est_grad(test; dif=0.0001))
 #
 function est_grad(hyper; dif=0.0001)
     val = nlogL(hyper)

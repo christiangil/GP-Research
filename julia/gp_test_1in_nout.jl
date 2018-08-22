@@ -41,14 +41,16 @@ function kernel(hyperparameters, x1, x2; dorder=[0,0], dKdθ=0, products = 0)
 
 
     # this function mostly exists so I have to write fewer characters lol
+
+    #
     function kernel_piece(hyper, dif, products_line)
 
         # amount of possible derivatives on each function
         dorders = length(hyper) + length(dorder)
 
         # get the derivative orders for functions 1 and 2
-        dorder1 = floats2ints(products_line[1 + (1:dorders)]; allow_negatives=false)
-        dorder2 = floats2ints(products_line[1 + ((dorders + 1):(2 * dorders))]; allow_negatives=false)
+        dorder1 = floats2ints(products_line[2:(dorders+1)]; allow_negatives=false)
+        dorder2 = floats2ints(products_line[(dorders + 2):(2 * dorders+1)]; allow_negatives=false)
 
         # return 0 if you know that that portion will equal 0
         # this is when you are deriving one of the kernels by a hyperparameter
@@ -102,16 +104,8 @@ function kernel(hyperparameters, x1, x2; dorder=[0,0], dKdθ=0, products = 0)
         products = product_rule(new_dorder)
     end
 
-    # initialize the return value
-    final = 0
-
     # add all of the differentiated kernels together according to the product rule
-    for i in 1:size(products)[1]
-        # final += (products[i, 1]
-        #     * dRBFdt_kernel(hyperparameters[length(hyperparameters) - 2], dif_vec[1], products[i, 2:3)])
-        #     * dPeriodicdt_kernel(hyperparameters[(length(hyperparameters) - 1):length(hyperparameters)], dif_vec[1], products[i, (2 + length(dorder)):(3 + length(dorder))]))
-        final += + products[i, 1] * kernel_piece(hyperparameters[(length(hyperparameters) - 2):length(hyperparameters)], dif_vec[1], products[i,:])
-    end
+    final = sum([products[i, 1] * kernel_piece(hyperparameters[(length(hyperparameters) - 2):length(hyperparameters)], dif_vec[1], products[i,:]) for i in 1:size(products)[1]])
 
     return final
 
@@ -146,7 +140,8 @@ function total_covariance(x1list, x2list, hyperparameters; dKdθ=0, coeff_orders
 
     # only calculating each sub-matrix once and using the fact that they should
     # be basically the same if the kernel has been differentiated the same amount of times
-    A_list = Array{Any}(2 * n_dif - 1)
+    # A_list = Array{Any}(2 * n_dif - 1)  # depreciated in 1.0
+    A_list = Array{Any}(nothing, 2 * n_dif - 1)
     for k in 1:(2 * n_dif - 1)
         dorder = [0, k - 1]
 
@@ -252,6 +247,7 @@ end
 # kernel hyper parameters
 # AFFECTS SHAPE OF THE GP's
 # make sure you have the right amount!
+# a = [[1 .2];]
 a = [[1 .2];[2 .3]]
 # a = [[1  0.7 3];[0.4  1.5 3];[1 1 1]]
 kernel_lengths = [2, 2, 2]
@@ -286,36 +282,21 @@ amount_of_total_samp_points = amount_of_samp_points * n_out
 K_samp = total_covariance(x_samp, x_samp, hyperparameters)
 
 # getting the Cholesky factorization of the covariance matrix (for drawing GPs)
-L_samp = ridge_chol(K_samp; return_values=true)
+L_samp = ridge_chol(K_samp).L
+
 
 # showing a heatmap of the covariance matrix
-plot(heatmap(z=K_samp, colorscale="Viridis"))
-# plot_K(K_samp)
-
-
-# noise to add to gaussians (to simulate observations)
-GP_noise = .1
-
-# how many GPs to plot
-amount_of_GPs = 10
-
-# plotting amount_of_GPs randomly drawn Gaussian processes using the kernel
-# function to correlate points
-GP_funcs = zeros((amount_of_GPs, amount_of_total_samp_points))
-GP_obs = zeros((amount_of_GPs, amount_of_total_samp_points))
-
-# variables initialized in for loops or if statements are not saved
-for i in 1:amount_of_GPs
-    # sampled possible GP function values
-    GP_func = L_samp * randn(amount_of_total_samp_points)
-    GP_funcs[i, :] = GP_func
-    # sampled possible GP observations (that have noise)
-    GP_obs[i, :] = GP_func + GP_noise  *randn(amount_of_total_samp_points)
+# plot(heatmap(z=K_samp, colorscale="Viridis"))  # PlotlyJS
+function plot_K(K)
+    figure(figsize=(8, 8))
+    imshow(K[:,:])
+    colorbar()
 end
 
-plot(traces(x_samp, GP_funcs[:, 1:size(x_samp)[1]]), layout)
-plot(traces(x_samp, GP_funcs[:, size(x_samp)[1] + 1:2 * size(x_samp)[1]]), layout)
-plot(traces(x_samp, GP_funcs[:, 2* size(x_samp)[1] + 1:3 * size(x_samp)[1]]), layout)
+
+plot_K(K_samp)
+# plot_K_trace(K_samp)
+
 
 # creating observations to test methods on
 amount_of_measurements = 20
@@ -323,12 +304,12 @@ amount_of_measurements = 20
 # Uncertainty in the data (AFFECTS SPREAD OF DATA AND HOW TIGHTLY THE GP's WILL
 # TRY TO HUG THE DATA) aka how much noise is added to measurements and
 # measurement covariance function
-# can be a single Float64 or a vector of length = amount_of_measurements
+# a vector of length = amount_of_measurements
 measurement_noise = 0.3 * ones(amount_of_measurements)
 
 # x_obs = linspace(0,domain,amount_of_measurements)  # observation inputs
 # srand(1234)
-# observations taken at random poinst in the measurement domain
+# observations taken at random points in the measurement domain
 x_obs = domain[1] * rand((amount_of_measurements))
 
 # sorting inputs
@@ -342,9 +323,9 @@ else
 end
 
 # getting simulated measurement values
-y_obs = observations(x_obs, measurement_noise)  # observation outputs
-for i in 2:n_out
-    y_obs = vcat(y_obs, observations(x_obs, measurement_noise))
+y_obs = zeros(n_out * amount_of_measurements)
+for i in 1:n_out
+    y_obs[(amount_of_measurements * (i - 1) + 1):(amount_of_measurements * i)] = observations(x_obs, measurement_noise)
 end
 
 
@@ -354,58 +335,130 @@ function custom_line_plot(x_samp, L, x_obs, y_obs; output=1, draws=5000, σ=1, m
     # same curves are drawn every time?
     # srand(100)
 
+    # initialize figure size
+    figure(figsize=(10,6))
+
+    # the indices corresponding to the proper output
+    output_indices = (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)
+
+    # geting the y values for the proper output
     y = y_obs[(amount_of_measurements * (output - 1) + 1):(amount_of_measurements * output)]
+
+    # initializing storage for example GPs to be plotted
+    show_curves = zeros(show, amount_of_samp_points)
 
     # if no analytical variance is passed, estimate it with sampling
     if σ == 1
 
+        # calculate a bunch of GP draws
         storage = zeros((draws, amount_of_total_samp_points))
         for i in 1:draws
-            storage[i, :] = L * randn(amount_of_total_samp_points) + mean
+            storage[i, :] = (L * randn(amount_of_total_samp_points)) + mean
         end
 
-        storage = storage[:, (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
+        # ignore the outputs that aren't meant to be plotted
+        storage = storage[:, output_indices]
 
-        show_curves = storage[1:show, :]
-        storage = sort(storage, 1)
+        #
+        show_curves[:, :] = storage[1:show, :]
+        storage = sort(storage, dims=1)
 
         # filling the 5-95th percentile with a transparent orange
-        upper = scatter(;x=x_samp, y=storage[convert(Int64, 0.95 * draws),:], mode="lines", line_width=0)
-        lower = scatter(;x=x_samp, y=storage[convert(Int64, 0.05 * draws),:], fill="tonexty", mode="lines", line_width=0)
+        fill_between(x_samp, storage[convert(Int64, 0.95 * draws), :], storage[convert(Int64, 0.05 * draws), :], alpha=0.3, color="orange")
 
-        mean = mean[(amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
+        # needs to be in both leaves of the if statement
+        mean = mean[output_indices]
 
     else
 
-        show_curves = zeros((show, amount_of_total_samp_points))
+        storage = zeros((show, amount_of_total_samp_points))
         for i in 1:show
-            show_curves[i,:] = L * randn(amount_of_total_samp_points) + mean
+            storage[i,:] = L * randn(amount_of_total_samp_points) + mean
         end
+        show_curves[:, :] = storage[:, output_indices]
 
-        show_curves = show_curves[:, (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
+        σ = σ[output_indices]
 
-        mean = mean[(amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
-        σ = σ[(amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
+        mean = mean[output_indices]
+
 
         # filling the 5-95th percentile with a transparent orange
-        upper = scatter(;x=x_samp, y=mean + 1.96 * σ, mode="lines", line_width=0)
-        lower = scatter(;x=x_samp, y=mean - 1.96 * σ, fill="tonexty", mode="lines", line_width=0)
+        fill_between(x_samp, mean + 1.96 * σ, mean - 1.96 * σ, alpha=0.3, color="orange")
 
     end
 
-    median = scatter(;x=x_samp, y=mean, mode="lines", line_width=4, line_color="rgb(0, 0, 0)")
-    data_trace = scatter(;x=x_obs, y=y, mode="markers", marker_size=12, marker_color="rgb(0, 0, 0)")
-    return plot(append([upper, lower, median], traces(x_samp, show_curves), [data_trace]), layout)
+
+    plot(x_samp, mean, color="black", zorder=2)
+    for i in 1:show
+        plot(x_samp, show_curves[i, :], alpha=0.5, zorder=1)
+    end
+    scatter(x_obs, y, color="black", zorder=2)
+
+    xlabel("x (time)")
+    ylabel("y (flux or something lol)")
+    title("test")
 
 end
 
-using Rsvg
+
+# # quick and dirty function for creating plots that show what I want
+# function custom_line_plot(x_samp, L, x_obs, y_obs; output=1, draws=5000, σ=1, mean=zeros(amount_of_total_samp_points), show=10)
+#
+#     # same curves are drawn every time?
+#     # srand(100)
+#
+#     y = y_obs[(amount_of_measurements * (output - 1) + 1):(amount_of_measurements * output)]
+#
+#     # if no analytical variance is passed, estimate it with sampling
+#     if σ == 1
+#
+#         storage = zeros((draws, amount_of_total_samp_points))
+#         for i in 1:draws
+#             storage[i, :] = L * randn(amount_of_total_samp_points) + mean
+#         end
+#
+#         storage = storage[:, (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
+#
+#         show_curves = storage[1:show, :]
+#         storage = sort(storage, 1)
+#
+#         # filling the 5-95th percentile with a transparent orange
+#         upper = scatter(;x=x_samp, y=storage[convert(Int64, 0.95 * draws),:], mode="lines", line_width=0)
+#         lower = scatter(;x=x_samp, y=storage[convert(Int64, 0.05 * draws),:], fill="tonexty", mode="lines", line_width=0)
+#
+#         mean = mean[(amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
+#
+#     else
+#
+#         show_curves = zeros((show, amount_of_total_samp_points))
+#         for i in 1:show
+#             show_curves[i,:] = L * randn(amount_of_total_samp_points) + mean
+#         end
+#
+#         show_curves = show_curves[:, (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
+#
+#         mean = mean[(amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
+#         σ = σ[(amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
+#
+#         # filling the 5-95th percentile with a transparent orange
+#         upper = scatter(;x=x_samp, y=mean + 1.96 * σ, mode="lines", line_width=0)
+#         lower = scatter(;x=x_samp, y=mean - 1.96 * σ, fill="tonexty", mode="lines", line_width=0)
+#
+#     end
+#
+#     median = scatter(;x=x_samp, y=mean, mode="lines", line_width=4, line_color="rgb(0, 0, 0)")
+#     data_trace = scatter(;x=x_obs, y=y, mode="markers", marker_size=12, marker_color="rgb(0, 0, 0)")
+#     return plot(append([upper, lower, median], traces(x_samp, show_curves), [data_trace]), layout)
+#
+# end
+
+
 plt = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=1)
-savefig(plt, "figs/GP/initial_gp_1.pdf")
+# savefig(plt, "figs/GP/initial_gp_1.pdf")
 plt = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=2)
-savefig(plt, "figs/GP/initial_gp_2.pdf")
-plt = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=3)
-savefig(plt, "figs/GP/initial_gp_3.pdf")
+# savefig(plt, "figs/GP/initial_gp_2.pdf")
+# plt = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=3)
+# savefig(plt, "figs/GP/initial_gp_3.pdf")
 
 # calculate posterior quantities
 mean_post, return_vec = GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters, return_K=true, return_L=true, return_σ=true)
@@ -421,51 +474,59 @@ mean_post, return_vec = GP_posteriors(x_obs, x_samp, measurement_noise, hyperpar
 
 # for 1D GPs
 plt = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1)
-savefig(plt, "figs/GP/cond_initial_gp_1.pdf")
+# savefig(plt, "figs/GP/cond_initial_gp_1.pdf")
 plt = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2)
-savefig(plt, "figs/GP/cond_initial_gp_2.pdf")
-plt = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3)
-savefig(plt, "figs/GP/cond_initial_gp_3.pdf")
+# savefig(plt, "figs/GP/cond_initial_gp_2.pdf")
+# plt = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3)
+# savefig(plt, "figs/GP/cond_initial_gp_3.pdf")
 
 # numerically maximize the likelihood to find the best hyperparameters
 # Pkg.add("Optim")
 using Optim
 
 # storing initial hyperparameters
-initial_x = hyperparameters
+initial_x = copy(hyperparameters)
 
 # initializing Cholesky factorization storage
 chol_storage = chol_struct(initial_x, ridge_chol(K_observations(x_obs, measurement_noise, initial_x)))
 
 # lower = zeros(length(hyperparameters))
-lower = -4 * ones(length(hyperparameters))
-lower[(total_coefficients + 1):length(hyperparameters)] = 0
-upper = 7 * ones(length(hyperparameters))
-inner_optimizer = GradientDescent()
+# lower = -4 * ones(length(hyperparameters))
+# lower[(total_coefficients + 1):length(hyperparameters)] = 0
+# upper = 7 * ones(length(hyperparameters))
 
-# can optimize with our without using the analytical gradient
-# takes about the same amount of time
-result = @time optimize(nlogL, ∇nlogL, lower, upper, initial_x, Fminbox(inner_optimizer))
-result_nograd = @time optimize(nlogL, lower, upper, initial_x, SAMIN(), Optim.Options(iterations=10^6))
+# can optimize with or without using the analytical gradient
+# times listed are for optimizing 2 outputs with first order derivatives (7 hyperparameters)
+
+# use gradient
+# tic(); result1 = optimize(nlogL, ∇nlogL, lower, upper, initial_x, Fminbox(GradientDescent())); toc()  # 272.3 s
+# tic(); result2 = optimize(nlogL, ∇nlogL, initial_x, ConjugateGradient()); toc()  # 54.0 s, gave same result as Fminbox
+# tic(); result3 = optimize(nlogL, ∇nlogL, initial_x, GradientDescent()); toc()  # 116.8 s, gave same result as SA
+@elapsed result = optimize(nlogL, ∇nlogL, initial_x, LBFGS())
+# tic(); result = optimize(nlogL_penalty, ∇nlogL_penalty, initial_x, LBFGS()); toc()  # 19.8 s, unique result
+
+# don't use gradient
+# tic(); result5 = @time optimize(nlogL, lower, upper, initial_x, SAMIN(), Optim.Options(iterations=10^6)); toc()  # 253.4 s
+
+# println(result1.minimizer)
+# println(result1.minimum)
+# println(result2.minimizer)
+# println(result2.minimum)
+# println(result3.minimizer)
+# println(result3.minimum)
+# println(result4.minimizer)
+# println(result4.minimum)
+# println(result5.minimizer)
+# println(result5.minimum)
 
 println("old hyperparameters")
 println(initial_x)
 
-println("Gradient descent")
+println("new hyperparameters")
 println(result.minimizer)
 println(result.minimum)
-println("Simulated annealing")
-println(result_nograd.minimizer)
-println(result_nograd.minimum)
 
-# can take the better of the two results or just one of them
-if result.minimum < result_nograd.minimum
-    final_hyperparameters = result.minimizer
-else
-    final_hyperparameters = result_nograd.minimizer
-end
-# final_hyperparameters = result.minimizer
-# final_hyperparameters = result_nograd.minimizer
+final_hyperparameters = result.minimizer
 
 # reruning analysis of posterior with the "most likley" kernel amplitude and lengthscale
 # recalculating posterior covariance and mean function
@@ -479,11 +540,20 @@ mean_post, return_vec = GP_posteriors(x_obs, x_samp, measurement_noise, final_hy
 
 # for 1D GPs
 plt = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1)
-savefig(plt, "figs/GP/fit_gp_1.pdf")
+# savefig(plt, "figs/GP/fit_gp_1.pdf")
 plt = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2)
-savefig(plt, "figs/GP/fit_gp_2.pdf")
-plt = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3)
-savefig(plt, "figs/GP/fit_gp_3.pdf")
+# savefig(plt, "figs/GP/fit_gp_2.pdf")
+# plt = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3)
+# savefig(plt, "figs/GP/fit_gp_3.pdf")
+
+
+
+
+
+
+
+
+
 
 
 # create a contour plot that is smooth and puts an x on the [minx, miny] point
@@ -495,7 +565,7 @@ function custom_contour(x, y, z, min_x, min_y)
         showlegend=false)
     return plot([main, best_point])
 
-end
+# end
 
 
 # creating corner plots

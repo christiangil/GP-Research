@@ -6,7 +6,7 @@ include("all_functions.jl")
 # Pkg.add("HDF5")
 # Pkg.add("Rsvg")
 
-
+using JLD
 using RvSpectraKitLearn
 using MultivariateStats
 using HDF5
@@ -15,6 +15,7 @@ using HDF5
 # path_to_spectra = "/gpfs/group/ebf11/default/SOAP_output/May_runs"
 # test = "/Users/cjg66/Downloads/lambda-3923-6664-3years_174spots_diffrot_id980.h5"
 test = "D:/Christian/Downloads/lambda-3923-6664-3years_174spots_diffrot_id9.h5"
+# test = "C:/Users/chris/Downloads/lambda-3923-6664-3years_174spots_diffrot_id9.h5"
 fid = h5open(test, "r")
 objects = names(fid)
 println(objects)
@@ -37,10 +38,17 @@ read(quiet)
 quiet[:]
 
 lam_slice = :
-phase_slice = 1:convert(Int64, round(2190))
+phase_slice = :  # 1:convert(Int64, round(2190))
 obs = @time act[lam_slice, phase_slice];
-lambda = lam[lam_slice];
-phases = phase[phase_slice]
+# lambda = lam[lam_slice];
+# save("lambda.jld", "data", lambda)
+lambda = load("lambda.jld")["data"]
+# phases = phase[phase_slice]
+# save("phases.jld", "data", phases)
+phases = load("phases.jld")["data"]
+# quiet = quiet[:];
+# save("quiet.jld", "data", quiet)
+quiet = load("quiet.jld")["data"]
 
 # pca_out = @time fit_pca_default(obs, max_num_components=6);
 #
@@ -84,29 +92,48 @@ phases = phase[phase_slice]
 # doppler component basis vector? Based on how adjacent bins would grow if there was a shift?
 # can use simple derivatives or derivatives of fitted GPs?
 # returns doppler basis vector
-doppler_comp = @time calc_doppler_component_simple(lambda, obs)
+# doppler_comp = @time calc_doppler_component_simple(lambda, obs)
 # doppler_comp = calc_doppler_component_gp(lambda,obs)
+# save("doppler_comp.jld", "data", doppler_comp)
+doppler_comp = load("doppler_comp.jld")["data"]
+sum(abs2, doppler_comp)
 
 # Compute first num_components (can be specified) basis vectors for PCA, after
 # subtracting projection onto fixed_comp (the doppler component we passed)
 # returns mu, M, scores (mean spectra, basis vectors, and PCA scores)
-genpca_out = @time fit_gen_pca_rv(obs, doppler_comp)
+# genpca_out = @time fit_gen_pca_rv(obs, doppler_comp)
+# save("genpca_out.jld", "data", genpca_out)
+genpca_out = load("genpca_out.jld")["data"]
+mu, M, scores = genpca_out
+M = M'
+M[1, :] = M[1, :] / sum(abs2, M[1, :])
+scores = scores'
 
 # converting scores for doppler component basis vector into actual RV units (m/s)
-rvs_out = est_rvs_from_pc(obs, genpca_out[1], genpca_out[2][:,1])
+# rvs_out = est_rvs_from_pc(obs, genpca_out[1], genpca_out[2][:,1])
+# save("rvs_out.jld", "data", rvs_out)
+rvs_out = load("rvs_out.jld")["data"]
 
 plot(line_trace(phases, rvs_out))
-# plot(line_trace(lambda, doppler_comp))
+plot(traces(lambda, M))
+plot(traces(phases, scores))
 
-# rms = sqrt(sum(abs2,rvs_out)/length(rvs_out))
+
+sum(abs2,genpca_out[2][:,3])
+
+
+rms = sqrt(sum(abs2,rvs_out)/length(rvs_out))
 # println(" rms = ", rms)
 
+rvs_out = chop_array(rvs_out; dif = 5e-3)
+plot(line_trace(phases, rvs_out))
+phases[length(phases)]
 
 
 # HDF5 manipulation
 
 # # fid=h5open(test,"r")
-# # names(fid)  # Names of datasets
+# names(fid)  # Names of datasets
 # names(attrs(fid))  # Names of attributes (for file)
 # Temp = read(attrs(fid)["Temp"])  # Read a file attribute value
 # names(attrs(fid["lambdas"]))  # Get names of attributes (for dataset)
