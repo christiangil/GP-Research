@@ -1,5 +1,4 @@
 using SpecialFunctions
-# using JLD
 
 
 # Linear kernel
@@ -350,8 +349,8 @@ function covariance(x1list, x2list, hyperparameters; dorder=[0, 0], symmetric=fa
         equal_spacing = false
     end
 
-    x1_length = size(x1list)[1]
-    x2_length = size(x2list)[1]
+    x1_length = size(x1list, 1)
+    x2_length = size(x2list, 1)
     K = zeros((x1_length, x2_length))
 
     if equal_spacing && symmetric
@@ -392,8 +391,8 @@ function observations(x, measurement_noise)
     # a phase shifted sine curve with measurement noise and inherent noise
     measurement_noise += 0.2 * ones(length(measurement_noise))  # adding a noise component inherent to the activity
     if length(size(x)) > 1
-        shift = 2 * pi * rand(size(x)[2])
-        return [sum(sin.(pi / 2 * x[i,:] + [shift])) for i in 1:size(x)[1]] + measurement_noise .^ 2 .* randn(size(x)[1])
+        shift = 2 * pi * rand(size(x, 2))
+        return [sum(sin.(pi / 2 * x[i,:] + [shift])) for i in 1:size(x, 1)] + measurement_noise .^ 2 .* randn(size(x, 1))
     else
         shift = 2 * pi * rand()
         return [sum(sin.(pi / 2 * x[i,:] + [shift])) for i in 1:length(x)] + measurement_noise .^ 2 .* randn(length(x))
@@ -403,16 +402,16 @@ end
 
 # adding measurement noise to K_obs
 function K_observations(x_obs, measurement_noise, hyperparameters)
-    for i in 2:n_out
-        measurement_noise = vcat(measurement_noise, measurement_noise)
+    K_obs = total_covariance(x_obs, x_obs, hyperparameters)
+    total_amount_of_measurements = size(x_obs, 1)
+    for i in 1:total_amount_of_measurements
+        K_obs[i, i] +=  measurement_noise[i] ^ 2
     end
-    amount_of_measurements = size(x_obs)[1]
-    amount_of_outputs = amount_of_measurements * n_out
-    noise_I = zeros((amount_of_outputs, amount_of_outputs))
-    for i in 1:amount_of_outputs
-        noise_I[i, i] =  measurement_noise[i] ^ 2
-    end
-    K_obs = total_covariance(x_obs, x_obs, hyperparameters) + noise_I
+    # noise_I = zeros((total_amount_of_measurements, total_amount_of_measurements))
+    # for i in 1:total_amount_of_measurements
+    #     noise_I[i, i] =  measurement_noise[i] ^ 2
+    # end
+    # K_obs = K_obs + noise_I
     return symmetric_A(K_obs)
 end
 
@@ -421,8 +420,8 @@ end
 function get_σ(L_obs, K_obs_samp, K_samp)
 
     v = L_obs \ K_obs_samp
-    V = zeros(size(K_samp)[1])
-    for i in 1:size(K_samp)[1]
+    V = zeros(size(K_samp, 1))
+    for i in 1:size(K_samp, 1)
         V[i] = K_samp[i, i] - transpose(v[:, i]) * v[:, i]
     end
     σ = sqrt.(V)
@@ -452,7 +451,7 @@ function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return
     # L = LowerTriangular(L_fact[:L])  # depreciated in 1.0
     L = L_fact.L
 
-    # these are all equivalent but have different compuatational costs
+    # these are all equivalent but have different computational costs
     # α = inv(L_fact) * y_obs
     # α = transpose(L) \ (L \ y_obs)
     α = L_fact \ y_obs

@@ -105,7 +105,7 @@ function kernel(hyperparameters, x1, x2; dorder=[0,0], dKdθ=0, products = 0)
     end
 
     # add all of the differentiated kernels together according to the product rule
-    final = sum([products[i, 1] * kernel_piece(hyperparameters[(length(hyperparameters) - 2):length(hyperparameters)], dif_vec[1], products[i,:]) for i in 1:size(products)[1]])
+    final = sum([products[i, 1] * kernel_piece(hyperparameters[(length(hyperparameters) - 2):length(hyperparameters)], dif_vec[1], products[i,:]) for i in 1:size(products, 1)])
 
     return final
 
@@ -117,7 +117,7 @@ end
 function total_covariance(x1list, x2list, hyperparameters; dKdθ=0, coeff_orders=0)
 
     # calculating the total size of the multi-output covariance matrix
-    point_amount = [size(x1list)[1], size(x2list)[1]]
+    point_amount = [size(x1list, 1), size(x2list, 1)]
     K = zeros((n_out * point_amount[1], n_out * point_amount[2]))
 
     non_coefficient_hyperparameters = length(hyperparameters) - total_coefficients
@@ -267,9 +267,9 @@ x1_samp = linspace(0, domain[1], amount_of_samp_points[1])
 x_samp = x1_samp
 
 # how many outputs there will be
-n_out = size(a)[1]
+n_out = size(a, 1)
 # how many differentiated versions of the original GP there will be
-n_dif = size(a)[2]
+n_dif = size(a, 2)
 
 total_coefficients = n_out * n_dif
 
@@ -282,7 +282,7 @@ amount_of_total_samp_points = amount_of_samp_points * n_out
 K_samp = total_covariance(x_samp, x_samp, hyperparameters)
 
 # getting the Cholesky factorization of the covariance matrix (for drawing GPs)
-L_samp = ridge_chol(K_samp).L
+L_samp = ridge_chol(K_samp).L  # usually has to add a ridge
 
 
 # showing a heatmap of the covariance matrix
@@ -295,8 +295,6 @@ end
 
 
 plot_K(K_samp)
-# plot_K_trace(K_samp)
-
 
 # creating observations to test methods on
 amount_of_measurements = 20
@@ -401,58 +399,6 @@ function custom_line_plot(x_samp, L, x_obs, y_obs; output=1, draws=5000, σ=1, m
 end
 
 
-# # quick and dirty function for creating plots that show what I want
-# function custom_line_plot(x_samp, L, x_obs, y_obs; output=1, draws=5000, σ=1, mean=zeros(amount_of_total_samp_points), show=10)
-#
-#     # same curves are drawn every time?
-#     # srand(100)
-#
-#     y = y_obs[(amount_of_measurements * (output - 1) + 1):(amount_of_measurements * output)]
-#
-#     # if no analytical variance is passed, estimate it with sampling
-#     if σ == 1
-#
-#         storage = zeros((draws, amount_of_total_samp_points))
-#         for i in 1:draws
-#             storage[i, :] = L * randn(amount_of_total_samp_points) + mean
-#         end
-#
-#         storage = storage[:, (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
-#
-#         show_curves = storage[1:show, :]
-#         storage = sort(storage, 1)
-#
-#         # filling the 5-95th percentile with a transparent orange
-#         upper = scatter(;x=x_samp, y=storage[convert(Int64, 0.95 * draws),:], mode="lines", line_width=0)
-#         lower = scatter(;x=x_samp, y=storage[convert(Int64, 0.05 * draws),:], fill="tonexty", mode="lines", line_width=0)
-#
-#         mean = mean[(amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
-#
-#     else
-#
-#         show_curves = zeros((show, amount_of_total_samp_points))
-#         for i in 1:show
-#             show_curves[i,:] = L * randn(amount_of_total_samp_points) + mean
-#         end
-#
-#         show_curves = show_curves[:, (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
-#
-#         mean = mean[(amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
-#         σ = σ[(amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)]
-#
-#         # filling the 5-95th percentile with a transparent orange
-#         upper = scatter(;x=x_samp, y=mean + 1.96 * σ, mode="lines", line_width=0)
-#         lower = scatter(;x=x_samp, y=mean - 1.96 * σ, fill="tonexty", mode="lines", line_width=0)
-#
-#     end
-#
-#     median = scatter(;x=x_samp, y=mean, mode="lines", line_width=4, line_color="rgb(0, 0, 0)")
-#     data_trace = scatter(;x=x_obs, y=y, mode="markers", marker_size=12, marker_color="rgb(0, 0, 0)")
-#     return plot(append([upper, lower, median], traces(x_samp, show_curves), [data_trace]), layout)
-#
-# end
-
-
 plt = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=1)
 # savefig(plt, "figs/GP/initial_gp_1.pdf")
 plt = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=2)
@@ -464,10 +410,8 @@ plt = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=2)
 mean_post, return_vec = GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters, return_K=true, return_L=true, return_σ=true)
 σ, K_post, L_post = return_vec
 
-
 # plot the posterior covariance matrix (colors show how correlated points are to each other)
-# possible colors found here (https://plot.ly/julia/heatmaps/)
-# plot(heatmap(z=K_post, colorscale="Viridis"))
+plot_K(K_post)
 
 # plotting randomly drawn Gaussian processes with the mean function and covariance of the posterior
 # much closer to the data, no?
@@ -499,25 +443,14 @@ chol_storage = chol_struct(initial_x, ridge_chol(K_observations(x_obs, measureme
 # times listed are for optimizing 2 outputs with first order derivatives (7 hyperparameters)
 
 # use gradient
-# tic(); result1 = optimize(nlogL, ∇nlogL, lower, upper, initial_x, Fminbox(GradientDescent())); toc()  # 272.3 s
-# tic(); result2 = optimize(nlogL, ∇nlogL, initial_x, ConjugateGradient()); toc()  # 54.0 s, gave same result as Fminbox
-# tic(); result3 = optimize(nlogL, ∇nlogL, initial_x, GradientDescent()); toc()  # 116.8 s, gave same result as SA
-@elapsed result = optimize(nlogL, ∇nlogL, initial_x, LBFGS())
-# tic(); result = optimize(nlogL_penalty, ∇nlogL_penalty, initial_x, LBFGS()); toc()  # 19.8 s, unique result
+# result1 = optimize(nlogL, ∇nlogL, lower, upper, initial_x, Fminbox(GradientDescent()))  # 272.3 s
+# result2 = optimize(nlogL, ∇nlogL, initial_x, ConjugateGradient())  # 54.0 s, gave same result as Fminbox
+# result3 = optimize(nlogL, ∇nlogL, initial_x, GradientDescent())  # 116.8 s, gave same result as SA
+@elapsed result = optimize(nlogL, ∇nlogL, initial_x, LBFGS())  # 19.8 s, unique result
+# result = optimize(nlogL_penalty, ∇nlogL_penalty, initial_x, LBFGS())  # same as above but with a penalty
 
 # don't use gradient
-# tic(); result5 = @time optimize(nlogL, lower, upper, initial_x, SAMIN(), Optim.Options(iterations=10^6)); toc()  # 253.4 s
-
-# println(result1.minimizer)
-# println(result1.minimum)
-# println(result2.minimizer)
-# println(result2.minimum)
-# println(result3.minimizer)
-# println(result3.minimum)
-# println(result4.minimizer)
-# println(result4.minimum)
-# println(result5.minimizer)
-# println(result5.minimum)
+# result5 = @time optimize(nlogL, lower, upper, initial_x, SAMIN(), Optim.Options(iterations=10^6))  # 253.4 s
 
 println("old hyperparameters")
 println(initial_x)
@@ -535,7 +468,7 @@ mean_post, return_vec = GP_posteriors(x_obs, x_samp, measurement_noise, final_hy
 
 # plot the posterior covariance of the "most likely" posterior matrix
 # (colors show how correlated points are to each other)
-# plot(heatmap(z=K_post, colorscale="Viridis"))
+plot_K(K_post)
 
 
 # for 1D GPs
@@ -552,69 +485,66 @@ plt = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, outp
 
 
 
-
-
-
-
-# create a contour plot that is smooth and puts an x on the [minx, miny] point
-function custom_contour(x, y, z, min_x, min_y)
-
-    main = contour(;z=z, x=x, y=y, showscale=false, colorscale="Viridis", contours_coloring="heatmap")
-    best_point = scatter(;x=[min_x], y=[min_y],
-        mode="markers", marker_size=12, marker_symbol="x", marker_color="rgb(0, 0, 0)",
-        showlegend=false)
-    return plot([main, best_point])
-
+#
+# # create a contour plot that is smooth and puts an x on the [minx, miny] point
+# function custom_contour(x, y, z, min_x, min_y)
+#
+#     main = contour(;z=z, x=x, y=y, showscale=false, colorscale="Viridis", contours_coloring="heatmap")
+#     best_point = scatter(;x=[min_x], y=[min_y],
+#         mode="markers", marker_size=12, marker_symbol="x", marker_color="rgb(0, 0, 0)",
+#         showlegend=false)
+#     return plot([main, best_point])
+#
+# # end
+#
+#
+# # creating corner plots
+# function corner_plot(; steps=30+1)
+#     data = [1]
+#     spread = 1
+#     for k in 1:length(final_hyperparameters)
+#         for l in 1:length(final_hyperparameters)
+#
+#             hold = copy(final_hyperparameters)
+#             if k == l
+#                 # x = linspace(maximum([0, final_hyperparameters[k] - spread]), final_hyperparameters[k] + spread, steps)
+#                 x = linspace(final_hyperparameters[k] - spread, final_hyperparameters[k] + spread, steps)
+#                 hold[k] = x[1]
+#                 y = [nlogL(hold)]
+#                 for i in 2:length(x)
+#                     hold[k] = x[i]
+#                     y = append!(y,[nlogL(hold)])
+#                 end
+#                 plt = plot([line_trace(x, y), line_trace([final_hyperparameters[k], final_hyperparameters[k]], [minimum(y), maximum(y)], color="black")])
+#             elseif k < l
+#                 # x = linspace(maximum([0, final_hyperparameters[k] - spread]), final_hyperparameters[k] + spread, steps)
+#                 # y = linspace(maximum([0, final_hyperparameters[l] - spread]), final_hyperparameters[l] + spread, steps)
+#                 x = linspace(final_hyperparameters[k] - spread, final_hyperparameters[k] + spread, steps)
+#                 y = linspace(final_hyperparameters[l] - spread, final_hyperparameters[l] + spread, steps)
+#
+#                 z = zeros((steps,steps))
+#                 for i in 1:steps
+#                     for j in 1:steps
+#                         hold[k] = x[i]
+#                         hold[l] = y[j]
+#                         z[i,j] = nlogL(hold)
+#                     end
+#                 end
+#                 plt = custom_contour(x, y, z, final_hyperparameters[k], final_hyperparameters[l])
+#             else
+#                 plt = plot()
+#             end
+#
+#             data = hcat(data,[plt])
+#
+#         end
+#     end
+#     data = data[2:length(data)]
+#
+#     return return_plot_matrix(data)
+#
 # end
-
-
-# creating corner plots
-function corner_plot(; steps=30+1)
-    data = [1]
-    spread = 1
-    for k in 1:length(final_hyperparameters)
-        for l in 1:length(final_hyperparameters)
-
-            hold = copy(final_hyperparameters)
-            if k == l
-                # x = linspace(maximum([0, final_hyperparameters[k] - spread]), final_hyperparameters[k] + spread, steps)
-                x = linspace(final_hyperparameters[k] - spread, final_hyperparameters[k] + spread, steps)
-                hold[k] = x[1]
-                y = [nlogL(hold)]
-                for i in 2:length(x)
-                    hold[k] = x[i]
-                    y = append!(y,[nlogL(hold)])
-                end
-                plt = plot([line_trace(x, y), line_trace([final_hyperparameters[k], final_hyperparameters[k]], [minimum(y), maximum(y)], color="black")])
-            elseif k < l
-                # x = linspace(maximum([0, final_hyperparameters[k] - spread]), final_hyperparameters[k] + spread, steps)
-                # y = linspace(maximum([0, final_hyperparameters[l] - spread]), final_hyperparameters[l] + spread, steps)
-                x = linspace(final_hyperparameters[k] - spread, final_hyperparameters[k] + spread, steps)
-                y = linspace(final_hyperparameters[l] - spread, final_hyperparameters[l] + spread, steps)
-
-                z = zeros((steps,steps))
-                for i in 1:steps
-                    for j in 1:steps
-                        hold[k] = x[i]
-                        hold[l] = y[j]
-                        z[i,j] = nlogL(hold)
-                    end
-                end
-                plt = custom_contour(x, y, z, final_hyperparameters[k], final_hyperparameters[l])
-            else
-                plt = plot()
-            end
-
-            data = hcat(data,[plt])
-
-        end
-    end
-    data = data[2:length(data)]
-
-    return return_plot_matrix(data)
-
-end
-
-
-data = corner_plot()
-savefig(data, "figs/GP/corner_plot.pdf")
+#
+#
+# data = corner_plot()
+# savefig(data, "figs/GP/corner_plot.pdf")

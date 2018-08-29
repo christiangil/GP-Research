@@ -1,4 +1,3 @@
-# include("reusable_code.jl")
 using LinearAlgebra
 
 
@@ -14,11 +13,13 @@ end
 # if array is symmetric, return the symmetric version
 function symmetric_A(A)
 
-    if size(A)[1] == size(A)[2]
+    if size(A, 1) == size(A, 2)
         max_dif = maximum(abs.(A - transpose(A)))
 
+        if max_dif == zero(max_dif)
+            return Symmetric(A)
         # an arbitrary threshold that is meant to catch numerical errors
-        if max_dif < 1e-6
+        elseif max_dif < 1e-6  # * maximum(A)
             # return the symmetrized version of the matrix
             return Symmetric((A + transpose(A)) / 2)
         else
@@ -48,7 +49,7 @@ end
 
 
 # adds a ridge to a Cholesky factorization if necessary
-function ridge_chol(A; notification=true, ridge=1e-10)
+function ridge_chol(A; notification=true, ridge=1e-6 )  # * maximum(A))
 
     # only add a small ridge if necessary
     try
@@ -57,7 +58,7 @@ function ridge_chol(A; notification=true, ridge=1e-10)
         if notification
             println("had to add a ridge")
         end
-        # factor = genernal_chol(A + ridge * eye(size(A)[1]), return_values=return_values)  # depreciated in 1.0
+        # factor = genernal_chol(A + ridge * eye(size(A, 1)), return_values=return_values)  # depreciated in 1.0
         factor = cholesky(A + UniformScaling(ridge))
     end
 
@@ -75,7 +76,7 @@ function product_rule(dorder)
     for i in 1:length(dorder)
 
         # create a holding matrix so we don't have to modify the total matrix
-        hold = zeros(0, size(total)[2])
+        hold = zeros(0, size(total, 2))
 
         # assign the coefficients and dorders for each combination of dorders
         for j in 0:dorder[i]
@@ -89,7 +90,7 @@ function product_rule(dorder)
             # setting the new dorders for this parameter
             # total_copy[:, i + 1] = dorder[i] - j  # depreciated in 1.0
             # total_copy[:, i + 1 + length(dorder)] = j  # depreciated in 1.0
-            current_length = size(total_copy)[1]
+            current_length = size(total_copy, 1)
             total_copy[:, i + 1] = (dorder[i] - j) * ones(current_length)
             total_copy[:, i + 1 + length(dorder)] = j * ones(current_length)
 
