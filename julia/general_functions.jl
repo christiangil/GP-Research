@@ -11,7 +11,7 @@ end
 
 
 # if array is symmetric, return the symmetric version
-function symmetric_A(A)
+function symmetric_A(A; ignore_asymmetry = false)
 
     if size(A, 1) == size(A, 2)
         max_dif = maximum(abs.(A - transpose(A)))
@@ -19,7 +19,7 @@ function symmetric_A(A)
         if max_dif == zero(max_dif)
             return Symmetric(A)
         # an arbitrary threshold that is meant to catch numerical errors
-        elseif max_dif < 1e-6  # * maximum(A)
+    elseif (max_dif < 1e-6) | ignore_asymmetry
             # return the symmetrized version of the matrix
             return Symmetric((A + transpose(A)) / 2)
         else
@@ -34,34 +34,29 @@ function symmetric_A(A)
 end
 
 
-# # Returns the type of cholesky factorization process that is desired
-# # either the raw values of the matrix or the factorization type
-# # depreciated in 1.0
-# function genernal_chol(A; return_values=false)
-#
-#     factor = cholfact(A, :L)
-#     if return_values
-#         return LowerTriangular(factor[:L])
-#     else
-#         return factor
-#     end
-# end
-
-
 # adds a ridge to a Cholesky factorization if necessary
-function ridge_chol(A; notification=true, ridge=1e-6 )  # * maximum(A))
+function ridge_chol(A; notification=true, ridge=1e-6)  # * maximum(A))
+
+    # this would work but it automatically makes A the Cholesky matrix, not the factorization type
+    # if !isposdef!(A)
+    #     if notification
+    #         println("had to add a ridge")
+    #     end
+    #     cholesky!(A + UniformScaling(ridge))
+    # end
+
 
     # only add a small ridge if necessary
+    A_copy = copy(A)
     try
-        factor = cholesky(A)
+        cholesky(A_copy)
+        # factor = cholesky(copy(A))
     catch
         if notification
             println("had to add a ridge")
         end
-        # factor = genernal_chol(A + ridge * eye(size(A, 1)), return_values=return_values)  # depreciated in 1.0
-        factor = cholesky(A + UniformScaling(ridge))
+        cholesky(A_copy + UniformScaling(ridge))
     end
-
 end
 
 
@@ -88,8 +83,6 @@ function product_rule(dorder)
             total_copy[:, 1] = total_copy[:, 1] * binomial(dorder[i], j)
 
             # setting the new dorders for this parameter
-            # total_copy[:, i + 1] = dorder[i] - j  # depreciated in 1.0
-            # total_copy[:, i + 1 + length(dorder)] = j  # depreciated in 1.0
             current_length = size(total_copy, 1)
             total_copy[:, i + 1] = (dorder[i] - j) * ones(current_length)
             total_copy[:, i + 1 + length(dorder)] = j * ones(current_length)
@@ -110,7 +103,7 @@ function product_rule(dorder)
 end
 
 
-# convert all floats in an array to ints
+# convert all floats in vector to ints
 function floats2ints(v; allow_negatives=true)
     for i in length(v)
         if v[i] < 0 & !allow_negatives
@@ -126,7 +119,7 @@ end
 
 # find differences between two arrays and set values smaller than a threshold
 # to be zero
-# use isapprox instead if you care about whether about boolean result
+# use isapprox instead if you care about boolean result
 function signficant_difference(A1, A2, dif)
     A1mA2 = abs.(A1 - A2);
     A1mA2[A1mA2 .< (max(A1, A2) * ones(size(A1mA2)) * dif)] = 0;

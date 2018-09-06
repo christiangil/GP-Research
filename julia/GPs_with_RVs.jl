@@ -258,47 +258,79 @@ scores = scores'
 
 
 for i in 1:3
-    figure(figsize=(24, 13.5))
+    figure(figsize=(10,6))
     fig = plot(phases, scores[i, :])
     xlabel("phases (days?)")
     ylabel("pca scores")
-    title("PCA " * string(i))
-    savefig("figs/pca/pca_score_" * string(i) * ".pdf")
+    title("PCA " * string(i - 1))
+    savefig("figs/pca/pca_score_" * string(i - 1) * ".pdf")
 end
 
+# ind = 890:1070
+# plot(phases[ind], scores[1, ind])
 
 # how many components you will use
 n_out = 3
 # how many differentiated versions of the original GP you will use
 n_dif = 2
 
+total_coefficients = n_out * n_dif
+
+
+# Setting up all of the data things
 # how much of the data you want to use (on time domain)
-amount_of_measurements = 30
+start_ind = 900
+end_ind = 940  # 1070
+amount_of_measurements = end_ind - start_ind + 1
 total_amount_of_measurements = amount_of_measurements * n_out
-phases = phases[1:amount_of_measurements]
-scores = scores[1:n_out, 1:amount_of_measurements]
-println(scores)
-# using Statistics
-# normals = mean(scores, dims=2)'[:]
-normals = maximum(abs.(scores), dims=2)'[:]
+
+# getting proper slice of data
+x_obs = phases[start_ind:end_ind]
+y_obs_hold = scores[1:n_out, start_ind:end_ind]
+
+for i in 1:3
+    figure(figsize=(10,6))
+    fig = plot(x_obs, y_obs_hold[i, :])
+    xlabel("phases (days?)")
+    ylabel("pca scores")
+    title("PCA " * string(i - 1) * " fit section")
+    savefig("figs/pca/pca_score_" * string(i - 1) * "_section.pdf")
+end
+
+# normalizing the data (for numerical purposes)
+normals = maximum(abs.(y_obs_hold), dims=2)'[:]
 for i in 1:n_out
-    scores[i, :] /= normals[i]
+    y_obs_hold[i, :] /= normals[i]
+end
+
+# rearranging the data into one column (not sure reshape() does what I want)
+y_obs = zeros(total_amount_of_measurements)
+for i in 1:n_out
+    y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :]
+end
+
+# Uncertainty in the data (AFFECTS SPREAD OF DATA AND HOW TIGHTLY THE GP's WILL
+# TRY TO HUG THE DATA) aka how much noise is added to measurements and
+# measurement covariance function
+# a vector of length = total_amount_of_measurements
+measurement_noise = ones(total_amount_of_measurements)
+for i in 1:n_out
+    measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] *= 0.10 * maximum(abs.(y_obs_hold[i, :]))
 end
 
 # kernel hyper parameters
 # AFFECTS SHAPE OF THE GP's
 # make sure you have the right amount!
-a = ones(n_out, n_dif)
-kernel_lengths = [2, 2, 2]
+a = ones(n_out, n_dif) / 20
+kernel_lengths = [1, 1, 1] / 1.5
 hyperparameters = append!(collect(Iterators.flatten(a)), kernel_lengths)
+# hyperparameters=rand(n_out * n_dif + 3)
 
 # how finely to sample the domain (for plotting)
-amount_of_samp_points = 100
+amount_of_samp_points = max(100, convert(Int64, round(sqrt(2) * 3 * amount_of_measurements)))
 
 # creating many inputs to sample the eventual gaussian process on (for plotting)
-x_samp = linspace(minimum(phases),maximum(phases), amount_of_samp_points[1])
-
-total_coefficients = n_out * n_dif
+x_samp = linspace(minimum(x_obs),maximum(x_obs), amount_of_samp_points[1])
 
 # total amount of output points
 amount_of_total_samp_points = amount_of_samp_points * n_out
@@ -312,37 +344,21 @@ K_samp = total_covariance(x_samp, x_samp, hyperparameters)
 L_samp = ridge_chol(K_samp).L  # usually has to add a ridge
 
 
-function plot_im(A)
-    figure(figsize=(8, 8))
-    imshow(A[:,:])
+function plot_im(A; file=0)
+    figure(figsize=(10,6))
+    fig = imshow(A[:,:])
     colorbar()
+    title("Heatmap")
+    if file != 0
+        savefig(file)
+    end
 end
 
 
 # showing a heatmap of the covariance matrix
-plot_im(K_samp)
+plot_im(K_samp; file="figs/gp/initial_covariance.pdf")
 plot_im(L_samp)
 
-figure(figsize=(8, 8))
-for i in 1:n_out
-    plot(phases, scores[i, :])
-end
-
-
-# Uncertainty in the data (AFFECTS SPREAD OF DATA AND HOW TIGHTLY THE GP's WILL
-# TRY TO HUG THE DATA) aka how much noise is added to measurements and
-# measurement covariance function
-# a vector of length = total_amount_of_measurements
-measurement_noise = ones(total_amount_of_measurements)
-for i in 1:n_out
-    measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] *= 0.10 * maximum(scores[i, :])
-end
-
-x_obs = phases
-y_obs = zeros(total_amount_of_measurements)
-for i in 1:n_out
-    y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = scores[i, :]
-end
 
 # quick and dirty function for creating plots that show what I want
 function custom_line_plot(x_samp, L, x_obs, y_obs; output=1, draws=5000, σ=1, mean=zeros(amount_of_total_samp_points), show=10)
@@ -409,40 +425,40 @@ function custom_line_plot(x_samp, L, x_obs, y_obs; output=1, draws=5000, σ=1, m
     end
     scatter(x_obs, y, color="black", zorder=2)
 
-    xlabel("x (time)")
-    ylabel("y (flux or something lol)")
-    title("test")
+    xlabel("phases (days?)")
+    ylabel("pca scores")
+    title("PCA " * string(output-1))
 
 end
 
 
 fig = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=1)
-# savefig(fig, "figs/GP/initial_gp_1.pdf")
+savefig("figs/gp/initial_gp_0.pdf")
 fig = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=2)
-# savefig(fig, "figs/GP/initial_gp_2.pdf")
-# fig = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=3)
-# savefig(fig, "figs/GP/initial_gp_3.pdf")
+savefig("figs/gp/initial_gp_1.pdf")
+fig = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=3)
+savefig("figs/gp/initial_gp_2.pdf")
 
 # calculate posterior quantities
 mean_post, return_vec = GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters, return_K=true, return_L=true, return_σ=true)
 σ, K_post, L_post = return_vec
 
 # plot the posterior covariance matrix (colors show how correlated points are to each other)
-plot_im(K_post)
+# plot_im(K_post)
+# plot_im(L_post)
 
 # plotting randomly drawn Gaussian processes with the mean function and covariance of the posterior
 # much closer to the data, no?
 
 # for 1D GPs
 fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1)
-# savefig(fig, "figs/GP/cond_initial_gp_1.pdf")
+savefig("figs/gp/cond_initial_gp_1.pdf")
 fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2)
-# savefig(fig, "figs/GP/cond_initial_gp_2.pdf")
-# fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3)
-# savefig(fig, "figs/GP/cond_initial_gp_3.pdf")
+savefig("figs/gp/cond_initial_gp_2.pdf")
+fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3)
+savefig("figs/gp/cond_initial_gp_3.pdf")
 
 # numerically maximize the likelihood to find the best hyperparameters
-# Pkg.add("Optim")
 using Optim
 
 # storing initial hyperparameters
@@ -452,31 +468,37 @@ initial_x = copy(hyperparameters)
 chol_storage = chol_struct(initial_x, ridge_chol(K_observations(x_obs, measurement_noise, initial_x)))
 
 # lower = zeros(length(hyperparameters))
-# lower = -4 * ones(length(hyperparameters))
-# lower[(total_coefficients + 1):length(hyperparameters)] = 0
-# upper = 7 * ones(length(hyperparameters))
+# lower = -5 * ones(length(hyperparameters))
+# lower[(total_coefficients + 1):length(hyperparameters)] = zeros(length(hyperparameters) - total_coefficients)
+# upper = 5 * ones(length(hyperparameters))
 
 # can optimize with or without using the analytical gradient
 # times listed are for optimizing 2 outputs with first order derivatives (7 hyperparameters)
+# the optimization currently doesn't work because it looks for kernel lengths that are either negative (unphysical) or way too large kernel lengths (flatten covariance and prevents positice definiteness)
 
 # use gradient
-# result1 = optimize(nlogL, ∇nlogL, lower, upper, initial_x, Fminbox(GradientDescent()))  # 272.3 s
-# result2 = optimize(nlogL, ∇nlogL, initial_x, ConjugateGradient())  # 54.0 s, gave same result as Fminbox
-# result3 = optimize(nlogL, ∇nlogL, initial_x, GradientDescent())  # 116.8 s, gave same result as SA
-@elapsed result = optimize(nlogL, ∇nlogL, initial_x, LBFGS())  # 19.8 s, unique result
+# result = optimize(nlogL, ∇nlogL, lower, upper, initial_x, Fminbox(GradientDescent()))  # 272.3 s
+# @elapsed result = optimize(nlogL, ∇nlogL, initial_x, ConjugateGradient())  # 54.0 s, gave same result as Fminbox
+# @elapsed result = optimize(nlogL, ∇nlogL, initial_x, GradientDescent(), Optim.Options(iterations=2, show_trace=true))  # 116.8 s, gave same result as SA
+@elapsed result = optimize(nlogL, ∇nlogL, initial_x, LBFGS(), Optim.Options(show_trace=true))  # 19.8 s, unique result, takes around a minute with 50 real data points and 3 outputs for 3 hyperparameter model (9 total)
+# @elapsed result = optimize(nlogL_penalty, ∇nlogL_penalty, initial_x, LBFGS())
+# @elapsed result = optimize(nlogL, ∇nlogL, initial_x)
 # result = optimize(nlogL_penalty, ∇nlogL_penalty, initial_x, LBFGS())  # same as above but with a penalty
 
+
 # don't use gradient
-# result5 = @time optimize(nlogL, lower, upper, initial_x, SAMIN(), Optim.Options(iterations=10^6))  # 253.4 s
+# @elapsed result = optimize(nlogL, lower, upper, initial_x, SAMIN(), Optim.Options(iterations=10^6))  # 253.4 s
+
+final_hyperparameters = result.minimizer
 
 println("old hyperparameters")
 println(initial_x)
+println(nlogL(initial_x))
 
 println("new hyperparameters")
-println(result.minimizer)
+println(final_hyperparameters)
 println(result.minimum)
 
-final_hyperparameters = result.minimizer
 
 # reruning analysis of posterior with the "most likley" kernel amplitude and lengthscale
 # recalculating posterior covariance and mean function
@@ -490,8 +512,8 @@ plot_im(K_post)
 
 # for 1D GPs
 fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1)
-# savefig(fig, "figs/GP/fit_gp_1.pdf")
+savefig("figs/gp/fit_gp_1.pdf")
 fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2)
-# savefig(fig, "figs/GP/fit_gp_2.pdf")
-# fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3)
-# savefig(fig, "figs/GP/fit_gp_3.pdf")
+savefig("figs/gp/fit_gp_2.pdf")
+fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3)
+savefig("figs/gp/fit_gp_3.pdf")

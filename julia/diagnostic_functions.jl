@@ -2,23 +2,30 @@
 
 
 # estimate the gradient of nlogL with forward differences
-# could use code like this to compare the analytical version with the numerical version
-#
-# test = rand(length(hyperparameters))
-# G = zeros(length(test))
-# ∇nlogL(G, test)
-# println(G)
-# println(est_grad(test; dif=0.0001))
-#
 function est_grad(hyper; dif=0.0001)
     val = nlogL(hyper)
     grad = zeros(length(hyper))
     for i in 1:length(hyper)
         hold = copy(hyper)
         hold[i] += dif
+        # println(hold)
+        # println(nlogL(hold))
         grad[i] =  (nlogL(hold) - val) / dif
     end
+    # println(nlogL(hyper))
     return grad
+end
+
+
+# prints analytical and numerically estimated ∇nlogL
+function test_grad(; dif=0.001, hyper=rand(length(hyperparameters)))
+    println()
+    println(nlogL(hyper))
+    println(hyper)
+    G = zeros(length(hyper))
+    ∇nlogL(G, hyper)
+    println(G)
+    println(est_grad(hyper; dif=dif))
 end
 
 

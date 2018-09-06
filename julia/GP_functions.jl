@@ -306,7 +306,7 @@ end
 
 
 # Matern 3/2 kernel
-function Matern32_kernel(hyperparameters, dif, nu)
+function Matern32_kernel(hyperparameters, dif)
     kernel_amplitude, kernel_length = hyperparameters
     x = sqrt(3) * dif / kernel_length
     return kernel_amplitude ^ 2 * (1 + x) * exp(-x)
@@ -314,7 +314,7 @@ end
 
 
 # Matern 5/2 kernel
-function Matern52_kernel(hyperparameters, dif, nu)
+function Matern52_kernel(hyperparameters, dif)
     kernel_amplitude, kernel_length = hyperparameters
     x = sqrt(5) * dif / kernel_length
     return kernel_amplitude ^ 2 * (1 + x + (x ^ 2) / 3) * exp(-x)
@@ -327,6 +327,17 @@ function RQ_kernel(hyperparameters, dif_sq)
     kernel_amplitude, kernel_length, alpha = hyperparameters
     alpha = max(alpha, 0)
     return kernel_amplitude ^ 2 * (1 + dif_sq / (2 * alpha * kernel_length ^ 2)) ^ -alpha
+end
+
+
+# Bessel (function of he first kind) kernel
+# Bessel functions of the first kind, denoted as Jα(x), are solutions of Bessel's
+# differential equation that are finite at the origin (x = 0) for integer or positive α
+# http://crsouza.com/2010/03/17/kernel-functions-for-machine-learning-applications/#bessel
+function Bessel_kernel(hyperparameters, dif; nu=0)
+    kernel_amplitude, kernel_length, n = hyperparameters
+    nu = max(nu, 0)
+    return besselj(nu, kernel_length * dif) / (dif ^ (-n * nu))
 end
 
 
@@ -401,18 +412,13 @@ end
 
 
 # adding measurement noise to K_obs
-function K_observations(x_obs, measurement_noise, hyperparameters)
+function K_observations(x_obs, measurement_noise, hyperparameters; ignore_asymmetry=false)
     K_obs = total_covariance(x_obs, x_obs, hyperparameters)
-    total_amount_of_measurements = size(x_obs, 1)
-    for i in 1:total_amount_of_measurements
+    @assert (size(K_obs, 1) == length(measurement_noise)) ["measurement_noise is the wrong length"]
+    for i in 1:size(K_obs, 1)
         K_obs[i, i] +=  measurement_noise[i] ^ 2
     end
-    # noise_I = zeros((total_amount_of_measurements, total_amount_of_measurements))
-    # for i in 1:total_amount_of_measurements
-    #     noise_I[i, i] =  measurement_noise[i] ^ 2
-    # end
-    # K_obs = K_obs + noise_I
-    return symmetric_A(K_obs)
+    return symmetric_A(K_obs; ignore_asymmetry=ignore_asymmetry)
 end
 
 
@@ -423,15 +429,23 @@ function get_σ(L_obs, K_obs_samp, K_samp)
     V = zeros(size(K_samp, 1))
     for i in 1:size(K_samp, 1)
         V[i] = K_samp[i, i] - transpose(v[:, i]) * v[:, i]
+
+        # this should only happen at plot points that are very close to the observation points
+        if V[i] < 0
+            println("ignored a negative value in variance calculation")
+            println(V[i])
+            V[i] = 0
+        end
+
     end
     σ = sqrt.(V)
     return σ
+
 end
 
 
 # produces equivalent variances as the other version, but ~46% faster
 function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return_σ=false, return_K=false, return_L=false)
-
 
     return_vec = []
 
@@ -490,20 +504,18 @@ end
 # (negative because scipy has a minimizer instead of a maximizer)
 function nlogL(hyperparameter_list...)
 
-    hyperparameters = []
+    hyper = []
     for i in 1:length(hyperparameter_list)
-        append!(hyperparameters, hyperparameter_list[i])
+        append!(hyper, hyperparameter_list[i])
     end
     n=length(y_obs)
 
     # a weirdly necessary dummy variable
     measurement_noise_dummy = measurement_noise
-    K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
-
-    # inv_K_obs = inv(K_obs)
+    K_obs = K_observations(x_obs, measurement_noise_dummy, hyper; ignore_asymmetry=true)
+    L_fact = stored_chol(chol_storage, hyper, K_obs; notification=false)
     # inv_K_obs = inv(L_fact)  # ~35% faster than inv(K_obs)
     # det_K_obs = det(L_fact)  # ~8% faster than det(K_obs)
-    L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
 
     # goodness of fit term
     data_fit = -1 / 2 * (transpose(y_obs) * (L_fact \ y_obs))
@@ -522,15 +534,15 @@ end
 # (negative because scipy has a minimizer instead of a maximizer)
 function ∇nlogL(G, hyperparameter_list...)
 
-    hyperparameters = []
+    hyper = []
     for i in 1:length(hyperparameter_list)
-        append!(hyperparameters, hyperparameter_list[i])
+        append!(hyper, hyperparameter_list[i])
     end
 
     # a weirdly necessary dummy variable
     measurement_noise_dummy = measurement_noise
-    K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
-    L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
+    K_obs = K_observations(x_obs, measurement_noise_dummy, hyper; ignore_asymmetry=true)
+    L_fact = stored_chol(chol_storage, hyper, K_obs; notification=false)
     # inv_K_obs = inv(L_fact)
 
 
@@ -545,106 +557,105 @@ function ∇nlogL(G, hyperparameter_list...)
     # taking some burden off of recalculating the coefficient orders used by the automatic differentiation
     coeff_orders = coefficient_orders(n_out, n_dif)
 
-    for i in 1:(length(hyperparameters))
-        G[i] = grad(total_covariance(x_obs, x_obs, hyperparameters; dKdθ=i, coeff_orders=coeff_orders))
+    for i in 1:(length(hyper))
+        G[i] = grad(total_covariance(x_obs, x_obs, hyper; dKdθ=i, coeff_orders=coeff_orders))
     end
 
 end
 
 
-# negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-# (negative because scipy has a minimizer instead of a maximizer)
-function nlogL_penalty(hyperparameter_list...)
-
-    hyperparameters = []
-    for i in 1:length(hyperparameter_list)
-        append!(hyperparameters, hyperparameter_list[i])
-    end
-    n=length(y_obs)
-
-    # a weirdly necessary dummy variable
-    measurement_noise_dummy = measurement_noise
-    K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
-
-    # inv_K_obs = inv(K_obs)
-    # inv_K_obs = inv(L_fact)  # ~35% faster than inv(K_obs)
-    # det_K_obs = det(L_fact)  # ~8% faster than det(K_obs)
-    L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
-
-    # goodness of fit term
-    data_fit = -1 / 2 * (transpose(y_obs) * (L_fact \ y_obs))
-    # complexity penalization term
-    # penalty = -1 / 2 * log(det_K_obs)
-    penalty = -1 / 2 * logdet(L_fact)  # half memory but twice the time
-    # normalization term (functionally useless)
-    normalization = -n / 2 * log(2 * pi)
-
-    # lower = zeros(length(hyperparameters))
-    lower = -10 * ones(length(hyperparameters))
-    lower[(total_coefficients + 1):length(hyperparameters)] = 0
-    upper = 10 * ones(length(hyperparameters))
-
-    add_penalty = 0
-    for i in 1:length(hyperparameters)
-        if hyperparameters[i] > upper[i]
-            add_penalty += hyperparameters[i] - upper[i]
-        elseif hyperparameters[i] < lower[i]
-            add_penalty += lower[i] - hyperparameters[i]
-        end
-    end
-
-    return -1 * (data_fit + penalty + normalization) + add_penalty
-end
-
-
-# http://www.gaussianprocess.org/gpml/chapters/RW5.pdf
-# gradient of negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-# (negative because scipy has a minimizer instead of a maximizer)
-function ∇nlogL_penalty(G, hyperparameter_list...)
-
-    hyperparameters = []
-    for i in 1:length(hyperparameter_list)
-        append!(hyperparameters, hyperparameter_list[i])
-    end
-
-    # a weirdly necessary dummy variable
-    measurement_noise_dummy = measurement_noise
-    K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
-    L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
-    # inv_K_obs = inv(L_fact)
-
-    # lower = zeros(length(hyperparameters))
-    lower = -10* ones(length(hyperparameters))
-    lower[(total_coefficients + 1):length(hyperparameters)] = 0
-    upper = 10 * ones(length(hyperparameters))
-
-    function grad(dK_dθj)
-        # derivative of goodness of fit term
-        data_fit = 1 / 2 * (transpose(y_obs) * (L_fact \ (dK_dθj * (L_fact \ y_obs))))
-        # derivative of complexity penalization term
-        penalty = -1 / 2 * tr(L_fact \ dK_dθj)
-
-        add_penalty = 0
-        for i in 1:length(hyperparameters)
-            if hyperparameters[i] > upper[i]
-                add_penalty = 1
-            elseif hyperparameters[i] < lower[i]
-                add_penalty = -1
-            end
-        end
-
-        return -1 * (data_fit + penalty) + add_penalty
-    end
-
-    # taking some burden off of recalculating the coefficient orders used by the automatic differentiation
-    coeff_orders = coefficient_orders(n_out, n_dif)
-
-    for i in 1:(length(hyperparameters))
-        G[i] = grad(total_covariance(x_obs, x_obs, hyperparameters; dKdθ=i, coeff_orders=coeff_orders))
-    end
-
-
-end
+# # negative log likelihood of the data given the current kernel parameters (as seen on page 19)
+# # (negative because scipy has a minimizer instead of a maximizer)
+# function nlogL_penalty(hyperparameter_list...)
+#
+#     hyperparameters = []
+#     for i in 1:length(hyperparameter_list)
+#         append!(hyperparameters, hyperparameter_list[i])
+#     end
+#     n=length(y_obs)
+#
+#     # a weirdly necessary dummy variable
+#     measurement_noise_dummy = measurement_noise
+#     K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
+#
+#     # inv_K_obs = inv(K_obs)
+#     # inv_K_obs = inv(L_fact)  # ~35% faster than inv(K_obs)
+#     # det_K_obs = det(L_fact)  # ~8% faster than det(K_obs)
+#     L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
+#
+#     # goodness of fit term
+#     data_fit = -1 / 2 * (transpose(y_obs) * (L_fact \ y_obs))
+#     # complexity penalization term
+#     # penalty = -1 / 2 * log(det_K_obs)
+#     penalty = -1 / 2 * logdet(L_fact)  # half memory but twice the time
+#     # normalization term (functionally useless)
+#     normalization = -n / 2 * log(2 * pi)
+#
+#     # lower = zeros(length(hyperparameters))
+#     lower = (-10) * ones(length(hyperparameters))
+#     lower[(total_coefficients + 1):length(hyperparameters)] = zeros(length(hyperparameters) - total_coefficients)
+#     upper = 10 * ones(length(hyperparameters))
+#
+#     add_penalty = 0
+#     for i in 1:length(hyperparameters)
+#         if hyperparameters[i] > upper[i]
+#             add_penalty += hyperparameters[i] - upper[i]
+#         elseif hyperparameters[i] < lower[i]
+#             add_penalty += lower[i] - hyperparameters[i]
+#         end
+#     end
+#
+#     return -1 * (data_fit + penalty + normalization) + add_penalty
+# end
+#
+#
+# # http://www.gaussianprocess.org/gpml/chapters/RW5.pdf
+# # gradient of negative log likelihood of the data given the current kernel parameters (as seen on page 19)
+# # (negative because scipy has a minimizer instead of a maximizer)
+# function ∇nlogL_penalty(G, hyperparameter_list...)
+#
+#     hyperparameters = []
+#     for i in 1:length(hyperparameter_list)
+#         append!(hyperparameters, hyperparameter_list[i])
+#     end
+#
+#     # a weirdly necessary dummy variable
+#     measurement_noise_dummy = measurement_noise
+#     K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
+#     L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
+#     # inv_K_obs = inv(L_fact)
+#
+#     # lower = zeros(length(hyperparameters))
+#     lower = (-10) * ones(length(hyperparameters))
+#     lower[(total_coefficients + 1):length(hyperparameters)] = zeros(length(hyperparameters) - total_coefficients)
+#     upper = 10 * ones(length(hyperparameters))
+#
+#     function grad(dK_dθj)
+#         # derivative of goodness of fit term
+#         data_fit = 1 / 2 * (transpose(y_obs) * (L_fact \ (dK_dθj * (L_fact \ y_obs))))
+#         # derivative of complexity penalization term
+#         penalty = -1 / 2 * tr(L_fact \ dK_dθj)
+#
+#         add_penalty = 0
+#         for i in 1:length(hyperparameters)
+#             if hyperparameters[i] > upper[i]
+#                 add_penalty = 1
+#             elseif hyperparameters[i] < lower[i]
+#                 add_penalty = -1
+#             end
+#         end
+#
+#         return -1 * (data_fit + penalty) + add_penalty
+#     end
+#
+#     # taking some burden off of recalculating the coefficient orders used by the automatic differentiation
+#     coeff_orders = coefficient_orders(n_out, n_dif)
+#
+#     for i in 1:(length(hyperparameters))
+#         G[i] = grad(total_covariance(x_obs, x_obs, hyperparameters; dKdθ=i, coeff_orders=coeff_orders))
+#     end
+#
+# end
 
 
 # creating a Cholesky factorization storage structure
@@ -655,11 +666,11 @@ end
 
 
 # An effort to avoid recalculating Cholesky factorizations
-function stored_chol(chol_storage, new_hyper, A; return_values=false, notification=true)
+function stored_chol(chol_storage, new_hyper, A; return_values=false, notification=true, ridge=1e-6)
 
-    # if the Cholesky factorization wasn'y just calculated, calculate a new one.
+    # if the Cholesky factorization wasn't just calculated, calculate a new one.
     if chol_storage.hyperparameters != new_hyper
-        chol_storage = chol_struct(new_hyper, ridge_chol(A; notification=notification))
+        chol_storage = chol_struct(copy(new_hyper), ridge_chol(A; notification=notification, ridge=ridge))
     end
     return chol_storage.cholesky_object
 

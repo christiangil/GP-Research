@@ -4,6 +4,7 @@
 # Pkg.add("SpecialFunctions")
 # # Pkg.add("JLD")  # broken in Julia 1.0.0, syntax: try without catch or finally
 # Pkg.add("JLD2")
+# Pkg.add("FileIO")
 # Pkg.add("MultivariateStats")
 # Pkg.add("HDF5")
 # Pkg.add("Rsvg")
