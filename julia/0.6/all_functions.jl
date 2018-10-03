@@ -20,7 +20,7 @@
 # include("reusable_code.jl")
 include("GP_functions.jl")
 include("general_functions.jl")
-# using PyPlot
+using PyPlot
 # include("plotting_functions.jl")
 # include("plotting_functions_PlotlyJS.jl")
 include("diagnostic_functions.jl")

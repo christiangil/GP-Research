@@ -451,8 +451,9 @@ function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return
 
     K_samp = total_covariance(x_samp, x_samp, hyperparameters)
     K_obs = K_observations(x_obs, measurement_noise, hyperparameters)
+
     K_samp_obs = total_covariance(x_samp, x_obs, hyperparameters)
-    # K_obs_samp = total_covariance(x_obs, x_samp, hyperparameters)
+    # K_samp_obs = (K_samp_obs + transpose(total_covariance(x_obs, x_samp, hyperparameters)) / 2
     K_obs_samp = transpose(K_samp_obs)
 
     # (RW alg. 2.1)
@@ -461,8 +462,6 @@ function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return
     L_fact = ridge_chol(K_obs)
 
     # actual lower triangular matrix values)
-    # L = ridge_chol(K_obs, return_values=true)
-    # L = LowerTriangular(L_fact[:L])  # depreciated in 1.0
     L = L_fact.L
 
     # these are all equivalent but have different computational costs
@@ -471,14 +470,6 @@ function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return
     α = L_fact \ y_obs
 
     mean_post = K_samp_obs * α
-
-    # python implementation
-    # # Compute the mean at our test points.
-    # v = np.linalg.solve(L, K_obs_samp)
-    # mean_post = np.dot(v.T, np.linalg.solve(L, y_obs)).reshape((n,))
-    #
-    # V = np.diag(K_samp) - np.sum(v**2, axis=0)
-    # stdv = np.sqrt(V)
 
     if return_σ
         σ = get_σ(L, K_obs_samp, K_samp)
@@ -501,7 +492,7 @@ end
 
 
 # negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-# (negative because scipy has a minimizer instead of a maximizer)
+# (negative because Optim has a minimizer)
 function nlogL(hyperparameter_list...)
 
     hyper = []
@@ -520,7 +511,7 @@ function nlogL(hyperparameter_list...)
     # goodness of fit term
     data_fit = -1 / 2 * (transpose(y_obs) * (L_fact \ y_obs))
     # complexity penalization term
-    # penalty = -1 / 2 * log(det_K_obs)
+    # penalty = -1 / 2 * log(det(L_fact))
     penalty = -1 / 2 * logdet(L_fact)  # half memory but twice the time
     # normalization term (functionally useless)
     normalization = -n / 2 * log(2 * pi)
@@ -531,7 +522,6 @@ end
 
 # http://www.gaussianprocess.org/gpml/chapters/RW5.pdf
 # gradient of negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-# (negative because scipy has a minimizer instead of a maximizer)
 function ∇nlogL(G, hyperparameter_list...)
 
     hyper = []
@@ -565,7 +555,6 @@ end
 
 
 # # negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-# # (negative because scipy has a minimizer instead of a maximizer)
 # function nlogL_penalty(hyperparameter_list...)
 #
 #     hyperparameters = []
@@ -611,7 +600,6 @@ end
 #
 # # http://www.gaussianprocess.org/gpml/chapters/RW5.pdf
 # # gradient of negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-# # (negative because scipy has a minimizer instead of a maximizer)
 # function ∇nlogL_penalty(G, hyperparameter_list...)
 #
 #     hyperparameters = []

@@ -140,7 +140,6 @@ function total_covariance(x1list, x2list, hyperparameters; dKdθ=0, coeff_orders
 
     # only calculating each sub-matrix once and using the fact that they should
     # be basically the same if the kernel has been differentiated the same amount of times
-    # A_list = Array{Any}(2 * n_dif - 1)  # depreciated in 1.0
     A_list = Array{Any}(nothing, 2 * n_dif - 1)
     for k in 1:(2 * n_dif - 1)
         dorder = [0, k - 1]
@@ -254,20 +253,17 @@ using JLD2, FileIO
 @load "sunspot_data.jld2" lambda phases quiet
 @load "rv_data.jld2" doppler_comp genpca_out rvs_out
 mu, M, scores = genpca_out
+scores[:, 1] = rvs_out
 scores = scores'
 
-
-for i in 1:3
-    figure(figsize=(10,6))
-    fig = plot(phases, scores[i, :])
-    xlabel("phases (days?)")
-    ylabel("pca scores")
-    title("PCA " * string(i - 1))
-    savefig("figs/pca/pca_score_" * string(i - 1) * ".pdf")
-end
-
-# ind = 890:1070
-# plot(phases[ind], scores[1, ind])
+# for i in 1:3
+#     figure(figsize=(10,6))
+#     fig = plot(phases, scores[i, :])
+#     xlabel("phases (days?)")
+#     ylabel("pca scores")
+#     title("PCA " * string(i - 1))
+#     savefig("figs/pca/pca_score_" * string(i - 1) * ".pdf")
+# end
 
 # how many components you will use
 n_out = 3
@@ -275,7 +271,6 @@ n_out = 3
 n_dif = 2
 
 total_coefficients = n_out * n_dif
-
 
 # Setting up all of the data things
 # how much of the data you want to use (on time domain)
@@ -288,14 +283,14 @@ total_amount_of_measurements = amount_of_measurements * n_out
 x_obs = phases[start_ind:end_ind]
 y_obs_hold = scores[1:n_out, start_ind:end_ind]
 
-for i in 1:3
-    figure(figsize=(10,6))
-    fig = plot(x_obs, y_obs_hold[i, :])
-    xlabel("phases (days?)")
-    ylabel("pca scores")
-    title("PCA " * string(i - 1) * " fit section")
-    savefig("figs/pca/pca_score_" * string(i - 1) * "_section.pdf")
-end
+# for i in 1:3
+#     figure(figsize=(10,6))
+#     fig = plot(x_obs, y_obs_hold[i, :])
+#     xlabel("phases (days?)")
+#     ylabel("pca scores")
+#     title("PCA " * string(i - 1) * " fit section")
+#     savefig("figs/pca/pca_score_" * string(i - 1) * "_section.pdf")
+# end
 
 # normalizing the data (for numerical purposes)
 normals = maximum(abs.(y_obs_hold), dims=2)'[:]
@@ -315,7 +310,7 @@ end
 # a vector of length = total_amount_of_measurements
 measurement_noise = ones(total_amount_of_measurements)
 for i in 1:n_out
-    measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] *= 0.10 * maximum(abs.(y_obs_hold[i, :]))
+    measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] *= 0.05 * maximum(abs.(y_obs_hold[i, :]))
 end
 
 # kernel hyper parameters

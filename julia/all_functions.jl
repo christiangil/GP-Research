@@ -16,10 +16,11 @@
 # Pkg.add("LaTeXStrings")
 # Pkg.add("https://github.com/eford/RvSpectraKitLearn.jl.git")
 # Pkg.add("Optim")
+# Pkg.add("Distributions")
 # Pkg.update()
 
 # include("reusable_code.jl")
 include("GP_functions.jl")
 include("general_functions.jl")
-using PyPlot
+include("plotting_functions.jl")
 include("diagnostic_functions.jl")

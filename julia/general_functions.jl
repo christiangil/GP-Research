@@ -1,5 +1,5 @@
 using LinearAlgebra
-
+using Distributed
 
 # a generalized version of the built in append!() function
 function append(a, b...)
@@ -147,3 +147,16 @@ end
 
 
 linspace(start, stop, length) = range(start, stop=stop, length=length)
+
+
+function clear_variables()
+    for var in names(Main)[2:length(names(Main))]
+        try
+            # eval(Meta.parse("$var=0"))\
+            # eval(Meta.parse("$var=nothing"))
+            clear!(var)
+        catch
+        end
+    end
+    # GC.gc()
+end
