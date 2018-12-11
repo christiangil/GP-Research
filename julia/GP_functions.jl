@@ -351,8 +351,8 @@ function covariance(x1list, x2list, hyperparameters; dorder=[0, 0], symmetric=fa
     same_x = (x1list == x2list)
 
     # are the x's passed identical and equally spaced
-    spacing = [x1list[i]-x1list[i-1] for i in 2:length(x1list)]
-    all([spacing[i]==spacing[1] for i in 2:length(spacing)])
+    # spacing = [x1list[i]-x1list[i-1] for i in 2:length(x1list)]
+    # all([spacing[i]==spacing[1] for i in 2:length(spacing)])
     if same_x
         spacing = [x1list[i]-x1list[i-1] for i in 2:length(x1list)]
         equal_spacing = all([abs(spacing[i] - spacing[1]) < 1e-8 for i in 2:length(spacing)])
@@ -461,7 +461,7 @@ function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return
     # tells Julia to perform and store the Cholesky factorization
     L_fact = ridge_chol(K_obs)
 
-    # actual lower triangular matrix values)
+    # actual lower triangular matrix values
     L = L_fact.L
 
     # these are all equivalent but have different computational costs

@@ -257,7 +257,7 @@ scores[:, 1] = rvs_out
 scores = scores'
 
 # for i in 1:3
-#     figure(figsize=(10,6))
+#     init_plot()
 #     fig = plot(phases, scores[i, :])
 #     xlabel("phases (days?)")
 #     ylabel("pca scores")
@@ -284,7 +284,7 @@ x_obs = phases[start_ind:end_ind]
 y_obs_hold = scores[1:n_out, start_ind:end_ind]
 
 # for i in 1:3
-#     figure(figsize=(10,6))
+#     init_plot()
 #     fig = plot(x_obs, y_obs_hold[i, :])
 #     xlabel("phases (days?)")
 #     ylabel("pca scores")
@@ -340,7 +340,7 @@ L_samp = ridge_chol(K_samp).L  # usually has to add a ridge
 
 
 function plot_im(A; file=0)
-    figure(figsize=(10,6))
+    init_plot()
     fig = imshow(A[:,:])
     colorbar()
     title("Heatmap")
@@ -362,7 +362,7 @@ function custom_line_plot(x_samp, L, x_obs, y_obs; output=1, draws=5000, σ=1, m
     # srand(100)
 
     # initialize figure size
-    figure(figsize=(10,6))
+    init_plot()
 
     # the indices corresponding to the proper output
     output_indices = (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)

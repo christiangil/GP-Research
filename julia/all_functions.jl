@@ -14,10 +14,10 @@
 # Pkg.add("PyPlot")
 # Pkg.add("PyCall")
 # Pkg.add("LaTeXStrings")
-# Pkg.add("https://github.com/eford/RvSpectraKitLearn.jl.git")
+# # Pkg.add("https://github.com/eford/RvSpectraKitLearn.jl.git")
 # Pkg.add("Optim")
 # Pkg.add("Distributions")
-# Pkg.update()
+# # Pkg.update()
 
 # include("reusable_code.jl")
 include("GP_functions.jl")

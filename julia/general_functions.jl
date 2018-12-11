@@ -150,7 +150,7 @@ linspace(start, stop, length) = range(start, stop=stop, length=length)
 
 
 function clear_variables()
-    for var in names(Main)[2:length(names(Main))]
+    for var in names(Main)
         try
             # eval(Meta.parse("$var=0"))\
             # eval(Meta.parse("$var=nothing"))
