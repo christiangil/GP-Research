@@ -1,9 +1,0 @@
-#!/bin/bash
-#PBS -l nodes=1:ppn=1
-#PBS -l walltime=10:00:00
-#PBS -l pmem=150gb                
-#PBS -A cyberlamp 	
-#PBS -j oe  
-cd $PBS_O_WORKDIR
-source activate soap2
-python soap_run.py 5 >& outputs/soap_job_id5_out.txt

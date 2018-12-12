@@ -1,9 +1,0 @@
-#!/bin/bash
-#PBS -l nodes=1:ppn=1
-#PBS -l walltime=10:00:00
-#PBS -l pmem=25gb                
-#PBS -A ebf11_a_g_sc_default 	
-#PBS -j oe  
-cd $PBS_O_WORKDIR
-source activate soap2
-python soap_run.py 10 >& outputs/soap_job_id10_out.txt
