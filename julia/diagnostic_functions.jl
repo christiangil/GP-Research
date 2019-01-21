@@ -1,7 +1,7 @@
 # these are all custom diagnostic functions. May help with debugging
 
 
-# estimate the gradient of nlogL with forward differences
+"estimate the gradient of nlogL with forward differences"
 function est_grad(hyper; dif=0.0001)
     val = nlogL(hyper)
     grad = zeros(length(hyper))
@@ -17,7 +17,7 @@ function est_grad(hyper; dif=0.0001)
 end
 
 
-# prints analytical and numerically estimated ∇nlogL
+"prints analytical and numerically estimated ∇nlogL"
 function test_grad(; dif=0.001, hyper=rand(length(hyperparameters)))
     println()
     println(nlogL(hyper))
@@ -29,7 +29,7 @@ function test_grad(; dif=0.001, hyper=rand(length(hyperparameters)))
 end
 
 
-# estimate the covariance derivatives with forward differences
+"estimate the covariance derivatives with forward differences"
 function est_dKdθ(hyper; x=[1,2], return_est=true, return_act=false, return_dif=false, dif=0.0001, outputs=2)
 
     return_vec = []

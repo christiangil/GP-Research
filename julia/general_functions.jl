@@ -1,7 +1,7 @@
 using LinearAlgebra
 using Distributed
 
-# a generalized version of the built in append!() function
+"a generalized version of the built in append!() function"
 function append(a, b...)
     for i in 1:length(b)
         append!(a, b[i])
@@ -10,7 +10,7 @@ function append(a, b...)
 end
 
 
-# if array is symmetric, return the symmetric version
+"if array is symmetric, return the symmetric version"
 function symmetric_A(A; ignore_asymmetry = false)
 
     if size(A, 1) == size(A, 2)
@@ -34,7 +34,7 @@ function symmetric_A(A; ignore_asymmetry = false)
 end
 
 
-# adds a ridge to a Cholesky factorization if necessary
+"adds a ridge to a Cholesky factorization if necessary"
 function ridge_chol(A; notification=true, ridge=1e-6)  # * maximum(A))
 
     # this would work but it automatically makes A the Cholesky matrix, not the factorization type
@@ -60,8 +60,8 @@ function ridge_chol(A; notification=true, ridge=1e-6)  # * maximum(A))
 end
 
 
-# gets the coefficients and differentiation orders necessary for two multiplied
-# functions with an arbitrary amount of parameters
+"gets the coefficients and differentiation orders necessary for two multiplied
+functions with an arbitrary amount of parameters"
 function product_rule(dorder)
 
     # initializing the final matrix with a single combined function with no derivatives
@@ -103,23 +103,10 @@ function product_rule(dorder)
 end
 
 
-# convert all floats in vector to ints
-function floats2ints(v; allow_negatives=true)
-    for i in length(v)
-        if v[i] < 0 & !allow_negatives
-            v[i] = 0
-            println("one of your floats was negative!")
-        else
-            v[i] = convert(Int64, v[i])
-        end
-    end
-    return v
-end
-
-
-# find differences between two arrays and set values smaller than a threshold
-# to be zero
-# use isapprox instead if you care about boolean result
+"""
+find differences between two arrays and set values smaller than a threshold to be zero
+use isapprox instead if you care about boolean result
+"""
 function signficant_difference(A1, A2, dif)
     A1mA2 = abs.(A1 - A2);
     A1mA2[A1mA2 .< (max(A1, A2) * ones(size(A1mA2)) * dif)] = 0;
@@ -128,14 +115,14 @@ function signficant_difference(A1, A2, dif)
 end
 
 
-# function similar to Mathematica's Chop[]
+"function similar to Mathematica's Chop[]"
 function chop_array(A; dif = 1e-6)
     A[abs.(A) .< dif] = 0;
     return A
 end
 
 
-# return approximate derivatives based on central differences
+"return approximate derivatives based on central differences"
 # a bit finicky based on h values
 # f is the function of x
 # x is the place you want the derivative at
@@ -146,9 +133,14 @@ function finite_differences(f, x, n, h)
 end
 
 
+"""
+Return evenly spaced numbers over a specified interval
+equivalent to range but without the keywords
+"""
 linspace(start, stop, length) = range(start, stop=stop, length=length)
 
 
+"set all variables equal to nothing to save some memory"
 function clear_variables()
     for var in names(Main)
         try

@@ -4,9 +4,11 @@
 using PyPlot
 
 
+"set axes and tick label font sizes for PyPlot plots"
 function set_font_sizes(ax; title=30, axes=20, ticks=15)
 
-    setp(ax[:title], fontsize=title)
+    # this doesn't work. set title size at plot creating
+    # setp(ax[:title], fontsize=title)
 
     setp(ax[:xaxis][:label], fontsize=axes)
     setp(ax[:yaxis][:label], fontsize=axes)
@@ -24,6 +26,7 @@ function set_font_sizes(ax; title=30, axes=20, ticks=15)
 end
 
 
+"create a nice, large PyPlot with large text sizes (excluding title)"
 function init_plot()
     figure(figsize=(10,6))
     ax = subplot(111)

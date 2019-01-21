@@ -49,8 +49,8 @@ function kernel(hyperparameters, x1, x2; dorder=[0,0], dKdθ=0, products = 0)
         dorders = length(hyper) + length(dorder)
 
         # get the derivative orders for functions 1 and 2
-        dorder1 = floats2ints(products_line[2:(dorders+1)]; allow_negatives=false)
-        dorder2 = floats2ints(products_line[(dorders + 2):(2 * dorders+1)]; allow_negatives=false)
+        dorder1 = convert(Array{Int64,1}, products_line[2:(dorders+1)])
+        dorder2 = convert(Array{Int64,1}, products_line[(dorders + 2):(2 * dorders+1)])
 
         # return 0 if you know that that portion will equal 0
         # this is when you are deriving one of the kernels by a hyperparameter

@@ -1,14 +1,26 @@
 using SpecialFunctions
 
-
-# Linear kernel
+"Linear GP kernel"
 function Linear_kernel(hyperparameters, x1, x2)
     sigma_b, sigma_a = hyperparameters
     return sigma_b ^ 2 * vecdot(x1, x2) + sigma_a ^ 2
 end
 
+"Radial basis function GP kernel (aka squared exonential, ~gaussian)"
+function RBF_kernel_base(hyperparameters, dif_sq)
 
-# Radial basis function kernel (aka squared exonential, ~gaussian)
+    if length(hyperparameters) > 1
+        kernel_amplitude, kernel_length = hyperparameters
+    else
+        kernel_amplitude = 1
+        kernel_length = hyperparameters
+    end
+
+    return kernel_amplitude ^ 2 * exp(-dif_sq / (2 * (kernel_length ^ 2)))
+end
+
+
+"Radial basis function GP kernel (aka squared exonential, ~gaussian)"
 function RBF_kernel(hyperparameters, dif_sq)
 
     if length(hyperparameters) > 1
@@ -22,11 +34,13 @@ function RBF_kernel(hyperparameters, dif_sq)
 end
 
 
-# Differentiated Radial basis function kernel (aka squared exonential, ~gauss)
-# ONLY WORKS FOR 1D TIME AS INPUTS
+"""
+Differentiated Radial basis function kernel (aka squared exonential, ~gauss)
+ONLY WORKS FOR 1D TIME AS INPUTS
+"""
 function dRBFdt_kernel(hyperparameters, dif, dorder)
 
-    dorder = floats2ints(dorder; allow_negatives=false)
+    dorder = convert(Array{Int64,1}, dorder)
 
     if length(hyperparameters) > 1
         kernel_amplitude, kernel_length = hyperparameters
@@ -72,7 +86,7 @@ end
 # ONLY WORKS FOR 1D TIME AS INPUTS
 function dRBFdλ_kernel(hyperparameters, dif, dorder)
 
-    dorder = floats2ints(dorder; allow_negatives=false)
+    dorder = convert(Array{Int64,1}, dorder)
 
     if length(hyperparameters) > 1
         kernel_amplitude, kernel_length = hyperparameters
@@ -116,17 +130,43 @@ function OU_kernel(hyperparameters, dif)
 end
 
 
-# Periodic kernel
-function Periodic_kernel(hyperparameters, abs_dif)
+# Periodic kernel base
+function Periodic_kernel_base(hyperparameters, abs_dif)
 
     if length(hyperparameters) > 2
         kernel_amplitude, kernel_length, kernel_period = hyperparameters
     else
         kernel_amplitude = 1
-        kernel_length, kernel_period = hyperparameters
+        kernel_period, kernel_length = hyperparameters
     end
 
-    return kernel_amplitude ^ 2 * exp(-2 * sin(pi * abs_dif / kernel_period) ^ 2 / (kernel_length ^ 2))
+    return kernel_amplitude ^ 2 * exp(-2 * sin(pi * (abs_dif / kernel_period)) ^ 2 / (kernel_length ^ 2))
+end
+
+
+# Differentiatable periodic kernel
+# ONLY WORKS FOR 1D TIME AS INPUTS
+function Periodic_kernel(hyperparameters, dif; dorder=zeros(4))
+
+    dorder = convert(Array{Int64,1}, dorder)
+
+    # if a kernel amplitude isn't passed, just make it 1
+    if length(hyperparameters) < 3
+        prepend!(hyperparameters, [1])
+    end
+
+    if dorder[3]==0 & dorder[4]==0
+        ans = dPeriodicdt_kernel(hyperparameters, dif, dorder[1:2])
+    elseif dorder[3] == 1
+        ans = dPeriodicdp_kernel(hyperparameters, dif, dorder[1:2])
+    elseif dorder[4] == 1
+        ans = dPeriodicdλ_kernel(hyperparameters, dif, dorder[1:2])
+    else
+        error("invalid dorder")
+    end
+
+    # returning answer
+    return ans
 end
 
 
@@ -134,7 +174,7 @@ end
 # ONLY WORKS FOR 1D TIME AS INPUTS
 function dPeriodicdt_kernel(hyperparameters, dif, dorder)
 
-    dorder = floats2ints(dorder; allow_negatives=false)
+    dorder = convert(Array{Int64,1}, dorder)
 
     if length(hyperparameters) > 2
         kernel_amplitude, kernel_length, kernel_period = hyperparameters
@@ -142,7 +182,7 @@ function dPeriodicdt_kernel(hyperparameters, dif, dorder)
         kernel_length, kernel_period = hyperparameters
     end
 
-    Periodic = Periodic_kernel(hyperparameters, abs(dif))
+    Periodic = Periodic_kernel_base(hyperparameters, abs(dif))
 
     sum_dorder = sum(dorder)
 
@@ -183,7 +223,7 @@ end
 # ONLY WORKS FOR 1D TIME AS INPUTS
 function dPeriodicdλ_kernel(hyperparameters, dif, dorder)
 
-    dorder = floats2ints(dorder; allow_negatives=false)
+    dorder = convert(Array{Int64,1}, dorder)
 
     if length(hyperparameters) > 2
         kernel_amplitude, kernel_length, kernel_period = hyperparameters
@@ -191,7 +231,7 @@ function dPeriodicdλ_kernel(hyperparameters, dif, dorder)
         kernel_length, kernel_period = hyperparameters
     end
 
-    Periodic = Periodic_kernel(hyperparameters, abs(dif))
+    Periodic = Periodic_kernel_base(hyperparameters, abs(dif))
 
     sum_dorder = sum(dorder)
 
@@ -236,7 +276,7 @@ end
 # ONLY WORKS FOR 1D TIME AS INPUTS
 function dPeriodicdp_kernel(hyperparameters, dif, dorder)
 
-    dorder = floats2ints(dorder; allow_negatives=false)
+    dorder = convert(Array{Int64,1}, dorder)
 
     if length(hyperparameters) > 2
         kernel_amplitude, kernel_length, kernel_period = hyperparameters
@@ -244,7 +284,7 @@ function dPeriodicdp_kernel(hyperparameters, dif, dorder)
         kernel_length, kernel_period = hyperparameters
     end
 
-    Periodic = Periodic_kernel(hyperparameters, abs(dif))
+    Periodic = Periodic_kernel_base(hyperparameters, abs(dif))
 
     sum_dorder = sum(dorder)
 
@@ -444,7 +484,7 @@ function get_σ(L_obs, K_obs_samp, K_samp)
 end
 
 
-# produces equivalent variances as the other version, but ~46% faster
+"conditions a GP with data"
 function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return_σ=false, return_K=false, return_L=false)
 
     return_vec = []
@@ -491,8 +531,8 @@ function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return
 end
 
 
-# negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-# (negative because Optim has a minimizer)
+"""negative log likelihood of the data given the current kernel parameters (as seen on page 19)
+(negative because Optim has a minimizer)"""
 function nlogL(hyperparameter_list...)
 
     hyper = []
@@ -520,8 +560,8 @@ function nlogL(hyperparameter_list...)
 end
 
 
-# http://www.gaussianprocess.org/gpml/chapters/RW5.pdf
-# gradient of negative log likelihood of the data given the current kernel parameters (as seen on page 19)
+"""http://www.gaussianprocess.org/gpml/chapters/RW5.pdf
+gradient of negative log likelihood of the data given the current kernel parameters (as seen on page 19)"""
 function ∇nlogL(G, hyperparameter_list...)
 
     hyper = []
@@ -646,14 +686,14 @@ end
 # end
 
 
-# creating a Cholesky factorization storage structure
+"creating a Cholesky factorization storage structure"
 struct chol_struct
     hyperparameters
     cholesky_object
 end
 
 
-# An effort to avoid recalculating Cholesky factorizations
+"An effort to avoid recalculating Cholesky factorizations"
 function stored_chol(chol_storage, new_hyper, A; return_values=false, notification=true, ridge=1e-6)
 
     # if the Cholesky factorization wasn't just calculated, calculate a new one.
@@ -665,8 +705,8 @@ function stored_chol(chol_storage, new_hyper, A; return_values=false, notificati
 end
 
 
-# find the powers that each coefficient is taken to for each part of the matrix construction
-# used for constructing differentiated versions of the kernel
+"""find the powers that each coefficient is taken to for each part of the matrix construction
+used for constructing differentiated versions of the kernel"""
 function coefficient_orders(n_out, n_dif; a=ones(n_out, n_dif))
 
     coeff_orders = zeros(n_out,n_out,n_dif,n_dif,n_out,n_dif)
@@ -700,12 +740,12 @@ function coefficient_orders(n_out, n_dif; a=ones(n_out, n_dif))
 end
 
 
-# a small function to get indices that make sense from Julia's reshaping routine
+"a small function to get indices that make sense from Julia's reshaping routine"
 proper_index(i) = [convert(Int64, rem(i - 1, n_out)) + 1, convert(Int64, floor((i -1) / n_out)) + 1]
 
 
-# getting the coefficients for constructing differentiated versions of the kernel
-# using the powers that each coefficient is taken to for each part of the matrix construction
+"""getting the coefficients for constructing differentiated versions of the kernel
+using the powers that each coefficient is taken to for each part of the matrix construction"""
 function dif_coefficients(n_out, n_dif, dKdθ; coeff_orders=0, a=ones(n_out, n_dif))
 
     if coeff_orders == 0

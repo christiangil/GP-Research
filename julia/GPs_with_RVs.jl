@@ -6,7 +6,7 @@ include("all_functions.jl")
 
 # Creating a custom kernel (possibly by adding and multiplying other kernels?)
 # x1 and x2 are single data points
-function kernel(hyperparameters, x1, x2; dorder=[0,0], dKdθ=0, products = 0)
+function kernel(hyperparameters, x1, x2; dorder=[0,0], dKdθ=0, products=0)
 
     # finding required differences between inputs
     dif_vec = x1 - x2  # raw difference vectors
@@ -49,8 +49,8 @@ function kernel(hyperparameters, x1, x2; dorder=[0,0], dKdθ=0, products = 0)
         dorders = length(hyper) + length(dorder)
 
         # get the derivative orders for functions 1 and 2
-        dorder1 = floats2ints(products_line[2:(dorders+1)]; allow_negatives=false)
-        dorder2 = floats2ints(products_line[(dorders + 2):(2 * dorders+1)]; allow_negatives=false)
+        dorder1 = convert(Array{Int64,1}, products_line[2:(dorders+1)])
+        dorder2 = convert(Array{Int64,1}, products_line[(dorders + 2):(2 * dorders+1)])
 
         # return 0 if you know that that portion will equal 0
         # this is when you are deriving one of the kernels by a hyperparameter
@@ -256,6 +256,7 @@ mu, M, scores = genpca_out
 scores[:, 1] = rvs_out
 scores = scores'
 
+# # plot pca scores
 # for i in 1:3
 #     init_plot()
 #     fig = plot(phases, scores[i, :])
@@ -265,17 +266,27 @@ scores = scores'
 #     savefig("figs/pca/pca_score_" * string(i - 1) * ".pdf")
 # end
 
+# for i in 1:3
+#     init_plot()
+#     fig = plot(x_obs, y_obs_hold[i, :])
+#     xlabel("phases (days?)")
+#     ylabel("pca scores")
+#     title("PCA " * string(i - 1) * " fit section")
+#     savefig("figs/pca/pca_score_" * string(i - 1) * "_section.pdf")
+# end
+
+
 # how many components you will use
 n_out = 3
 # how many differentiated versions of the original GP you will use
-n_dif = 2
+n_dif = 3
 
 total_coefficients = n_out * n_dif
 
 # Setting up all of the data things
 # how much of the data you want to use (on time domain)
-start_ind = 900
-end_ind = 940  # 1070
+start_ind = 100
+end_ind = 140  # 1070
 amount_of_measurements = end_ind - start_ind + 1
 total_amount_of_measurements = amount_of_measurements * n_out
 
@@ -283,6 +294,7 @@ total_amount_of_measurements = amount_of_measurements * n_out
 x_obs = phases[start_ind:end_ind]
 y_obs_hold = scores[1:n_out, start_ind:end_ind]
 
+# # plot pca scores for chosen fit section
 # for i in 1:3
 #     init_plot()
 #     fig = plot(x_obs, y_obs_hold[i, :])
@@ -309,6 +321,7 @@ end
 # measurement covariance function
 # a vector of length = total_amount_of_measurements
 measurement_noise = ones(total_amount_of_measurements)
+# currently set to 5 percent of total amplitude at every point. should be done with bootstrapping
 for i in 1:n_out
     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] *= 0.05 * maximum(abs.(y_obs_hold[i, :]))
 end
@@ -472,6 +485,7 @@ chol_storage = chol_struct(initial_x, ridge_chol(K_observations(x_obs, measureme
 # the optimization currently doesn't work because it looks for kernel lengths that are either negative (unphysical) or way too large kernel lengths (flatten covariance and prevents positice definiteness)
 
 # use gradient
+# http://julianlsolvers.github.io/Optim.jl/stable/#user/gradientsandhessians/
 # result = optimize(nlogL, ∇nlogL, lower, upper, initial_x, Fminbox(GradientDescent()))  # 272.3 s
 # @elapsed result = optimize(nlogL, ∇nlogL, initial_x, ConjugateGradient())  # 54.0 s, gave same result as Fminbox
 # @elapsed result = optimize(nlogL, ∇nlogL, initial_x, GradientDescent(), Optim.Options(iterations=2, show_trace=true))  # 116.8 s, gave same result as SA
