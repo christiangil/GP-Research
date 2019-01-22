@@ -2,7 +2,7 @@
 
 
 "estimate the gradient of nlogL with forward differences"
-function est_grad(hyper; dif=0.0001)
+function est_grad(hyper::Array{Float64,1}; dif::Float64=0.0001)
     val = nlogL(hyper)
     grad = zeros(length(hyper))
     for i in 1:length(hyper)
@@ -18,7 +18,7 @@ end
 
 
 "prints analytical and numerically estimated ∇nlogL"
-function test_grad(; dif=0.001, hyper=rand(length(hyperparameters)))
+function test_grad(; dif::Float64=0.001, hyper::Array{Float64,1}=rand(length(hyperparameters)))
     println()
     println(nlogL(hyper))
     println(hyper)
@@ -30,7 +30,7 @@ end
 
 
 "estimate the covariance derivatives with forward differences"
-function est_dKdθ(hyper; x=[1,2], return_est=true, return_act=false, return_dif=false, dif=0.0001, outputs=2)
+function est_dKdθ(hyper::Array{Float64,1}; x=[1,2], return_est::Bool=true, return_act::Bool=false, return_dif::Bool=false, dif::Float64=0.0001, outputs::Int=2)
 
     return_vec = []
 
@@ -78,7 +78,7 @@ end
 
 
 "Compare the performance of two different kernel functions"
-function func_comp(n, kernel1, kernel2; hyperparameters::Array{Float64,1}=[1.,2], dif::Float64=0.1)
+function func_comp(n::Int, kernel1, kernel2; hyperparameters::Array{Float64,1}=[1.,2], dif::Float64=0.1)
     @time [kernel1(hyperparameters, dif) for i in 1:n]
     @time [kernel2(hyperparameters, dif) for i in 1:n]
 end

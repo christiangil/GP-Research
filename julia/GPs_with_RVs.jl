@@ -9,7 +9,7 @@ include("kernels/Quasi_periodic_kernel.jl")
 # t1 and t2 are single time points
 # kernel_hyperparameters = total_hyperparameters[(total_coefficients + 1):end] = the hyperparameters for the base kernel (e.g. [kernel_period, kernel_length])
 # total_hyperparameters = kernel_hyperparameters appended to a flattened list of coefficients
-function kernel(kernel_hyperparameters, t1::Union{Float64,Array{Float64,1}}, t2::Union{Float64,Array{Float64,1}}; dorder=zeros(2), dKdθ=0)
+function kernel(kernel_hyperparameters::Union{Array{Any,1},Array{Float64,1}}, t1::Union{Float64,Array{Float64,1}}, t2::Union{Float64,Array{Float64,1}}; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(2), dKdθ::Int=0)
 
     dif = (t1 - t2)[1]
     dorder_tot = append!(copy(dorder), zeros(length(kernel_hyperparameters)))
@@ -273,10 +273,6 @@ amount_of_total_samp_points = amount_of_samp_points * n_out
 # pairs of points)
 K_samp = dependent_covariance(x_samp, x_samp, total_hyperparameters)
 
-####################### HAVE TO DEAL WITH NANs
-
-
-
 # getting the Cholesky factorization of the covariance matrix (for drawing GPs)
 L_samp = ridge_chol(K_samp).L  # usually has to add a ridge
 
@@ -418,7 +414,8 @@ chol_storage = chol_struct(initial_x, ridge_chol(K_observations(x_obs, measureme
 # result = optimize(nlogL, ∇nlogL, lower, upper, initial_x, Fminbox(GradientDescent()))  # 272.3 s
 # @elapsed result = optimize(nlogL, ∇nlogL, initial_x, ConjugateGradient())  # 54.0 s, gave same result as Fminbox
 # @elapsed result = optimize(nlogL, ∇nlogL, initial_x, GradientDescent(), Optim.Options(iterations=2, show_trace=true))  # 116.8 s, gave same result as SA
-@elapsed result = optimize(nlogL, ∇nlogL, initial_x, LBFGS(), Optim.Options(show_trace=true))  # 19.8 s, unique result, takes around a minute with 50 real data points and 3 outputs for 3 hyperparameter model (9 total)
+@elapsed result = optimize(nlogL, ∇nlogL, initial_x, LBFGS(), Optim.Options(show_trace=true))
+  # 19.8 s, unique result, takes around 5 mins with 50 real data points and 3 outputs for 3 hyperparameter model (9 total)
 # @elapsed result = optimize(nlogL_penalty, ∇nlogL_penalty, initial_x, LBFGS())
 # @elapsed result = optimize(nlogL, ∇nlogL, initial_x)
 # result = optimize(nlogL_penalty, ∇nlogL_penalty, initial_x, LBFGS())  # same as above but with a penalty

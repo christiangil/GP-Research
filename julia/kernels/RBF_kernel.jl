@@ -4,7 +4,7 @@
 RBF_kernel function created by kernel_coder(). Requires 1 hyperparameters. Likely created using RBF_kernel_base() as an input.
 Use with include("kernels/RBF_kernel.jl").
 """
-function RBF_kernel(hyperparameters::Array{Any,1}, dif::Float64; dorder::Array{}=zeros(1))
+function RBF_kernel(hyperparameters::Union{Array{Float64,1},Array{Any,1}}, dif::Float64; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(1))
 
     @assert length(hyperparameters)==1 "hyperparameters is the wrong length"
     if dorder==zeros(1)

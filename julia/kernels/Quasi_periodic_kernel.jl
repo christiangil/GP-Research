@@ -4,7 +4,7 @@
 Quasi_periodic_kernel function created by kernel_coder(). Requires 3 hyperparameters. Likely created using Quasi_periodic_kernel_base() as an input.
 Use with include("kernels/Quasi_periodic_kernel.jl").
 """
-function Quasi_periodic_kernel(hyperparameters::Array{Any,1}, dif::Float64; dorder::Array{}=zeros(1))
+function Quasi_periodic_kernel(hyperparameters::Union{Array{Float64,1},Array{Any,1}}, dif::Float64; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(1))
 
     @assert length(hyperparameters)==3 "hyperparameters is the wrong length"
     if dorder==zeros(1)

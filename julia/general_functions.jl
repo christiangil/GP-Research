@@ -2,7 +2,7 @@ using LinearAlgebra
 using Distributed
 
 "a generalized version of the built in append!() function"
-function append(a, b...)
+function append(a::Array{T,1}, b...) where {T}
     for i in 1:length(b)
         append!(a, b[i])
     end
@@ -11,7 +11,7 @@ end
 
 
 "if array is symmetric, return the symmetric version"
-function symmetric_A(A; ignore_asymmetry = false)
+function symmetric_A(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; ignore_asymmetry::Bool=false) where {T}
 
     if size(A, 1) == size(A, 2)
         max_dif = maximum(abs.(A - transpose(A)))
@@ -35,7 +35,7 @@ end
 
 
 "adds a ridge to a Cholesky factorization if necessary"
-function ridge_chol(A; notification=true, ridge=1e-6)  # * maximum(A))
+function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; notification::Bool=true, ridge::Float64=1e-6)  where {T} # * maximum(A))
 
     # this would work but it automatically makes A the Cholesky matrix, not the factorization type
     # if !isposdef!(A)
@@ -62,7 +62,7 @@ end
 
 "gets the coefficients and differentiation orders necessary for two multiplied
 functions with an arbitrary amount of parameters"
-function product_rule(dorder)
+function product_rule(dorder::Array{T,1}) where {T}
 
     # initializing the final matrix with a single combined function with no derivatives
     total = transpose(append!([1], zeros(2 * length(dorder))))
@@ -107,7 +107,7 @@ end
 find differences between two arrays and set values smaller than a threshold to be zero
 use isapprox instead if you care about boolean result
 """
-function signficant_difference(A1, A2, dif)
+function signficant_difference(A1::Array{Float64}, A2::Array{Float64}, dif::Float64)
     A1mA2 = abs.(A1 - A2);
     A1mA2[A1mA2 .< (max(A1, A2) * ones(size(A1mA2)) * dif)] = 0;
     # A1mA2[A1mA2 .< (ones(size(A1mA2)) * sqrt(dif))] = 0;
@@ -116,7 +116,7 @@ end
 
 
 "function similar to Mathematica's Chop[]"
-function chop_array(A; dif = 1e-6)
+function chop_array(A::Array{Float64}; dif = 1e-6)
     A[abs.(A) .< dif] = 0;
     return A
 end
@@ -128,16 +128,13 @@ end
 # x is the place you want the derivative at
 # n is the order of derivative
 # h is the step size
-function finite_differences(f, x, n, h)
+function finite_differences(f, x::Float64, n::Int, h::Float64)
     return sum([(-1) ^ i * binomial(n, i) * f(x + (n / 2 - i) * h) for i in 0:n] / h ^ n)
 end
 
 
-"""
-Return evenly spaced numbers over a specified interval
-equivalent to range but without the keywords
-"""
-linspace(start, stop, length) = collect(range(start, stop=stop, length=length))
+"Return evenly spaced numbers over a specified interval equivalent to range but without the keywords"
+linspace(start::Union{Float64,Int}, stop::Union{Float64,Int}, length::Int) = collect(range(start, stop=stop, length=length))
 
 
 "set all variables equal to nothing to save some memory"

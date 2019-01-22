@@ -91,8 +91,9 @@ of passed inputs. Generic. Complicated covariances accounted for in the
 total_covariance function
 the symmetric parameter asks whether or note the kernel used will be symmetric about dif=0 (only guarunteed for undifferentiated kernels)
 """
-function covariance(x1list, x2list, kernel_hyperparameters; dorder=[0, 0], symmetric=false, dKdθ=0)
+function covariance(x1list, x2list, kernel_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; dorder::Union{Array{Float64,1},Array{Int,1}}=[0, 0], symmetric::Bool=false, dKdθ::Int=0)
 
+    # @assert dKdθ <= length()
     # are the list of x's passed identical
     same_x = (x1list == x2list)
 
@@ -290,7 +291,7 @@ end
 
 
 "adding measurement noise to K_obs"
-function K_observations(x_obs, measurement_noise, total_hyperparameters; ignore_asymmetry=false)
+function K_observations(x_obs::Array{Float64,1}, measurement_noise::Array{Float64,1}, total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; ignore_asymmetry::Bool=false)
     K_obs = dependent_covariance(x_obs, x_obs, total_hyperparameters)
     @assert (size(K_obs, 1) == length(measurement_noise)) ["measurement_noise is the wrong length"]
     for i in 1:size(K_obs, 1)
@@ -302,6 +303,7 @@ end
 
 "calculating the variance at each GP posterior point"
 function get_σ(L_obs, K_obs_samp, K_samp)
+# function get_σ(L_obs::Cholesky{Float64,Array{Float64,2}}, K_obs_samp::Array{Float64,2}, K_samp::Array{Float64,2})
 
     v = L_obs \ K_obs_samp
     V = zeros(size(K_samp, 1))
@@ -323,7 +325,7 @@ end
 
 
 "conditions a GP with data"
-function GP_posteriors(x_obs, x_samp, measurement_noise, total_hyperparameters; return_σ=false, return_K=false, return_L=false)
+function GP_posteriors(x_obs::Array{Float64,1}, x_samp::Array{Float64,1}, measurement_noise::Array{Float64,1}, total_hyperparameters::Array{Float64,1}; return_σ::Bool=false, return_K::Bool=false, return_L::Bool=false)
 
     return_vec = []
 
@@ -434,13 +436,13 @@ end
 
 "creating a Cholesky factorization storage structure"
 struct chol_struct
-    total_hyperparameters::Array{Float64,1}
+    total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}
     cholesky_object::Cholesky{Float64,Array{Float64,2}}
 end
 
 
 "An effort to avoid recalculating Cholesky factorizations"
-function stored_chol(chol_storage, new_hyper, A; return_values=false, notification=true, ridge=1e-6)
+function stored_chol(chol_storage::chol_struct, new_hyper::Union{Array{Any,1},Array{Float64,1}}, A::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}; return_values::Bool=false, notification::Bool=true, ridge::Float64=1e-6)
 
     # if the Cholesky factorization wasn't just calculated, calculate a new one.
     if chol_storage.total_hyperparameters != new_hyper
@@ -453,7 +455,7 @@ end
 
 """find the powers that each coefficient is taken to for each part of the matrix construction
 used for constructing differentiated versions of the kernel"""
-function coefficient_orders(n_out, n_dif; a=ones(n_out, n_dif))
+function coefficient_orders(n_out::Int, n_dif::Int; a::Array{Float64,2}=ones(n_out, n_dif))
 
     coeff_orders = zeros(n_out,n_out,n_dif,n_dif,n_out,n_dif)
     for i in 1:n_out
@@ -492,11 +494,12 @@ proper_index(i::Int) = [convert(Int64, rem(i - 1, n_out)) + 1, convert(Int64, fl
 
 """getting the coefficients for constructing differentiated versions of the kernel
 using the powers that each coefficient is taken to for each part of the matrix construction"""
-function dif_coefficients(n_out, n_dif, dKdθ; coeff_orders=0, a=ones(n_out, n_dif))
+function dif_coefficients(n_out::Int, n_dif::Int, dKdθ::Int; coeff_orders=0, a::Union{Array{Any,2},Array{Float64,2}}=ones(n_out, n_dif))
 
     if coeff_orders == 0
         coeff_orders = coefficient_orders(n_out, n_dif, a=a)
     end
+
 
     # ((output pair), (which A matrix to use), (which a coefficent to use))
     coeff = zeros(n_out,n_out,n_dif,n_dif,n_out,n_dif)

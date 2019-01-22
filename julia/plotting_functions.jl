@@ -5,7 +5,7 @@ using PyPlot
 
 
 "set axes and tick label font sizes for PyPlot plots"
-function set_font_sizes(ax; title=30, axes=20, ticks=15)
+function set_font_sizes(ax; axes::Union{Float64,Int}=20., ticks::Union{Float64,Int}=15., title::Union{Float64,Int}=30.)
 
     # this doesn't work. set title size at plot creating
     # setp(ax[:title], fontsize=title)
