@@ -1,398 +1,102 @@
 using SpecialFunctions
-
-"Linear GP kernel"
-function Linear_kernel(hyperparameters, x1, x2)
-    sigma_b, sigma_a = hyperparameters
-    return sigma_b ^ 2 * vecdot(x1, x2) + sigma_a ^ 2
-end
-
-"Radial basis function GP kernel (aka squared exonential, ~gaussian)"
-function RBF_kernel_base(hyperparameters, dif_sq)
-
-    if length(hyperparameters) > 1
-        kernel_amplitude, kernel_length = hyperparameters
-    else
-        kernel_amplitude = 1
-        kernel_length = hyperparameters
-    end
-
-    return kernel_amplitude ^ 2 * exp(-dif_sq / (2 * (kernel_length ^ 2)))
-end
-
-
-"Radial basis function GP kernel (aka squared exonential, ~gaussian)"
-function RBF_kernel(hyperparameters, dif_sq)
-
-    if length(hyperparameters) > 1
-        kernel_amplitude, kernel_length = hyperparameters
-    else
-        kernel_amplitude = 1
-        kernel_length = hyperparameters
-    end
-
-    return kernel_amplitude ^ 2 * exp(-dif_sq / (2 * kernel_length ^ 2))
-end
+using LinearAlgebra
 
 
 """
-Differentiated Radial basis function kernel (aka squared exonential, ~gauss)
-ONLY WORKS FOR 1D TIME AS INPUTS
+All of these functions are enabled by a generic kernel function of the following form
+
+function kernel(hyperparameters, t1::Float64, t2::Float64; dorder=[0, 0], dKdθ=0)
+    ...
+    return value
+end
 """
-function dRBFdt_kernel(hyperparameters, dif, dorder)
-
-    dorder = convert(Array{Int64,1}, dorder)
-
-    if length(hyperparameters) > 1
-        kernel_amplitude, kernel_length = hyperparameters
-    else
-        kernel_length = hyperparameters
-    end
-
-    RBF = RBF_kernel(hyperparameters, dif ^ 2)
-
-    sum_dorder = sum(dorder)
-
-    # first coefficients are triangular numbers. second coefficients are
-    # tri triangular numbers
-    if sum_dorder > 0
-
-        T1 = dif / kernel_length ^ 2
-        if sum_dorder == 1
-            value = (T1)
-        elseif sum_dorder == 2
-            value = (T1 ^ 2 - 1 / kernel_length ^ 2)
-        elseif sum_dorder == 3
-            value = (T1 ^ 3 - 3 * T1 / (kernel_length ^ 2))
-        elseif sum_dorder == 4
-            value = (T1 ^ 4 - 6 * T1 ^ 2 / (kernel_length ^ 2)
-                + 3 / (kernel_length ^ 4))
-        end
-
-        if isodd(convert(Int64, dorder[1]))
-            value = -value
-        end
-
-        return RBF * value
-
-    else
-
-        return RBF
-    end
-
-end
-
-
-# kernel length differentiated Radial basis function kernel (aka squared exonential, ~gauss)
-# ONLY WORKS FOR 1D TIME AS INPUTS
-function dRBFdλ_kernel(hyperparameters, dif, dorder)
-
-    dorder = convert(Array{Int64,1}, dorder)
-
-    if length(hyperparameters) > 1
-        kernel_amplitude, kernel_length = hyperparameters
-    else
-        kernel_length = hyperparameters
-    end
-
-    RBF = RBF_kernel(hyperparameters, dif ^ 2)
-
-    sum_dorder = sum(dorder)
-
-    T1 = dif / kernel_length ^ 2
-    if sum_dorder == 0
-        value = (T1 ^ 2)
-    elseif sum_dorder == 1
-        value = (T1 ^ 3 - 2 * T1 / (kernel_length ^ 2))
-    elseif sum_dorder == 2
-        value = (T1 ^ 4 - 5 * T1 ^ 2 / (kernel_length ^ 2)
-            + 2 / (kernel_length ^ 4))
-    elseif sum_dorder == 3
-        value = (T1 ^ 5 - 9 * T1 ^ 3 / (kernel_length ^ 2)
-            + 12 * T1 / (kernel_length ^ 4))
-    elseif sum_dorder == 4
-        value = (T1 ^ 6 - 14 * T1 ^ 4 / (kernel_length ^ 2)
-            + 39 * T1 ^ 2 / (kernel_length ^ 4) - 12 / (kernel_length ^ 6))
-    end
-
-    if isodd(convert(Int64, dorder[1]))
-        value = -value
-    end
-
-    return RBF * kernel_length * value
-
-end
-
-
-# Ornstein–Uhlenbeck (Exponential) kernel
-function OU_kernel(hyperparameters, dif)
-    kernel_amplitude, kernel_length = hyperparameters
-    return kernel_amplitude ^ 2 * exp(-dif / kernel_length)
-end
-
-
-# Periodic kernel base
-function Periodic_kernel_base(hyperparameters, abs_dif)
-
-    if length(hyperparameters) > 2
-        kernel_amplitude, kernel_length, kernel_period = hyperparameters
-    else
-        kernel_amplitude = 1
-        kernel_period, kernel_length = hyperparameters
-    end
-
-    return kernel_amplitude ^ 2 * exp(-2 * sin(pi * (abs_dif / kernel_period)) ^ 2 / (kernel_length ^ 2))
-end
-
-
-# Differentiatable periodic kernel
-# ONLY WORKS FOR 1D TIME AS INPUTS
-function Periodic_kernel(hyperparameters, dif; dorder=zeros(4))
-
-    dorder = convert(Array{Int64,1}, dorder)
-
-    # if a kernel amplitude isn't passed, just make it 1
-    if length(hyperparameters) < 3
-        prepend!(hyperparameters, [1])
-    end
-
-    if dorder[3]==0 & dorder[4]==0
-        ans = dPeriodicdt_kernel(hyperparameters, dif, dorder[1:2])
-    elseif dorder[3] == 1
-        ans = dPeriodicdp_kernel(hyperparameters, dif, dorder[1:2])
-    elseif dorder[4] == 1
-        ans = dPeriodicdλ_kernel(hyperparameters, dif, dorder[1:2])
-    else
-        error("invalid dorder")
-    end
-
-    # returning answer
-    return ans
-end
-
-
-# Differentiated periodic kernel
-# ONLY WORKS FOR 1D TIME AS INPUTS
-function dPeriodicdt_kernel(hyperparameters, dif, dorder)
-
-    dorder = convert(Array{Int64,1}, dorder)
-
-    if length(hyperparameters) > 2
-        kernel_amplitude, kernel_length, kernel_period = hyperparameters
-    else
-        kernel_length, kernel_period = hyperparameters
-    end
-
-    Periodic = Periodic_kernel_base(hyperparameters, abs(dif))
-
-    sum_dorder = sum(dorder)
-
-    if sum_dorder > 0
-
-        theta = 2 * pi * dif / kernel_period
-        Sin = sin(theta)
-        Cos_tab = [cos(i * theta) for i in 1:(2 * floor(sum_dorder/2))]
-
-        if sum_dorder == 1
-            value = (Sin)
-        elseif sum_dorder == 2
-            value = -1 * (-1 + 2 * kernel_length ^ 2 * Cos_tab[1] + Cos_tab[2])
-        elseif sum_dorder == 3
-            value = (-2 * Sin * (-1 + 2 * kernel_length ^ 4
-                + 6 * kernel_length ^ 2 * Cos_tab[1] + Cos_tab[2]))
-        elseif sum_dorder == 4
-            value = (3 - 4 * kernel_length ^ 4
-                + 4 * kernel_length ^ 2 * (-3 + 2 * kernel_length ^ 4) * Cos_tab[1]
-                + 4 * (-1 + 7 * kernel_length ^ 4) * Cos_tab[2]
-                + 12 * kernel_length ^ 2 * Cos_tab[3]
-                + Cos_tab[4])
-        end
-        if isodd(convert(Int64, dorder[1]))
-            value = -value
-        end
-
-        constant = (pi / (kernel_period * kernel_length ^ 2)) ^ sum_dorder
-        return 2 * constant * Periodic * value
-    else
-        return Periodic
-    end
-
-end
-
-
-# kernel length differentiated periodic kernel
-# ONLY WORKS FOR 1D TIME AS INPUTS
-function dPeriodicdλ_kernel(hyperparameters, dif, dorder)
-
-    dorder = convert(Array{Int64,1}, dorder)
-
-    if length(hyperparameters) > 2
-        kernel_amplitude, kernel_length, kernel_period = hyperparameters
-    else
-        kernel_length, kernel_period = hyperparameters
-    end
-
-    Periodic = Periodic_kernel_base(hyperparameters, abs(dif))
-
-    sum_dorder = sum(dorder)
-
-    theta = pi * dif / kernel_period
-    Sin_tab = [sin(i * theta) for i in 1:maximum([2, sum_dorder + 1])]
-    Cos_tab = [cos(2 * i * theta) for i in 1:(1 + 2 * floor(sum_dorder/2))]
-
-    if sum_dorder == 0
-        value = (Sin_tab[1] ^ 2)
-    elseif sum_dorder == 1
-        value = (-Sin_tab[2] * (-1 + kernel_length ^ 2 + Cos_tab[1]))
-    elseif sum_dorder == 2
-        value = (1 / 2 * (2 - 2 * kernel_length ^ 2
-            + (-1 - 4 * kernel_length ^ 2 + 4 * kernel_length ^ 4) * Cos_tab[1]
-            + (-2 + 6 * kernel_length ^ 2) * Cos_tab[2]
-            + Cos_tab[3]))
-    elseif sum_dorder == 3
-        value = (Sin_tab[2] * (2 - 4 * kernel_length ^ 4 + 4 * kernel_length ^ 6
-            + (-1 - 12 * kernel_length ^ 2 + 28 * kernel_length ^ 4) * Cos_tab[1]
-            + 2 * (-1 + 6 * kernel_length ^ 2) * Cos_tab[2]
-            + Cos_tab[3]))
-    elseif sum_dorder == 4
-        value = (-1 / 2 * (-6 + 12 * kernel_length ^ 2 + 8 * kernel_length ^ 4 - 8 * kernel_length ^ 6
-            + 2 * (1 + 12 * kernel_length ^ 2 - 26 * kernel_length ^ 4 - 8 * kernel_length ^ 6 + 8 * kernel_length ^ 8) * Cos_tab[1]
-            + 8 * (1 - 4 * kernel_length ^ 2 - 7 * kernel_length ^ 4 + 15 * kernel_length ^ 6) * Cos_tab[2]
-            + (-3 - 24 * kernel_length ^ 2 + 100 * kernel_length ^ 4) * Cos_tab[3]
-            + 2 * (-1 + 10 * kernel_length ^ 2) * Cos_tab[4]
-            + Cos_tab[5]))
-    end
-
-    if isodd(convert(Int64, dorder[1]))
-        value = -value
-    end
-
-    constant = (pi / (kernel_period * kernel_length ^ 2)) ^ sum_dorder
-    return 4 / kernel_length ^ 3 * constant * Periodic * value
-
-end
-
-
-# kernel period differentiated periodic kernel
-# ONLY WORKS FOR 1D TIME AS INPUTS
-function dPeriodicdp_kernel(hyperparameters, dif, dorder)
-
-    dorder = convert(Array{Int64,1}, dorder)
-
-    if length(hyperparameters) > 2
-        kernel_amplitude, kernel_length, kernel_period = hyperparameters
-    else
-        kernel_length, kernel_period = hyperparameters
-    end
-
-    Periodic = Periodic_kernel_base(hyperparameters, abs(dif))
-
-    sum_dorder = sum(dorder)
-
-    theta = 2 * pi *dif / kernel_period
-    Sin_tab = [sin(i * theta) for i in 1:maximum([3,(1 + 2 * floor(sum_dorder/2))])]
-    Cos_tab = [cos(i * theta) for i in 1:(2 * floor(sum_dorder/2 + 1))]
-
-    if sum_dorder == 0
-        value = (pi * dif * Sin_tab[1])
-    elseif sum_dorder == 1
-        value = (-1 * (pi * dif * (-1 + 2 * kernel_length ^ 2 * Cos_tab[1] + Cos_tab[2])
-            + kernel_period * kernel_length ^ 2 * Sin_tab[1]))
-    elseif sum_dorder == 2
-        value = (-1 * (-2 * kernel_period * kernel_length ^ 2 * (-1 + 2 * kernel_length ^ 2 * Cos_tab[1] + Cos_tab[2])
-            + 2 * pi * dif * (-1 + 2 * kernel_length ^ 4 + 6 * kernel_length ^ 2 * Cos_tab[1] + Cos_tab[2]) * Sin_tab[1]))
-    elseif sum_dorder == 3
-        value = (-pi * dif * (-3 + 4 * kernel_length ^ 4)
-            + 4 * pi * dif * kernel_length ^ 2 * (-3 + 2 * kernel_length ^ 4) * Cos_tab[1]
-            + 4 * pi * dif * (-1 + 7 * kernel_length ^ 4) * Cos_tab[2]
-            + 12 * pi * dif * kernel_length ^ 2 * Cos_tab[3]
-            + pi * dif * Cos_tab[4]
-            + 3 * kernel_period * kernel_length ^ 2 * (-3 + 4 * kernel_length ^ 4) * Sin_tab[1]
-            + 18 * kernel_period * kernel_length ^ 4 * Sin_tab[2]
-            + 3 * kernel_period * kernel_length ^ 2 * Sin_tab[3])
-    elseif sum_dorder == 4
-        value = (-4 * kernel_period * kernel_length ^ 2 * (3
-            - 4 * kernel_length ^ 4 + 4 * kernel_length ^ 2 * (-3 + 2 * kernel_length ^ 4) * Cos_tab[1]
-            + 4 * (-1 + 7 * kernel_length ^ 4) * Cos_tab[2]
-            + 12 * kernel_length ^ 2 * Cos_tab[3]
-            + Cos_tab[4])
-            + 2 * pi * dif * Sin_tab[1] * (3 + 20 * kernel_length ^ 4 + 8 * kernel_length ^ 8
-            + 20 * kernel_length ^ 2 * (-1 + 6 * kernel_length ^ 4) * Cos_tab[1]
-            + 4 * (-1 + 25 * kernel_length ^ 4) * Cos_tab[2]
-            + 20 * kernel_length ^ 2 * Cos_tab[3]
-            + Cos_tab[4]))
-    end
-
-    if isodd(convert(Int64, dorder[1]))
-        value = -value
-    end
-
-    constant = (pi / (kernel_period * kernel_length ^ 2)) ^ sum_dorder
-    return 2 / (kernel_period ^ 2 * kernel_length ^ 2) * constant * Periodic * value
-
-end
-
-
-# general Matern kernel
-function Matern_kernel(hyperparameters, dif, nu)
-    kernel_amplitude, kernel_length = hyperparameters
-    #limit of the function as it apporaches 0 (see https://en.wikipedia.org/wiki/Mat%C3%A9rn_covariance_function)
-    if dif == 0
-        return kernel_amplitude ^ 2
-    else
-        x = (sqrt(2 * nu) * dif) / kernel_length
-        return kernel_amplitude ^ 2 * ((2 ^ (1 - nu)) / (gamma(nu))) * x ^ nu * besselk(nu, x)
-    end
-end
-
-
-# Matern 3/2 kernel
-function Matern32_kernel(hyperparameters, dif)
-    kernel_amplitude, kernel_length = hyperparameters
-    x = sqrt(3) * dif / kernel_length
-    return kernel_amplitude ^ 2 * (1 + x) * exp(-x)
-end
-
-
-# Matern 5/2 kernel
-function Matern52_kernel(hyperparameters, dif)
-    kernel_amplitude, kernel_length = hyperparameters
-    x = sqrt(5) * dif / kernel_length
-    return kernel_amplitude ^ 2 * (1 + x + (x ^ 2) / 3) * exp(-x)
-end
-
-
-# Rational Quadratic kernel (equivalent to adding together many SE kernels
-# with different lengthscales. When α→∞, the RQ is identical to the SE.)
-function RQ_kernel(hyperparameters, dif_sq)
-    kernel_amplitude, kernel_length, alpha = hyperparameters
-    alpha = max(alpha, 0)
-    return kernel_amplitude ^ 2 * (1 + dif_sq / (2 * alpha * kernel_length ^ 2)) ^ -alpha
-end
-
-
-# Bessel (function of he first kind) kernel
-# Bessel functions of the first kind, denoted as Jα(x), are solutions of Bessel's
-# differential equation that are finite at the origin (x = 0) for integer or positive α
-# http://crsouza.com/2010/03/17/kernel-functions-for-machine-learning-applications/#bessel
-function Bessel_kernel(hyperparameters, dif; nu=0)
-    kernel_amplitude, kernel_length, n = hyperparameters
-    nu = max(nu, 0)
-    return besselj(nu, kernel_length * dif) / (dif ^ (-n * nu))
-end
-
-
-# Creates the covariance matrix by evaluating the kernel function for each pair
-# of passed inputs. Generic. Complicated covariances accounted for in the
-# total_covariance function
-# the symmetric parameter asks whether or note the kernel used will be symmetric about d=0
-function covariance(x1list, x2list, hyperparameters; dorder=[0, 0], symmetric=false, dKdθ=0, products=0)
+# function kernel1(hyperparameters, x1, x2; dorder=[0,0], dKdθ=0, products = 0)
+#
+#     # finding required differences between inputs
+#     dif_vec = x1 - x2  # raw difference vectors
+#
+#     function kernel_piece(hyper, dif, products_line)
+#
+#         # amount of possible derivatives on each function
+#         dorders = length(hyper) + length(dorder)
+#
+#         # get the derivative orders for functions 1 and 2
+#         dorder1 = convert(Array{Int64,1}, products_line[2:(dorders+1)])
+#         dorder2 = convert(Array{Int64,1}, products_line[(dorders + 2):(2 * dorders+1)])
+#
+#         # return 0 if you know that that portion will equal 0
+#         # this is when you are deriving one of the kernels by a hyperparameter
+#         # of the other kernel
+#         if (((dorder1[length(dorder) + 2] == 1) | (dorder1[length(dorder) + 3] == 1))
+#             | (dorder2[length(dorder) + 1] == 1))
+#
+#             return 0
+#
+#         else
+#
+#             # use the properly differentiated version of kernel function 1
+#             if dorder1[length(dorder) + 1] == 1
+#                 func1 = dRBFdλ_kernel([hyper[1]], dif, dorder1[1:length(dorder)])
+#             # elseif ((dorder1[length(dorder) + 2] == 1) | (dorder1[length(dorder) + 3] == 1))
+#             #     func1 = 0
+#             else
+#                 func1 = dRBFdt_kernel([hyper[1]], dif, dorder1[1:length(dorder)])
+#             end
+#
+#             # use the properly differentiated version of kernel function 2
+#             # if dorder2[length(dorder) + 1] == 1
+#             #     func2 = 0
+#             if dorder2[length(dorder) + 2] == 1
+#                 func2 = dPeriodicdλ_kernel(hyper[2:3], dif, dorder2[1:length(dorder)])
+#             elseif dorder2[length(dorder) + 3] == 1
+#                 func2 = dPeriodicdp_kernel(hyper[2:3], dif, dorder2[1:length(dorder)])
+#             else
+#                 func2 = dPeriodicdt_kernel(hyper[2:3], dif, dorder2[1:length(dorder)])
+#             end
+#
+#             return func1 * func2
+#
+#         end
+#     end
+#
+#     # calculate the product rule coefficients and dorders if they aren't passed
+#     if products == 0
+#         non_coefficient_hyperparameters = length(hyperparameters) - total_coefficients
+#         new_dorder = append!(copy(dorder), zeros(non_coefficient_hyperparameters))
+#         # differentiate by RBF kernel length
+#         if dKdθ == length(hyperparameters) - 2
+#             new_dorder[length(dorder) + 1] = 1
+#         # differentiate by Periodic kernel length
+#         elseif dKdθ == length(hyperparameters) - 1
+#             new_dorder[length(dorder) + 2] = 1
+#         # differentiate by Periodic kernel period
+#         elseif dKdθ == length(hyperparameters)
+#             new_dorder[length(dorder) + 3] = 1
+#         end
+#         products = product_rule(new_dorder)
+#     end
+#
+#     # add all of the differentiated kernels together according to the product rule
+#     final = sum([products[i, 1] * kernel_piece(hyperparameters[(length(hyperparameters) - 2):length(hyperparameters)], dif_vec[1], products[i,:]) for i in 1:size(products, 1)])
+#
+#     return final
+#
+# end
+
+
+
+"""
+Creates the covariance matrix by evaluating the kernel function for each pair
+of passed inputs. Generic. Complicated covariances accounted for in the
+total_covariance function
+the symmetric parameter asks whether or note the kernel used will be symmetric about dif=0 (only guarunteed for undifferentiated kernels)
+"""
+function covariance(x1list, x2list, kernel_hyperparameters; dorder=[0, 0], symmetric=false, dKdθ=0)
 
     # are the list of x's passed identical
     same_x = (x1list == x2list)
 
     # are the x's passed identical and equally spaced
-    # spacing = [x1list[i]-x1list[i-1] for i in 2:length(x1list)]
-    # all([spacing[i]==spacing[1] for i in 2:length(spacing)])
     if same_x
         spacing = [x1list[i]-x1list[i-1] for i in 2:length(x1list)]
         equal_spacing = all([abs(spacing[i] - spacing[1]) < 1e-8 for i in 2:length(spacing)])
@@ -407,7 +111,7 @@ function covariance(x1list, x2list, hyperparameters; dorder=[0, 0], symmetric=fa
     if equal_spacing && symmetric
         kernline = zeros(x1_length)
         for i in 1:x1_length
-            kernline[i] = kernel(hyperparameters, x1list[1,:], x1list[i,:], dorder=dorder, dKdθ=dKdθ, products=products)
+            kernline[i] = kernel(kernel_hyperparameters, x1list[1,:], x1list[i,:], dorder=dorder, dKdθ=dKdθ)
         end
         for i in 1:x1_length
             for j in 1:x1_length
@@ -421,7 +125,7 @@ function covariance(x1list, x2list, hyperparameters; dorder=[0, 0], symmetric=fa
         for i in 1:x1_length
             for j in 1:x1_length
                 if i <= j
-                    K[i, j] = kernel(hyperparameters, x1list[i,:], x1list[j,:], dorder=dorder, dKdθ=dKdθ, products=products)
+                    K[i, j] = kernel(kernel_hyperparameters, x1list[i,:], x1list[j,:], dorder=dorder, dKdθ=dKdθ)
                 end
             end
         end
@@ -429,7 +133,7 @@ function covariance(x1list, x2list, hyperparameters; dorder=[0, 0], symmetric=fa
     else
         for i in 1:x1_length
             for j in 1:x2_length
-                K[i, j] = kernel(hyperparameters, x1list[i,:], x2list[j,:], dorder=dorder, dKdθ=dKdθ, products=products)
+                K[i, j] = kernel(kernel_hyperparameters, x1list[i,:], x2list[j,:], dorder=dorder, dKdθ=dKdθ)
             end
         end
         return K
@@ -437,23 +141,157 @@ function covariance(x1list, x2list, hyperparameters; dorder=[0, 0], symmetric=fa
 end
 
 
-# "true" underlying for the fake observations
-function observations(x, measurement_noise)
-    # a phase shifted sine curve with measurement noise and inherent noise
-    measurement_noise += 0.2 * ones(length(measurement_noise))  # adding a noise component inherent to the activity
-    if length(size(x)) > 1
-        shift = 2 * pi * rand(size(x, 2))
-        return [sum(sin.(pi / 2 * x[i,:] + [shift])) for i in 1:size(x, 1)] + measurement_noise .^ 2 .* randn(size(x, 1))
-    else
-        shift = 2 * pi * rand()
-        return [sum(sin.(pi / 2 * x[i,:] + [shift])) for i in 1:length(x)] + measurement_noise .^ 2 .* randn(length(x))
-    end
-end
+# """
+# Calculating the covariance between all outputs for a combination of dependent GPs
+# written so that the intermediate K's don't have to be calculated over and over again
+# """
+# function dependent_covariance(x1list, x2list, hyperparameters; dKdθ=0, coeff_orders=0)
+#
+#     # calculating the total size of the multi-output covariance matrix
+#     point_amount = [size(x1list, 1), size(x2list, 1)]
+#     K = zeros((n_out * point_amount[1], n_out * point_amount[2]))
+#
+#     non_coefficient_hyperparameters = length(hyperparameters) - total_coefficients
+#
+#     # calculating all of the sub-matrices explicitly
+#     # A = Array{Any}(n_dif, n_dif)
+#     # for k in 1:n_dif
+#     #     for l in 1:n_dif
+#     #         dorder = [k - 1, l - 1]
+#     #         # things that have been differentiated an even amount of times are symmetric
+#     #         if iseven(k + l)
+#     #             A[k, l] = covariance(x1list, x2list, hyperparameters; dorder=dorder, symmetric=true, dKdθ=dKdθ)
+#     #         else
+#     #             A[k, l] = covariance(x1list, x2list, hyperparameters; dorder=dorder, dKdθ=dKdθ)
+#     #         end
+#     #     end
+#     # end
+#     #
+#     # save_A(A)
+#
+#     # only calculating each sub-matrix once and using the fact that they should
+#     # be basically the same if the kernel has been differentiated the same amount of times
+#     A_list = Array{Any}(nothing, 2 * n_dif - 1)
+#     for k in 1:(2 * n_dif - 1)
+#         dorder = [0, k - 1]
+#
+#         new_dorder = append!(copy(dorder), zeros(non_coefficient_hyperparameters))
+#         # differentiate by RBF kernel length
+#         if dKdθ == length(hyperparameters) - 2
+#             new_dorder[length(dorder) + 1] = 1
+#         # differentiate by Periodic kernel length
+#         elseif dKdθ == length(hyperparameters) - 1
+#             new_dorder[length(dorder) + 2] = 1
+#         # differentiate by Periodic kernel period
+#         elseif dKdθ == length(hyperparameters)
+#             new_dorder[length(dorder) + 3] = 1
+#         end
+#         products = product_rule(new_dorder)
+#
+#
+#         # things that have been differentiated an even amount of times are symmetric
+#         if isodd(k)
+#             A_list[k] = covariance(x1list, x2list, hyperparameters; dorder=dorder, symmetric=true, dKdθ=dKdθ, products=products)
+#         else
+#             A_list[k] = covariance(x1list, x2list, hyperparameters; dorder=dorder, dKdθ=dKdθ, products=products)
+#         end
+#     end
+#
+#
+#     # return the properly negative differentiated A matrix from the list
+#     # make it negative or not based on how many times it has been differentiated in the x1 direction
+#     A_mat(k, l, A_list) = ((-1) ^ (k - 1)) * A_list[k + l - 1]
+#
+#
+#     # reshaping the list into a format consistent with the explicit calculation
+#     # A = Array{Any}(n_dif, n_dif)
+#     # for k in 1:n_dif
+#     #     for l in 1:n_dif
+#     #         A[k, l] =  A_mat(k, l, A_list)
+#     #     end
+#     # end
+#     #
+#     # save_A(A)
+#     # save_A(A_list)
+#
+#     # assembling the total covariance matrix
+#     a = reshape(hyperparameters[1:total_coefficients], (n_out, n_dif))
+#     # if we aren't differentiating by one of the coefficient hyperparameters
+#     # assemble the covariance matrix in the expected way
+#     if dKdθ == 0 || dKdθ > total_coefficients
+#         for i in 1:n_out
+#             for j in 1:n_out
+#                 for k in 1:n_dif
+#                     for l in 1:n_dif
+#                         if (i == j) & isodd(k + l)
+#                             # the cross terms (of odd differentiation orders) cancel each other out in diagonal matrices
+#                         else
+#                             K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
+#                                 ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=
+#                                 # a[i, k] * a[j, l] * A[k, l]
+#                                 a[i, k] * a[j, l] *  A_mat(k, l, A_list)
+#                         end
+#                     end
+#                 end
+#             end
+#         end
+#     # if we are differentiating by one of the coefficient hyperparameters
+#     # we have to assemble the covariance matrix in a different way
+#     else
+#         # ((output pair), (which A matrix to use), (which a coefficent to use))
+#         # get all of the coefficients for coefficient hyperparameters based on
+#         # the amount of outputs and differentiations
+#         coeff = dif_coefficients(n_out, n_dif, dKdθ; coeff_orders=coeff_orders, a=a)
+#
+#         for i in 1:n_out
+#             for j in 1:n_out
+#                 for k in 1:n_dif
+#                     for l in 1:n_dif
+#                         for m in 1:n_out
+#                             for n in 1:n_dif
+#                                 if coeff[i, j, k, l, m, n] != 0
+#                                     K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
+#                                         ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=
+#                                         # coeff[i, j, k, l, m, n] * a[m, n] * A[k, l]
+#                                         coeff[i, j, k, l, m, n] * a[m, n] * A_mat(k, l, A_list)
+#                                 end
+#                             end
+#                         end
+#                     end
+#                 end
+#             end
+#         end
+#     end
+#
+#     # this would just be a wrapper function for a less complicated kernel
+#     # all you would need is the following line
+#     # K = covariance(x1list, x2list, hyperparameters)
+#
+#     # return the symmetrized version of the covariance matrix
+#     # function corrects for numerical errors and notifies us if our matrix isn't
+#     # symmetric like it should be
+#     return symmetric_A(K)
+#
+# end
 
 
-# adding measurement noise to K_obs
-function K_observations(x_obs, measurement_noise, hyperparameters; ignore_asymmetry=false)
-    K_obs = total_covariance(x_obs, x_obs, hyperparameters)
+# "\"true\" underlying for the fake observations"
+# function observations(x, measurement_noise)
+#     # a phase shifted sine curve with measurement noise and inherent noise
+#     measurement_noise += 0.2 * ones(length(measurement_noise))  # adding a noise component inherent to the activity
+#     if length(size(x)) > 1
+#         shift = 2 * pi * rand(size(x, 2))
+#         return [sum(sin.(pi / 2 * x[i,:] + [shift])) for i in 1:size(x, 1)] + measurement_noise .^ 2 .* randn(size(x, 1))
+#     else
+#         shift = 2 * pi * rand()
+#         return [sum(sin.(pi / 2 * x[i,:] + [shift])) for i in 1:length(x)] + measurement_noise .^ 2 .* randn(length(x))
+#     end
+# end
+
+
+"adding measurement noise to K_obs"
+function K_observations(x_obs, measurement_noise, total_hyperparameters; ignore_asymmetry=false)
+    K_obs = dependent_covariance(x_obs, x_obs, total_hyperparameters)
     @assert (size(K_obs, 1) == length(measurement_noise)) ["measurement_noise is the wrong length"]
     for i in 1:size(K_obs, 1)
         K_obs[i, i] +=  measurement_noise[i] ^ 2
@@ -462,7 +300,7 @@ function K_observations(x_obs, measurement_noise, hyperparameters; ignore_asymme
 end
 
 
-# calculating the variance at each point
+"calculating the variance at each GP posterior point"
 function get_σ(L_obs, K_obs_samp, K_samp)
 
     v = L_obs \ K_obs_samp
@@ -485,15 +323,15 @@ end
 
 
 "conditions a GP with data"
-function GP_posteriors(x_obs, x_samp, measurement_noise, hyperparameters; return_σ=false, return_K=false, return_L=false)
+function GP_posteriors(x_obs, x_samp, measurement_noise, total_hyperparameters; return_σ=false, return_K=false, return_L=false)
 
     return_vec = []
 
-    K_samp = total_covariance(x_samp, x_samp, hyperparameters)
-    K_obs = K_observations(x_obs, measurement_noise, hyperparameters)
+    K_samp = dependent_covariance(x_samp, x_samp, total_hyperparameters)
+    K_obs = K_observations(x_obs, measurement_noise, total_hyperparameters)
 
-    K_samp_obs = total_covariance(x_samp, x_obs, hyperparameters)
-    # K_samp_obs = (K_samp_obs + transpose(total_covariance(x_obs, x_samp, hyperparameters)) / 2
+    K_samp_obs = dependent_covariance(x_samp, x_obs, total_hyperparameters)
+    # K_samp_obs = (K_samp_obs + transpose(dependent_covariance(x_obs, x_samp, hyperparameters)) / 2
     K_obs_samp = transpose(K_samp_obs)
 
     # (RW alg. 2.1)
@@ -588,108 +426,16 @@ function ∇nlogL(G, hyperparameter_list...)
     coeff_orders = coefficient_orders(n_out, n_dif)
 
     for i in 1:(length(hyper))
-        G[i] = grad(total_covariance(x_obs, x_obs, hyper; dKdθ=i, coeff_orders=coeff_orders))
+        G[i] = grad(dependent_covariance(x_obs, x_obs, hyper; dKdθ=i, coeff_orders=coeff_orders))
     end
 
 end
 
 
-# # negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-# function nlogL_penalty(hyperparameter_list...)
-#
-#     hyperparameters = []
-#     for i in 1:length(hyperparameter_list)
-#         append!(hyperparameters, hyperparameter_list[i])
-#     end
-#     n=length(y_obs)
-#
-#     # a weirdly necessary dummy variable
-#     measurement_noise_dummy = measurement_noise
-#     K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
-#
-#     # inv_K_obs = inv(K_obs)
-#     # inv_K_obs = inv(L_fact)  # ~35% faster than inv(K_obs)
-#     # det_K_obs = det(L_fact)  # ~8% faster than det(K_obs)
-#     L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
-#
-#     # goodness of fit term
-#     data_fit = -1 / 2 * (transpose(y_obs) * (L_fact \ y_obs))
-#     # complexity penalization term
-#     # penalty = -1 / 2 * log(det_K_obs)
-#     penalty = -1 / 2 * logdet(L_fact)  # half memory but twice the time
-#     # normalization term (functionally useless)
-#     normalization = -n / 2 * log(2 * pi)
-#
-#     # lower = zeros(length(hyperparameters))
-#     lower = (-10) * ones(length(hyperparameters))
-#     lower[(total_coefficients + 1):length(hyperparameters)] = zeros(length(hyperparameters) - total_coefficients)
-#     upper = 10 * ones(length(hyperparameters))
-#
-#     add_penalty = 0
-#     for i in 1:length(hyperparameters)
-#         if hyperparameters[i] > upper[i]
-#             add_penalty += hyperparameters[i] - upper[i]
-#         elseif hyperparameters[i] < lower[i]
-#             add_penalty += lower[i] - hyperparameters[i]
-#         end
-#     end
-#
-#     return -1 * (data_fit + penalty + normalization) + add_penalty
-# end
-#
-#
-# # http://www.gaussianprocess.org/gpml/chapters/RW5.pdf
-# # gradient of negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-# function ∇nlogL_penalty(G, hyperparameter_list...)
-#
-#     hyperparameters = []
-#     for i in 1:length(hyperparameter_list)
-#         append!(hyperparameters, hyperparameter_list[i])
-#     end
-#
-#     # a weirdly necessary dummy variable
-#     measurement_noise_dummy = measurement_noise
-#     K_obs = K_observations(x_obs, measurement_noise_dummy, hyperparameters)
-#     L_fact = stored_chol(chol_storage, hyperparameters, K_obs; notification=false)
-#     # inv_K_obs = inv(L_fact)
-#
-#     # lower = zeros(length(hyperparameters))
-#     lower = (-10) * ones(length(hyperparameters))
-#     lower[(total_coefficients + 1):length(hyperparameters)] = zeros(length(hyperparameters) - total_coefficients)
-#     upper = 10 * ones(length(hyperparameters))
-#
-#     function grad(dK_dθj)
-#         # derivative of goodness of fit term
-#         data_fit = 1 / 2 * (transpose(y_obs) * (L_fact \ (dK_dθj * (L_fact \ y_obs))))
-#         # derivative of complexity penalization term
-#         penalty = -1 / 2 * tr(L_fact \ dK_dθj)
-#
-#         add_penalty = 0
-#         for i in 1:length(hyperparameters)
-#             if hyperparameters[i] > upper[i]
-#                 add_penalty = 1
-#             elseif hyperparameters[i] < lower[i]
-#                 add_penalty = -1
-#             end
-#         end
-#
-#         return -1 * (data_fit + penalty) + add_penalty
-#     end
-#
-#     # taking some burden off of recalculating the coefficient orders used by the automatic differentiation
-#     coeff_orders = coefficient_orders(n_out, n_dif)
-#
-#     for i in 1:(length(hyperparameters))
-#         G[i] = grad(total_covariance(x_obs, x_obs, hyperparameters; dKdθ=i, coeff_orders=coeff_orders))
-#     end
-#
-# end
-
-
 "creating a Cholesky factorization storage structure"
 struct chol_struct
-    hyperparameters
-    cholesky_object
+    total_hyperparameters::Array{Float64,1}
+    cholesky_object::Cholesky{Float64,Array{Float64,2}}
 end
 
 
@@ -697,7 +443,7 @@ end
 function stored_chol(chol_storage, new_hyper, A; return_values=false, notification=true, ridge=1e-6)
 
     # if the Cholesky factorization wasn't just calculated, calculate a new one.
-    if chol_storage.hyperparameters != new_hyper
+    if chol_storage.total_hyperparameters != new_hyper
         chol_storage = chol_struct(copy(new_hyper), ridge_chol(A; notification=notification, ridge=ridge))
     end
     return chol_storage.cholesky_object
@@ -741,7 +487,7 @@ end
 
 
 "a small function to get indices that make sense from Julia's reshaping routine"
-proper_index(i) = [convert(Int64, rem(i - 1, n_out)) + 1, convert(Int64, floor((i -1) / n_out)) + 1]
+proper_index(i::Int) = [convert(Int64, rem(i - 1, n_out)) + 1, convert(Int64, floor((i -1) / n_out)) + 1]
 
 
 """getting the coefficients for constructing differentiated versions of the kernel
@@ -772,95 +518,3 @@ function dif_coefficients(n_out, n_dif, dKdθ; coeff_orders=0, a=ones(n_out, n_d
 
     return coeff
 end
-
-
-# old handcoded version of dif_coefficients function
-# function dif_coefficients_old(n_out, n_dif, dKdθ)
-#     # ((output pair), (which A matrix to use), (which a coefficent to use))
-#     coeff = zeros(n_out, n_out, n_dif, n_dif, n_out, n_dif)
-#     if (n_out == 2) & (n_dif > 1)
-#         if dKdθ == 1  # dK/da11
-#             coeff[1, 1, 1, 1, 1, 1] = 2
-#
-#             coeff[1, 2, 1, 1, 2, 1] = 1
-#             coeff[1, 2, 1, 2, 2, 2] = 1
-#
-#             coeff[2, 1, 1, 1, 2, 1] = 1
-#             coeff[2, 1, 2, 1, 2, 2] = 1
-#         elseif dKdθ == 2  # dK/da21
-#             coeff[1, 2, 1, 1, 1, 1] = 1
-#             coeff[1, 2, 2, 1, 1, 2] = 1
-#
-#             coeff[2, 1, 1, 1, 1, 1] = 1
-#             coeff[2, 1, 1, 2, 1, 2] = 1
-#
-#             coeff[2, 2, 1, 1, 2, 1] = 2
-#         elseif dKdθ == 3  # dK/da12
-#             coeff[1, 1, 2, 2, 1, 2] = 2
-#
-#             coeff[1, 2, 2, 1, 2, 1] = 1
-#             coeff[1, 2, 2, 2, 2, 2] = 1
-#
-#             coeff[2, 1, 1, 2, 2, 1] = 1
-#             coeff[2, 1, 2, 2, 2, 2] = 1
-#         elseif dKdθ == 4  # dK/da22
-#             coeff[1, 2, 1, 2, 1, 1] = 1
-#             coeff[1, 2, 2, 2, 1, 2] = 1
-#
-#             coeff[2, 1, 2, 1, 1, 1] = 1
-#             coeff[2, 1, 2, 2, 1, 2] = 1
-#
-#             coeff[2, 2, 2, 2, 2, 2] = 2
-#         end
-#         if n_dif > 2
-#             if dKdθ == 1  # dK/da11
-#                 coeff[1, 1, 3, 1, 1, 3] = 1
-#                 coeff[1, 1, 1, 3, 1, 3] = 1
-#
-#                 coeff[1, 2, 1, 3, 2, 3] = 1
-#
-#                 coeff[2, 1, 3, 1, 2, 3] = 1
-#             elseif dKdθ == 2  # dK/da21
-#                 coeff[1, 2, 3, 1, 1, 3] = 1
-#
-#                 coeff[2, 1, 1, 3, 1, 3] = 1
-#
-#                 coeff[2, 2, 3, 1, 2, 3] = 1
-#                 coeff[2, 2, 1, 3, 2, 3] = 1
-#             elseif dKdθ == 3  # dK/da12
-#                 coeff[1, 2, 2, 3, 2, 3] = 1
-#
-#                 coeff[2, 1, 3, 2, 2, 3] = 1
-#             elseif dKdθ == 4  # dK/da22
-#                 coeff[1, 2, 3, 2, 1, 3] = 1
-#
-#                 coeff[2, 1, 2, 3, 1, 3] = 1
-#             elseif dKdθ == 5  # dK/da13
-#                 coeff[1, 1, 3, 3, 1, 3] = 2
-#                 coeff[1, 1, 3, 1, 1, 1] = 1
-#                 coeff[1, 1, 1, 3, 1, 1] = 1
-#
-#                 coeff[1, 2, 3, 1, 2, 1] = 1
-#                 coeff[1, 2, 3, 2, 2, 2] = 1
-#                 coeff[1, 2, 3, 3, 2, 3] = 1
-#
-#                 coeff[2, 1, 1, 3, 2, 1] = 1
-#                 coeff[2, 1, 2, 3, 2, 2] = 1
-#                 coeff[2, 1, 3, 3, 2, 3] = 1
-#             elseif dKdθ == 6  # dK/da23
-#                 coeff[1, 2, 1, 3, 1, 1] = 1
-#                 coeff[1, 2, 2, 3, 1, 2] = 1
-#                 coeff[1, 2, 3, 3, 1, 3] = 1
-#
-#                 coeff[2, 1, 3, 1, 1, 1] = 1
-#                 coeff[2, 1, 3, 2, 1, 2] = 1
-#                 coeff[2, 1, 3, 3, 1, 3] = 1
-#
-#                 coeff[2, 2, 3, 3, 2, 3] = 2
-#                 coeff[2, 2, 3, 1, 2, 1] = 1
-#                 coeff[2, 2, 1, 3, 2, 1] = 1
-#             end
-#         end
-#     end
-#     return coeff
-# end

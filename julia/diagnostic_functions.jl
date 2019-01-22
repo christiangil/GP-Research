@@ -75,3 +75,10 @@ function est_dKdθ(hyper; x=[1,2], return_est=true, return_act=false, return_dif
     return return_vec
 
 end
+
+
+"Compare the performance of two different kernel functions"
+function func_comp(n, kernel1, kernel2; hyperparameters::Array{Float64,1}=[1.,2], dif::Float64=0.1)
+    @time [kernel1(hyperparameters, dif) for i in 1:n]
+    @time [kernel2(hyperparameters, dif) for i in 1:n]
+end

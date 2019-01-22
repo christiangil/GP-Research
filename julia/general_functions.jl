@@ -137,7 +137,7 @@ end
 Return evenly spaced numbers over a specified interval
 equivalent to range but without the keywords
 """
-linspace(start, stop, length) = range(start, stop=stop, length=length)
+linspace(start, stop, length) = collect(range(start, stop=stop, length=length))
 
 
 "set all variables equal to nothing to save some memory"
