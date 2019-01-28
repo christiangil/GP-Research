@@ -4,175 +4,6 @@ include("all_functions.jl")
 # can use this if you want to replicate results
 # srand(1234)
 
-include("kernels/Quasi_periodic_kernel.jl")
-# Creating a custom kernel (possibly by adding and multiplying other kernels?)
-# t1 and t2 are single time points
-# kernel_hyperparameters = total_hyperparameters[(total_coefficients + 1):end] = the hyperparameters for the base kernel (e.g. [kernel_period, kernel_length])
-# total_hyperparameters = kernel_hyperparameters appended to a flattened list of coefficients
-function kernel(kernel_hyperparameters::Union{Array{Any,1},Array{Float64,1}}, t1::Union{Float64,Array{Float64,1}}, t2::Union{Float64,Array{Float64,1}}; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(2), dKdθ::Int=0)
-
-    dif = (t1 - t2)[1]
-    dorder_tot = append!(copy(dorder), zeros(length(kernel_hyperparameters)))
-
-    if dKdθ > total_coefficients
-        dorder_tot[2 + dKdθ - total_coefficients] = 1
-    end
-    # println(dorder_tot)
-    final = Quasi_periodic_kernel(kernel_hyperparameters, dif; dorder=dorder_tot)
-
-    return final
-
-end
-
-
-"""
-Calculating the covariance between all outputs for a combination of dependent GPs
-written so that the intermediate K's don't have to be calculated over and over again
-"""
-function dependent_covariance(x1list, x2list, total_hyperparameters; dKdθ=0, coeff_orders=0)
-
-    kernel_hyperparameters = total_hyperparameters[(total_coefficients + 1):end]
-    # println(length(kernel_hyperparameters))
-
-    # calculating the total size of the multi-output covariance matrix
-    point_amount = [size(x1list, 1), size(x2list, 1)]
-    K = zeros((n_out * point_amount[1], n_out * point_amount[2]))
-
-    # non_coefficient_hyperparameters = length(total_hyperparameters) - total_coefficients
-
-    # calculating all of the sub-matrices explicitly
-    # A = Array{Any}(n_dif, n_dif)
-    # for k in 1:n_dif
-    #     for l in 1:n_dif
-    #         dorder = [k - 1, l - 1]
-    #         # things that have been differentiated an even amount of times are symmetric
-    #         if iseven(k + l)
-    #             A[k, l] = covariance(x1list, x2list, hyperparameters; dorder=dorder, symmetric=true, dKdθ=dKdθ)
-    #         else
-    #             A[k, l] = covariance(x1list, x2list, hyperparameters; dorder=dorder, dKdθ=dKdθ)
-    #         end
-    #     end
-    # end
-    #
-    # save_A(A)
-
-    # only calculating each sub-matrix once and using the fact that they should
-    # be basically the same if the kernel has been differentiated the same amount of times
-    A_list = Array{Any}(nothing, 2 * n_dif - 1)
-    for k in 1:(2 * n_dif - 1)
-
-        # CHANGE THIS TO MAKE MORE SENSE WITH NEW KERNEL SCHEME
-        # VERY HACKY
-        # dorder = [0, k - 1]
-        total_time_derivatives = k - 1
-        dorder = [2 * div(total_time_derivatives - 1, 2), rem(total_time_derivatives - 1, 2) + 1]
-
-        # new_dorder = append!(copy(dorder), zeros(non_coefficient_hyperparameters))
-        # # differentiate by RBF kernel length
-        # if dKdθ == length(hyperparameters) - 2
-        #     new_dorder[length(dorder) + 1] = 1
-        # # differentiate by Periodic kernel length
-        # elseif dKdθ == length(hyperparameters) - 1
-        #     new_dorder[length(dorder) + 2] = 1
-        # # differentiate by Periodic kernel period
-        # elseif dKdθ == length(hyperparameters)
-        #     new_dorder[length(dorder) + 3] = 1
-        # end
-        # products = product_rule(new_dorder)
-
-
-        # things that have been differentiated an even amount of times are symmetric
-        if isodd(k)
-            A_list[k] = covariance(x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dKdθ=dKdθ)
-            # A_list[k] = covariance(x1list, x2list, hyperparameters; dorder=dorder, symmetric=true, dKdθ=dKdθ, products=products)
-        else
-            A_list[k] = covariance(x1list, x2list, kernel_hyperparameters; dorder=dorder, dKdθ=dKdθ)
-            # A_list[k] = covariance(x1list, x2list, hyperparameters; dorder=dorder, dKdθ=dKdθ, products=products)
-        end
-    end
-
-
-    # return the properly negative differentiated A matrix from the list
-    # make it negative or not based on how many times it has been differentiated in the x1 direction
-    A_mat(k, l, A_list) = ((-1) ^ (k - 1)) * A_list[k + l - 1]
-
-
-    # reshaping the list into a format consistent with the explicit calculation
-    # A = Array{Any}(n_dif, n_dif)
-    # for k in 1:n_dif
-    #     for l in 1:n_dif
-    #         A[k, l] =  A_mat(k, l, A_list)
-    #     end
-    # end
-    #
-    # save_A(A)
-    # save_A(A_list)
-
-    # assembling the total covariance matrix
-    a = reshape(total_hyperparameters[1:total_coefficients], (n_out, n_dif))
-    # if we aren't differentiating by one of the coefficient hyperparameters
-    # assemble the covariance matrix in the expected way
-    if dKdθ == 0 || dKdθ > total_coefficients
-        for i in 1:n_out
-            for j in 1:n_out
-                for k in 1:n_dif
-                    for l in 1:n_dif
-                        if (i == j) & isodd(k + l)
-                            # the cross terms (of odd differentiation orders) cancel each other out in diagonal matrices
-                        else
-                            K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
-                                ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=
-                                # a[i, k] * a[j, l] * A[k, l]
-                                a[i, k] * a[j, l] *  A_mat(k, l, A_list)
-                        end
-                    end
-                end
-            end
-        end
-    # if we are differentiating by one of the coefficient hyperparameters
-    # we have to assemble the covariance matrix in a different way
-    else
-        # ((output pair), (which A matrix to use), (which a coefficent to use))
-        # get all of the coefficients for coefficient hyperparameters based on
-        # the amount of outputs and differentiations
-        coeff = dif_coefficients(n_out, n_dif, dKdθ; coeff_orders=coeff_orders, a=a)
-
-        for i in 1:n_out
-            for j in 1:n_out
-                for k in 1:n_dif
-                    for l in 1:n_dif
-                        for m in 1:n_out
-                            for n in 1:n_dif
-                                if coeff[i, j, k, l, m, n] != 0
-                                    K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
-                                        ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=
-                                        # coeff[i, j, k, l, m, n] * a[m, n] * A[k, l]
-                                        coeff[i, j, k, l, m, n] * a[m, n] * A_mat(k, l, A_list)
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    # this would just be a wrapper function for a less complicated kernel
-    # all you would need is the following line
-    # K = covariance(x1list, x2list, hyperparameters)
-
-    # return the symmetrized version of the covariance matrix
-    # function corrects for numerical errors and notifies us if our matrix isn't
-    # symmetric like it should be
-    return symmetric_A(K)
-
-end
-
-# kernel hyper parameters
-# AFFECTS SHAPE OF THE GP's
-# make sure you have the right amount!
-
-
 # loading in data
 using JLD2, FileIO
 @load "sunspot_data.jld2" lambda phases quiet
@@ -191,27 +22,15 @@ scores = scores'
 #     savefig("figs/pca/pca_score_" * string(i - 1) * ".pdf")
 # end
 
-# for i in 1:3
-#     init_plot()
-#     fig = plot(x_obs, y_obs_hold[i, :])
-#     xlabel("phases (days?)")
-#     ylabel("pca scores")
-#     title("PCA " * string(i - 1) * " fit section")
-#     savefig("figs/pca/pca_score_" * string(i - 1) * "_section.pdf")
-# end
-
-
 # how many components you will use
 n_out = 3
 # how many differentiated versions of the original GP you will use
 n_dif = 3
 
-total_coefficients = n_out * n_dif
-
 # Setting up all of the data things
 # how much of the data you want to use (on time domain)
 start_ind = 100
-end_ind = 140  # 1070
+end_ind = 130  # 1070
 amount_of_measurements = end_ind - start_ind + 1
 total_amount_of_measurements = amount_of_measurements * n_out
 
@@ -241,6 +60,16 @@ for i in 1:n_out
     y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :]
 end
 
+# # plot subsection that will be fit
+# for i in 1:3
+#     init_plot()
+#     fig = plot(x_obs, y_obs_hold[i, :])
+#     xlabel("phases (days?)")
+#     ylabel("pca scores")
+#     title("PCA " * string(i - 1) * " fit section")
+#     savefig("figs/pca/pca_score_" * string(i - 1) * "_section.pdf")
+# end
+
 # Uncertainty in the data (AFFECTS SPREAD OF DATA AND HOW TIGHTLY THE GP's WILL
 # TRY TO HUG THE DATA) aka how much noise is added to measurements and
 # measurement covariance function
@@ -251,12 +80,21 @@ for i in 1:n_out
     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] *= 0.05 * maximum(abs.(y_obs_hold[i, :]))
 end
 
+
+a0 = ones(n_out, n_dif) / 20
+
+include("kernels/Quasi_periodic_kernel.jl")  # sets correct num_kernel_hyperparameters
+build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
+
+
+##############################################################################
+
 # kernel hyper parameters
 # AFFECTS SHAPE OF THE GP's
 # make sure you have the right amount!
-a = ones(n_out, n_dif) / 20
+
 kernel_lengths = [1, 1, 1] / 1.5
-total_hyperparameters = append!(collect(Iterators.flatten(a)), kernel_lengths)
+total_hyperparameters = append!(collect(Iterators.flatten(a0)), kernel_lengths)
 # hyperparameters=rand(n_out * n_dif + 3)
 
 # how finely to sample the domain (for plotting)
@@ -271,30 +109,30 @@ amount_of_total_samp_points = amount_of_samp_points * n_out
 # Finding how correlated the sampled inputs are to each other
 # (aka getting the covariance matrix by evaluating the kernel function at all
 # pairs of points)
-K_samp = dependent_covariance(x_samp, x_samp, total_hyperparameters)
+K_samp = covariance(problem_definition, x_samp, x_samp, total_hyperparameters)
 
 # getting the Cholesky factorization of the covariance matrix (for drawing GPs)
 L_samp = ridge_chol(K_samp).L  # usually has to add a ridge
 
 
-function plot_im(A; file=0)
+function plot_im(A; file::String="")
     init_plot()
     fig = imshow(A[:,:])
     colorbar()
     title("Heatmap")
-    if file != 0
+    if file != ""
         savefig(file)
     end
 end
 
 
 # showing a heatmap of the covariance matrix
-plot_im(K_samp; file="figs/gp/initial_covariance.pdf")
-plot_im(L_samp)
+# plot_im(K_samp; file="figs/gp/initial_covariance.pdf")
+# plot_im(L_samp)
 
 
 # quick and dirty function for creating plots that show what I want
-function custom_line_plot(x_samp, L, x_obs, y_obs; output=1, draws=5000, σ=1, mean=zeros(amount_of_total_samp_points), show=10)
+function custom_line_plot(x_samp::Array{Float64,1}, L, x_obs::Array{Float64,1}, y_obs::Array{Float64,1}; output::Int=1, draws::Int=5000, σ::Array{Float64,1}=zeros(1), mean::Array{Float64,1}=zeros(amount_of_total_samp_points), show::Int=10, file::String="")
 
     # same curves are drawn every time?
     # srand(100)
@@ -312,7 +150,7 @@ function custom_line_plot(x_samp, L, x_obs, y_obs; output=1, draws=5000, σ=1, m
     show_curves = zeros(show, amount_of_samp_points)
 
     # if no analytical variance is passed, estimate it with sampling
-    if σ == 1
+    if σ == zeros(1)
 
         # calculate a bunch of GP draws
         storage = zeros((draws, amount_of_total_samp_points))
@@ -362,18 +200,20 @@ function custom_line_plot(x_samp, L, x_obs, y_obs; output=1, draws=5000, σ=1, m
     ylabel("pca scores")
     title("PCA " * string(output-1))
 
+    if file!=""
+        savefig(file)
+    end
+
 end
 
 
-fig = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=1)
-savefig("figs/gp/initial_gp_0.pdf")
-fig = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=2)
-savefig("figs/gp/initial_gp_1.pdf")
-fig = custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=3)
-savefig("figs/gp/initial_gp_2.pdf")
+# custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=1, file="figs/gp/initial_gp_0.pdf")
+# custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=2, file="figs/gp/initial_gp_1.pdf")
+# custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=3, file="figs/gp/initial_gp_2.pdf")
+
 
 # calculate posterior quantities
-mean_post, return_vec = GP_posteriors(x_obs, x_samp, measurement_noise, total_hyperparameters, return_K=true, return_L=true, return_σ=true)
+mean_post, return_vec = GP_posteriors(problem_definition, x_samp, total_hyperparameters, return_K=true, return_L=true, return_σ=true)
 σ, K_post, L_post = return_vec
 
 # plot the posterior covariance matrix (colors show how correlated points are to each other)
@@ -384,12 +224,9 @@ mean_post, return_vec = GP_posteriors(x_obs, x_samp, measurement_noise, total_hy
 # much closer to the data, no?
 
 # for 1D GPs
-fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1)
-savefig("figs/gp/cond_initial_gp_1.pdf")
-fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2)
-savefig("figs/gp/cond_initial_gp_2.pdf")
-fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3)
-savefig("figs/gp/cond_initial_gp_3.pdf")
+# custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1, file="figs/gp/cond_initial_gp_1.pdf")
+# custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2, file="figs/gp/cond_initial_gp_2.pdf")
+# custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3, file="figs/gp/cond_initial_gp_3.pdf")
 
 # numerically maximize the likelihood to find the best hyperparameters
 using Optim
@@ -398,11 +235,12 @@ using Optim
 initial_x = copy(total_hyperparameters)
 
 # initializing Cholesky factorization storage
-chol_storage = chol_struct(initial_x, ridge_chol(K_observations(x_obs, measurement_noise, initial_x)))
+chol_storage = chol_struct(initial_x, ridge_chol(K_observations(problem_definition, initial_x)))
+# chol_storage = chol_struct(zeros(1), ridge_chol(hcat([1,.1],[.1,1])))
 
 # lower = zeros(length(hyperparameters))
 # lower = -5 * ones(length(hyperparameters))
-# lower[(total_coefficients + 1):length(hyperparameters)] = zeros(length(hyperparameters) - total_coefficients)
+# lower[(num_coefficients + 1):length(hyperparameters)] = zeros(length(hyperparameters) - num_coefficients)
 # upper = 5 * ones(length(hyperparameters))
 
 # can optimize with or without using the analytical gradient
@@ -414,7 +252,7 @@ chol_storage = chol_struct(initial_x, ridge_chol(K_observations(x_obs, measureme
 # result = optimize(nlogL, ∇nlogL, lower, upper, initial_x, Fminbox(GradientDescent()))  # 272.3 s
 # @elapsed result = optimize(nlogL, ∇nlogL, initial_x, ConjugateGradient())  # 54.0 s, gave same result as Fminbox
 # @elapsed result = optimize(nlogL, ∇nlogL, initial_x, GradientDescent(), Optim.Options(iterations=2, show_trace=true))  # 116.8 s, gave same result as SA
-@elapsed result = optimize(nlogL, ∇nlogL, initial_x, LBFGS(), Optim.Options(show_trace=true))
+@elapsed result = optimize(nlogL_Jones, ∇nlogL_Jones, initial_x, LBFGS(), Optim.Options(show_trace=true))
   # 19.8 s, unique result, takes around 5 mins with 50 real data points and 3 outputs for 3 hyperparameter model (9 total)
 # @elapsed result = optimize(nlogL_penalty, ∇nlogL_penalty, initial_x, LBFGS())
 # @elapsed result = optimize(nlogL, ∇nlogL, initial_x)
@@ -437,18 +275,15 @@ println(result.minimum)
 
 # reruning analysis of posterior with the "most likley" kernel amplitude and lengthscale
 # recalculating posterior covariance and mean function
-mean_post, return_vec = GP_posteriors(x_obs, x_samp, measurement_noise, final_total_hyperparameters, return_K=true, return_L=true, return_σ=true)
+mean_post, return_vec = GP_posteriors(problem_definition, x_samp, final_total_hyperparameters, return_K=true, return_L=true, return_σ=true)
 σ, K_post, L_post = return_vec
 
 # plot the posterior covariance of the "most likely" posterior matrix
 # (colors show how correlated points are to each other)
-plot_im(K_post)
+# plot_im(K_post)
 
 
 # for 1D GPs
-fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1)
-savefig("figs/gp/fit_gp_1.pdf")
-fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2)
-savefig("figs/gp/fit_gp_2.pdf")
-fig = custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3)
-savefig("figs/gp/fit_gp_3.pdf")
+# custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1, file="figs/gp/fit_gp_1.pdf")
+# custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2, file="figs/gp/fit_gp_2.pdf")
+# custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3, file="figs/gp/fit_gp_3.pdf")

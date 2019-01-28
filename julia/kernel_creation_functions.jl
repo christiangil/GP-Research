@@ -45,10 +45,11 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String)
     file_loc = "kernels/" * kernel_name * ".jl"
     io = open(file_loc, "w")
 
+    num_kernel_hyperparameters = sym_amount-2
     # begin to write the function including assertions that the amount of hyperparameters are correct
-    write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $(sym_amount-2) hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"kernels/$kernel_name.jl\").\n\"\"\"\n")
+    write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"kernels/$kernel_name.jl\").\n\"\"\"\n")
     write(io, "function " * kernel_name * "(hyperparameters::Array{Any,1}, dif::Float64; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(1))\n\n")
-    write(io, "    @assert length(hyperparameters)==$(sym_amount-2) \"hyperparameters is the wrong length\"\n")
+    write(io, "    @assert length(hyperparameters)==$num_kernel_hyperparameters \"hyperparameters is the wrong length\"\n")
     write(io, "    if dorder==zeros(1)\n")
     write(io, "        dorder = zeros(length(hyperparameters) + 2)\n")
     write(io, "    else\n")
@@ -117,7 +118,8 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String)
     # write(io, string("    end\n\n"))
 
     write(io, string("    return float(func)\n\n"))
-    write(io, "end")
+    write(io, "end\n\n\n")
+    write(io, "num_kernel_hyperparameters = $num_kernel_hyperparameters\n")
     close(io)
 
     @warn "The order of hyperparameters in the function may be different from the order given when you made them in @vars. Check the created function file (or the print statement below) to see what order you need to actually use."
