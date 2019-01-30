@@ -1,13 +1,13 @@
 #adding in custom functions
-include("all_functions.jl")
+include("src/all_functions.jl")
 
 # can use this if you want to replicate results
 # srand(1234)
 
 # loading in data
 using JLD2, FileIO
-@load "sunspot_data.jld2" lambda phases quiet
-@load "rv_data.jld2" doppler_comp genpca_out rvs_out
+@load "jld2_files/sunspot_data.jld2" lambda phases quiet
+@load "jld2_files/rv_data.jld2" doppler_comp genpca_out rvs_out
 mu, M, scores = genpca_out
 scores[:, 1] = rvs_out
 scores = scores'
@@ -29,10 +29,10 @@ x_obs = phases[start_ind:end_ind]
 y_obs_hold = scores[1:n_out, start_ind:end_ind]
 
 # normalizing the data (for numerical purposes)
-# normals = maximum(abs.(y_obs_hold), dims=2)'[:]
-# for i in 1:n_out
-#     y_obs_hold[i, :] /= normals[i]
-# end
+normals = mean(abs.(y_obs_hold), dims=2)'[:]
+for i in 1:n_out
+    y_obs_hold[i, :] /= normals[i]
+end
 
 # rearranging the data into one column (not sure reshape() does what I want)
 y_obs = zeros(total_amount_of_measurements)
@@ -40,31 +40,37 @@ for i in 1:n_out
     y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :]
 end
 
-# Uncertainty in the data (AFFECTS SPREAD OF DATA AND HOW TIGHTLY THE GP's WILL
-# TRY TO HUG THE DATA) aka how much noise is added to measurements and
-# measurement covariance function
-# a vector of length = total_amount_of_measurements
-measurement_noise = ones(total_amount_of_measurements)
-# currently set to 20 percent of total amplitude at every point. should be done with bootstrapping
+# measurement_noise = ones(total_amount_of_measurements)
+
+
+@load "jld2_files/bootstrap.jld2" scores_tot error_ests
+error_ests = error_ests[:, start_ind:end_ind]
+measurement_noise = zeros(total_amount_of_measurements)
 for i in 1:n_out
-    measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] *= 0.05 * maximum(abs.(y_obs_hold[i, :]))
+    measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = error_ests[i, :] / normals[i]
 end
 
-a0 = ones(n_out, n_dif) / 20
-# a0 = zeros(n_out, n_dif)
-# a0[1,1] = 1; a0[2,1] = 1; a0[1,2] = 1000; a0[3,2] = 1000; a0[2,3] = 100; a0 /= 20
+y_obs
+measurement_noise
+# for i in 1:n_out
+#     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] *= 0.10 * maximum(abs.(y_obs_hold[i, :]))
+# end
 
-include("kernels/Quasi_periodic_kernel.jl")  # sets correct num_kernel_hyperparameters
+# a0 = ones(n_out, n_dif) / 20
+a0 = zeros(n_out, n_dif)
+a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.1; a0[2,3] = 0.1; a0  #  /= 20
+
+include("src/kernels/Quasi_periodic_kernel.jl")  # sets correct num_kernel_hyperparameters
 build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
-
-# kernel hyper parameters
-kernel_lengths = [1, 1, 1] / 1.5
-total_hyperparameters = append!(collect(Iterators.flatten(a0)), kernel_lengths)
 
 # # initializing Cholesky factorization storage
 # chol_storage = chol_struct(copy(total_hyperparameters), ridge_chol(K_observations(problem_definition, copy(total_hyperparameters))))
 
 ##############################################################################
+
+# kernel hyper parameters
+kernel_lengths = 2 * ones(num_kernel_hyperparameters)
+total_hyperparameters = append!(collect(Iterators.flatten(a0)), kernel_lengths)
 
 # how finely to sample the domain (for plotting)
 amount_of_samp_points = 500
@@ -79,7 +85,7 @@ amount_of_total_samp_points = amount_of_samp_points * n_out
 # (aka getting the covariance matrix by evaluating the kernel function at all
 # pairs of points)
 K_samp = covariance(problem_definition, x_samp, x_samp, total_hyperparameters)
-plot_im(K_samp, file="test.pdf")
+# plot_im(K_samp, file="test.pdf")
 
 # getting the Cholesky factorization of the covariance matrix (for drawing GPs)
 L_samp = ridge_chol(K_samp).L  # usually has to add a ridge
@@ -127,18 +133,14 @@ final_total_hyperparameters = reconstruct_total_hyperparameters(problem_definiti
 
 println("old hyperparameters")
 println(total_hyperparameters)
-# println(nlogL_Jones(initial_x))
+println(nlogL_Jones(problem_definition, total_hyperparameters))
 
 println("new hyperparameters")
 println(final_total_hyperparameters)
 println(result.minimum)
-# new hyperparameters
-# no penalty
-# [-0.38062, -7785.22, 0.0, -0.289081, 0.0, -31.1518, 0.0, 7.02291, 0.0, -72.7, -0.0870051, 0.14647]
-# 323.6028338641281
-# penalty
-# [0.547235, 0.53716, 0.488929, 50.577, 0.488929, 50.4002, 0.488929, 5.51546, 0.488929, 0.520252, 0.286278, 1.07373]
-# 5311.9462030734985
+
+# K_post = covariance(problem_definition, x_samp, x_samp, final_total_hyperparameters)
+# plot_im(K_post, file="test.pdf")
 
 # reruning analysis of posterior with the "most likley" kernel amplitude and lengthscale
 # recalculating posterior covariance and mean function

@@ -7,31 +7,32 @@ using MultivariateStats
 using HDF5
 
 # # path_to_spectra = "/gpfs/group/ebf11/default/SOAP_output/May_runs"
-# # test = "/Users/cjg66/Downloads/lambda-3923-6664-3years_174spots_diffrot_id980.h5"
-test = "D:/Christian/Downloads/lambda-3923-6664-3years_174spots_diffrot_id9.h5"
+# # test = "/Users/cjg66/Downloads/lambda-3923-6664-3years_174spots_diffrot_id9.h5"
+# test = "D:/Christian/Downloads/lambda-3923-6664-3years_174spots_diffrot_id9.h5"
+test = "D:/Christian/Downloads/lambda-3923-6664-1years_1582spots_diffrot_id1.h5"
 # # test = "C:/Users/chris/Downloads/lambda-3923-6664-3years_174spots_diffrot_id9.h5"
 fid = h5open(test, "r")
 # objects = names(fid)
 # println(objects)
 #
 act = fid["active"]
-# lam = fid["lambdas"]
-# phase = fid["phases"]
-# quiet = fid["quiet"]
+lam = fid["lambdas"]
+phase = fid["phases"]
+quiet = fid["quiet"]
 #
 lam_slice = :
 phase_slice = :  # 1:convert(Int64, round(2190))
 @time obs = act[lam_slice, phase_slice];
 
-# lambda = lam[lam_slice]
-# phases = phase[phase_slice]
-# quiet = quiet[:]
-# @save "sunspot_data.jld2" lambda phases quiet
-@load "sunspot_data.jld2" lambda phases quiet
+lambda = lam[lam_slice]
+phases = phase[phase_slice]
+quiet = quiet[:]
+@save "sunspot_data.jld2" lambda phases quiet
+# @load "sunspot_data.jld2" lambda phases quiet
 
 # pca_out = @time fit_pca_default(obs, max_num_components=6);
-# @save "pca_out_2.jld2" pca_out pca_scores
-@load "pca_out_2.jld2" pca_out pca_scores
+# @save "pca_out.jld2" pca_out pca_scores
+@load "pca_out.jld2" pca_out pca_scores
 
 
 # # pca_out.mean
