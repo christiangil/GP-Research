@@ -32,3 +32,93 @@ function init_plot()
     ax = subplot(111)
     set_font_sizes(ax)
 end
+
+
+function plot_im(A; file::String="")
+    init_plot()
+    fig = imshow(A[:,:])
+    colorbar()
+    # title("Heatmap")
+    if file != ""
+        savefig(file)
+    end
+    PyPlot.close_figs()
+end
+
+
+# quick and dirty function for creating plots that show what I want
+function custom_line_plot(x_samp::Array{Float64,1}, L, x_obs::Array{Float64,1}, y_obs::Array{Float64,1}; output::Int=1, draws::Int=5000, σ::Array{Float64,1}=zeros(1), mean::Array{Float64,1}=zeros(amount_of_total_samp_points), show::Int=10, file::String="")
+
+    # same curves are drawn every time?
+    # srand(100)
+
+    # initialize figure size
+    init_plot()
+
+    # the indices corresponding to the proper output
+    output_indices = (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)
+
+    # geting the y values for the proper output
+    y = y_obs[(amount_of_measurements * (output - 1) + 1):(amount_of_measurements * output)]
+
+    # initializing storage for example GPs to be plotted
+    show_curves = zeros(show, amount_of_samp_points)
+
+    # if no analytical variance is passed, estimate it with sampling
+    if σ == zeros(1)
+
+        # calculate a bunch of GP draws
+        storage = zeros((draws, amount_of_total_samp_points))
+        for i in 1:draws
+            storage[i, :] = (L * randn(amount_of_total_samp_points)) + mean
+        end
+
+        # ignore the outputs that aren't meant to be plotted
+        storage = storage[:, output_indices]
+
+        #
+        show_curves[:, :] = storage[1:show, :]
+        storage = sort(storage, dims=1)
+
+        # filling the 5-95th percentile with a transparent orange
+        fill_between(x_samp, storage[convert(Int64, 0.95 * draws), :], storage[convert(Int64, 0.05 * draws), :], alpha=0.3, color="orange")
+
+        # needs to be in both leaves of the if statement
+        mean = mean[output_indices]
+
+    else
+
+        storage = zeros((show, amount_of_total_samp_points))
+        for i in 1:show
+            storage[i,:] = L * randn(amount_of_total_samp_points) + mean
+        end
+        show_curves[:, :] = storage[:, output_indices]
+
+        σ = σ[output_indices]
+
+        mean = mean[output_indices]
+
+
+        # filling the 5-95th percentile with a transparent orange
+        fill_between(x_samp, mean + 1.96 * σ, mean - 1.96 * σ, alpha=0.3, color="orange")
+
+    end
+
+
+    plot(x_samp, mean, color="black", zorder=2)
+    for i in 1:show
+        plot(x_samp, show_curves[i, :], alpha=0.5, zorder=1)
+    end
+    scatter(x_obs, y, color="black", zorder=2)
+
+    xlabel("phases (days?)")
+    ylabel("pca scores")
+    title("PCA " * string(output-1))
+
+    if file!=""
+        savefig(file)
+    end
+
+    PyPlot.close_figs()
+
+end

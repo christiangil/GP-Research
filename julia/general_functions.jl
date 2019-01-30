@@ -19,7 +19,7 @@ function symmetric_A(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; i
         if max_dif == zero(max_dif)
             return Symmetric(A)
         # an arbitrary threshold that is meant to catch numerical errors
-    elseif (max_dif < 1e-6) | ignore_asymmetry
+    elseif (max_dif < maximum([1e-6 * maximum(abs.(A)), 1e-8])) | ignore_asymmetry
             # return the symmetrized version of the matrix
             return Symmetric((A + transpose(A)) / 2)
         else
@@ -47,16 +47,27 @@ function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; no
 
 
     # only add a small ridge if necessary
-    A_copy = copy(A)
+    factorization = copy(A)
+    no_error = false
+    log_max_A = log10(maximum(A))
+    ridge_magnitude = minimum([convert(Int64, round(log_max_A + log10(ridge))) - 1, -7])
     try
-        cholesky(A_copy)
+        factorization = cholesky(factorization)
         # factor = cholesky(copy(A))
     catch
-        if notification
-            println("had to add a ridge")
+        while (!no_error) & (ridge_magnitude<log_max_A)
+            ridge_magnitude += 1
+            no_error = true
+            try
+                hold = cholesky(copy(factorization) + UniformScaling(10 ^ ridge_magnitude))
+                factorization = copy(hold)
+            catch
+                no_error = false
+            end
         end
-        cholesky(A_copy + UniformScaling(ridge))
+        println("had to add a ridge of order 10^$ridge_magnitude. log10(maximum(A)) = $log_max_A")
     end
+    return factorization
 end
 
 
@@ -109,8 +120,7 @@ use isapprox instead if you care about boolean result
 """
 function signficant_difference(A1::Array{Float64}, A2::Array{Float64}, dif::Float64)
     A1mA2 = abs.(A1 - A2);
-    A1mA2[A1mA2 .< (max(A1, A2) * ones(size(A1mA2)) * dif)] = 0;
-    # A1mA2[A1mA2 .< (ones(size(A1mA2)) * sqrt(dif))] = 0;
+    A1mA2[A1mA2 .< (maximum([maximum(A1), maximum(A2)]) * dif)] .= 0;
     return A1mA2
 end
 
@@ -148,4 +158,22 @@ function clear_variables()
         end
     end
     # GC.gc()
+end
+
+
+function add_diagonal_term(original_array::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}, diag_terms::Array{Float64,1}; ignore_asymmetry::Bool=false)
+    @assert (size(original_array, 1) == length(diag_terms)) ["diagonal term is the wrong length"]
+    # for i in 1:size(original_array, 1)
+    #     original_array[i, i] +=  diag_terms[i] ^ 2
+    # end
+    return symmetric_A(original_array + Diagonal(diag_terms); ignore_asymmetry=ignore_asymmetry)
+end
+
+
+"Create a new array filling the non-zero entries of a template array with a vector of values"
+function reconstruct_array(non_zero_entries::Union{Array{Any,1},Array{Float64,1}}, template_array::Array{Float64,2})
+    @assert length(findall(!iszero, template_array))==length(non_zero_entries)
+    new_array = zeros(size(template_array))
+    new_array[findall(!iszero, template_array)] = non_zero_entries
+    return new_array
 end

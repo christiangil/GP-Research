@@ -25,4 +25,4 @@ include("kernel_creation_functions.jl")
 include("plotting_functions.jl")
 include("diagnostic_functions.jl")
 
-clear_variables()
+# clear_variables()

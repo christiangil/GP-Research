@@ -12,15 +12,24 @@ struct Jones_problem_definition
     y_obs::Array{Float64,1}
     noise::Array{Float64,1}
     a0::Array{Float64,2}
+    coeff_orders::Array{Float64,6}
+end
+
+
+function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, n_dif::Int, n_out::Int, x_obs::Array{Float64,1}, y_obs::Array{Float64,1}, noise::Array{Float64,1}, a0::Array{Float64,2}, coeff_orders::Array{Float64,6})
+    @assert isfinite(kernel_func(ones(num_kernel_hyperparameters), randn(); dorder=zeros(2 + num_kernel_hyperparameters)))  # make sure the kernel is valid by testing a sample input
+    @assert n_dif>0
+    @assert n_out>0
+    @assert (length(x_obs) * n_out) == length(y_obs)
+    @assert length(y_obs) == length(noise)
+    @assert size(a0) == (n_out, n_dif)
+    @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)
+    global problem_definition = Jones_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, noise, a0, coeff_orders)
 end
 
 
 function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, n_dif::Int, n_out::Int, x_obs::Array{Float64,1}, y_obs::Array{Float64,1}, noise::Array{Float64,1}, a0::Array{Float64,2})
-    @assert isfinite(kernel_func(ones(num_kernel_hyperparameters), randn(); dorder=zeros(2 + num_kernel_hyperparameters)))  # make sure the kernel is valid by testing a sample input
-    @assert n_dif>0
-    @assert n_out>0
-    # return Jones_problem_definition(kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs)
-    global problem_definition = Jones_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, noise, a0)
+    build_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, noise, a0, coefficient_orders(n_out, n_dif, a=a0))
 end
 
 
@@ -34,6 +43,8 @@ end
 # total_hyperparameters = kernel_hyperparameters appended to a flattened list of coefficients
 # num_coefficients is the number of coefficient "hyperparameters"
 function kernel(kernel_func, kernel_hyperparameters::Union{Array{Any,1},Array{Float64,1}}, t1::Union{Float64,Array{Float64,1}}, t2::Union{Float64,Array{Float64,1}}; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(2), dKdθ_kernel::Int=0)
+
+    @assert dKdθ_kernel <= length(kernel_hyperparameters) "Asking to differentiate by hyperparameter that the kernel doesn't have"
 
     dif = (t1 - t2)[1]
     dorder_tot = append!(copy(dorder), zeros(length(kernel_hyperparameters)))
@@ -113,10 +124,13 @@ end
 Calculating the covariance between all outputs for a combination of dependent GPs
 written so that the intermediate K's don't have to be calculated over and over again
 """
-function covariance(prob_def::Jones_problem_definition, x1list::Union{Array{Float64,1},Array{Float64,2}}, x2list::Union{Array{Float64,1},Array{Float64,2}}, total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; dKdθ_total::Int=0, coeff_orders::Array{Float64,6}=zeros(1,1,1,1,1,1))
+function covariance(prob_def::Jones_problem_definition, x1list::Union{Array{Float64,1},Array{Float64,2}}, x2list::Union{Array{Float64,1},Array{Float64,2}}, total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; dKdθ_total::Int=0)
 
+    @assert dKdθ_total >= 0
     @assert length(total_hyperparameters) == prob_def.n_kern_hyper + length(prob_def.a0)
     num_coefficients = length(total_hyperparameters) - prob_def.n_kern_hyper
+    n_out = prob_def.n_out
+    n_dif = prob_def.n_dif
     dKdθ_kernel = dKdθ_total - num_coefficients
     kernel_hyperparameters = total_hyperparameters[(num_coefficients + 1):end]
     # println(length(kernel_hyperparameters))
@@ -168,7 +182,7 @@ function covariance(prob_def::Jones_problem_definition, x1list::Union{Array{Floa
         # products = product_rule(new_dorder)
 
 
-        # things that have been differentiated an even amount of times are symmetric
+        # things that have been differentiated an even amount of times are symmetric about t1-t2==0
         if isodd(k)
             A_list[k] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dKdθ_kernel=dKdθ_kernel)
             # A_list[k] = covariance(x1list, x2list, hyperparameters; dorder=dorder, symmetric=true, dKdθ=dKdθ, products=products)
@@ -204,7 +218,7 @@ function covariance(prob_def::Jones_problem_definition, x1list::Union{Array{Floa
             for j in 1:n_out
                 for k in 1:n_dif
                     for l in 1:n_dif
-                        if (i == j) & isodd(k + l)
+                        if false  # (i == j) & isodd(k + l)
                             # the cross terms (of odd differentiation orders) cancel each other out in diagonal matrices
                         else
                             K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
@@ -222,7 +236,7 @@ function covariance(prob_def::Jones_problem_definition, x1list::Union{Array{Floa
         # ((output pair), (which A matrix to use), (which a coefficent to use))
         # get all of the coefficients for coefficient hyperparameters based on
         # the amount of outputs and differentiations
-        coeff = dif_coefficients(n_out, n_dif, dKdθ_total; coeff_orders=coeff_orders, a=a)
+        coeff = dif_coefficients(n_out, n_dif, dKdθ_total; coeff_orders=prob_def.coeff_orders, a=a)
 
         for i in 1:n_out
             for j in 1:n_out
@@ -256,17 +270,8 @@ function covariance(prob_def::Jones_problem_definition, x1list::Union{Array{Floa
 end
 
 
-function covariance(prob_def::Jones_problem_definition, total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; dKdθ_total::Int=0, coeff_orders::Array{Float64,6}=zeros(1,1,1,1,1,1))
-    return covariance(prob_def, prob_def.x_obs, prob_def.x_obs, total_hyperparameters)
-end
-
-
-function add_diagonal_term(original_array::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}, diag_terms::Array{Float64,1}; ignore_asymmetry::Bool=false)
-    @assert (size(original_array, 1) == length(diag_terms)) ["measurement_noise is the wrong length"]
-    for i in 1:size(original_array, 1)
-        original_array[i, i] +=  diag_terms[i] ^ 2
-    end
-    return symmetric_A(original_array; ignore_asymmetry=ignore_asymmetry)
+function covariance(prob_def::Jones_problem_definition, total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; dKdθ_total::Int=0)
+    return covariance(prob_def, prob_def.x_obs, prob_def.x_obs, total_hyperparameters; dKdθ_total=dKdθ_total)
 end
 
 
@@ -387,6 +392,117 @@ function GP_posteriors(prob_def::Jones_problem_definition, x_samp::Array{Float64
 end
 
 
+# "creating a Cholesky factorization storage structure"
+# struct chol_struct
+#     total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}
+#     cholesky_object::Cholesky{Float64,Array{Float64,2}}
+# end
+
+
+# # initializing Cholesky factorization storage
+# chol_storage = chol_struct(zeros(1), ridge_chol(hcat([1,.1],[.1,1])))
+
+
+# "An effort to avoid recalculating Cholesky factorizations"
+# function stored_chol(chol_stored::chol_struct, new_hyper::Union{Array{Any,1},Array{Float64,1}}, A::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}; return_values::Bool=false, notification::Bool=true, ridge::Float64=1e-6)
+#
+#     new_chol = chol_stored.cholesky_object
+#     # if the Cholesky factorization wasn't just calculated, calculate a new one.
+#     if chol_stored.total_hyperparameters != new_hyper
+#         new_chol = ridge_chol(A; notification=notification, ridge=ridge)
+#         global chol_storage = chol_struct(copy(new_hyper), new_chol)  # reassigning the gloabl variable
+#     end
+#     return new_chol
+#
+# end
+
+
+"""
+find the powers that each coefficient is taken to for each part of the matrix construction
+used for constructing differentiated versions of the kernel
+"""
+function coefficient_orders(n_out::Int, n_dif::Int; a::Union{Array{Float64,2},Array{Any,2}}=ones(1,1))
+
+    if a == ones(1,1)
+        a = ones(n_out, n_dif)
+    else
+        @assert size(a) == (n_out, n_dif)
+    end
+
+    coeff_orders = zeros(n_out, n_out, n_dif, n_dif, n_out, n_dif)
+    for i in 1:n_out
+        for j in 1:n_out
+            for k in 1:n_dif
+                for l in 1:n_dif
+                    if (i == j) & isodd(k + l)
+                        # the cross terms (of odd differentiation orders) cancel each other out in diagonal matrices
+                    else
+                        for m in 1:n_out
+                            for n in 1:n_dif
+                                if a[m, n] != 0
+                                    if [m, n] == [i, k]
+                                        coeff_orders[i, j, k, l, m, n] += 1
+                                    end
+                                    if [m, n] == [j, l]
+                                        coeff_orders[i, j, k, l, m, n] += 1
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return coeff_orders
+
+end
+
+
+"""
+getting the coefficients for constructing differentiated versions of the kernel
+using the powers that each coefficient is taken to for each part of the matrix construction
+"""
+function dif_coefficients(n_out::Int, n_dif::Int, dKdθ_total::Int; coeff_orders::Array{Float64,6}=zeros(1,1,1,1,1,1), a::Union{Array{Any,2},Array{Float64,2}}=ones(1,1))
+
+    @assert dKdθ_total>0 "Can't get differential coefficients when you aren't differentiating "
+    @assert dKdθ_total<=(n_out*n_dif) "Can't get differential coefficients fpr non-coefficient hyperparameters"
+
+    if coeff_orders == zeros(1,1,1,1,1,1)
+        coeff_orders = coefficient_orders(n_out, n_dif, a=a)
+        # println("found new coeff_orders")
+    else
+        @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)
+    end
+
+    # ((output pair), (which A matrix to use), (which a coefficent to use))
+    coeff = zeros(n_out, n_out, n_dif, n_dif, n_out, n_dif)
+
+    # "a small function to get indices that make sense from Julia's reshaping routine"
+    # proper_index(i::Int) = [convert(Int64, rem(i - 1, n_out)) + 1, convert(Int64, floor((i -1) / n_out)) + 1]
+    # proper_index(i::Int) = [((dKdθ_total - 1) % n_out) + 1, div(dKdθ_total - 1, n_out) + 1]
+
+    proper_indices = [((dKdθ_total - 1) % n_out) + 1, div(dKdθ_total - 1, n_out) + 1]
+    for i in 1:n_out
+        for j in 1:n_out
+            for k in 1:n_dif
+                for l in 1:n_dif
+                    if coeff_orders[i, j, k, l, proper_indices[1], proper_indices[2]] == 1
+                        coeff[i, j, k, l, :, :] = coeff_orders[i, j, k, l, :, :]
+                        coeff[i, j, k, l, proper_indices[1], proper_indices[2]] = 0
+                    elseif coeff_orders[i, j, k, l, proper_indices[1], proper_indices[2]] == 2
+                        coeff[i, j, k, l, :, :] = coeff_orders[i, j, k, l, :, :]
+                    end
+                end
+            end
+        end
+    end
+
+    return coeff
+end
+
+
 # """
 # negative log likelihood of the data given the current kernel parameters (as seen on page 19)
 # (negative because Optim has a minimizer)
@@ -418,33 +534,43 @@ end
 # end
 
 
-"""
-negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-(negative because Optim has a minimizer)
-"""
-function nlogL_Jones(hyperparameter_list...)
-
-    hyper = []
-    for i in 1:length(hyperparameter_list)
-        append!(hyper, hyperparameter_list[i])
-    end
-    n=length(y_obs)
-
-    K_obs = K_observations(problem_definition, hyper; ignore_asymmetry=true)
-    L_fact = stored_chol(chol_storage, hyper, K_obs; notification=false)
-    # inv_K_obs = inv(L_fact)  # ~35% faster than inv(K_obs)
-    # det_K_obs = det(L_fact)  # ~8% faster than det(K_obs)
-
-    # goodness of fit term
-    data_fit = -1 / 2 * (transpose(y_obs) * (L_fact \ y_obs))
-    # complexity penalization term
-    # penalty = -1 / 2 * log(det(L_fact))
-    penalty = -1 / 2 * logdet(L_fact)  # half memory but twice the time
-    # normalization term (functionally useless)
-    normalization = -n / 2 * log(2 * pi)
-
-    return -1 * (data_fit + penalty + normalization)
-end
+# """
+# negative log likelihood of the data given the current kernel parameters (as seen on page 19)
+# (negative because Optim has a minimizer)
+# """
+# function nlogL_Jones(hyperparameter_list...)
+#
+#     hyper = []
+#     for i in 1:length(hyperparameter_list)
+#         append!(hyper, hyperparameter_list[i])
+#     end
+#
+#
+#     K_obs = K_observations(problem_definition, hyper; ignore_asymmetry=true)
+#     L_fact = stored_chol(chol_storage, hyper, K_obs; notification=false)
+#     # inv_K_obs = inv(L_fact)  # ~35% faster than inv(K_obs)
+#     # det_K_obs = det(L_fact)  # ~8% faster than det(K_obs)
+#
+#     y_obs = problem_definition.y_obs
+#     n=length(problem_definition.y_obs)
+#
+#     # goodness of fit term
+#     data_fit = -1 / 2 * (transpose(y_obs) * (L_fact \ y_obs))
+#     # complexity penalization term
+#     # complexity_penalty = -1 / 2 * log(det(L_fact))
+#     complexity_penalty = -1 / 2 * logdet(L_fact)  # half memory but twice the time
+#     # normalization term (functionally useless)
+#     normalization = -n / 2 * log(2 * pi)
+#
+#     custom_penalty = 0
+#     for i in hyper[(end - problem_definition.n_kern_hyper):end]
+#         if i < 0
+#             custom_penalty -= 10000 * (i ^ 2)
+#         end
+#     end
+#
+#     return -1 * (data_fit + complexity_penalty + normalization + custom_penalty)
+# end
 
 
 # """
@@ -483,134 +609,132 @@ end
 # end
 
 
-"""
-http://www.gaussianprocess.org/gpml/chapters/RW5.pdf
-gradient of negative log likelihood of the data given the current kernel parameters (as seen on page 19)
-"""
-function ∇nlogL_Jones(G, hyperparameter_list...)
+# """
+# http://www.gaussianprocess.org/gpml/chapters/RW5.pdf
+# gradient of negative log likelihood of the data given the current kernel parameters (as seen on page 19)
+# """
+# function ∇nlogL_Jones(G, hyperparameter_list...)
+#
+#     hyper = []
+#     for i in 1:length(hyperparameter_list)
+#         append!(hyper, hyperparameter_list[i])
+#     end
+#
+#     K_obs = K_observations(problem_definition, hyper; ignore_asymmetry=true)
+#     L_fact = stored_chol(chol_storage, hyper, K_obs; notification=false)
+#     # inv_K_obs = inv(L_fact)
+#     y_obs = problem_definition.y_obs
+#
+#
+#     function grad(dK_dθj::Union{Array{Float64,2},Symmetric{Float64,Array{Float64,2}}})
+#         # derivative of goodness of fit term
+#         data_fit = 1 / 2 * (transpose(y_obs) * (L_fact \ (dK_dθj * (L_fact \ y_obs))))
+#         # derivative of complexity penalization term
+#         complexity_penalty = -1 / 2 * tr(L_fact \ dK_dθj)
+#
+#         custom_penalty = 0
+#         for i in hyper[(end - problem_definition.n_kern_hyper):end]
+#             if i < 0
+#                 custom_penalty -= 2 * 10000 * i
+#             end
+#         end
+#
+#         return -1 * (data_fit + complexity_penalty + custom_penalty)
+#     end
+#
+#
+#     for i in 1:(length(hyper))
+#         G[i] = grad(covariance(problem_definition, hyper; dKdθ_total=i))
+#         # G[i] = grad(covariance(problem_definition, hyper; dKdθ_total=i))
+#     end
+#
+# end
 
-    hyper = []
+
+function nlogL_Jones_fg!(F, G, hyperparameter_list...)
+
+    non_zero_hyperparameters = []
     for i in 1:length(hyperparameter_list)
-        append!(hyper, hyperparameter_list[i])
+        append!(non_zero_hyperparameters, hyperparameter_list[i])
     end
 
-    K_obs = K_observations(problem_definition, hyper; ignore_asymmetry=true)
-    L_fact = stored_chol(chol_storage, hyper, K_obs; notification=false)
+    # this allows us to prevent the optimizer from seeing the constant zero coefficients
+    total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, non_zero_hyperparameters)
+
+    K_obs = K_observations(problem_definition, total_hyperparameters; ignore_asymmetry=true)
+    # L_fact = stored_chol(chol_storage, hyper, K_obs; notification=false)
+    L_fact = ridge_chol(K_obs)
     # inv_K_obs = inv(L_fact)
 
+    y_obs = problem_definition.y_obs
+    L_fact_solve_y_obs = L_fact \ y_obs
 
-    function grad(dK_dθj)
-        # derivative of goodness of fit term
-        data_fit = 1 / 2 * (transpose(y_obs) * (L_fact \ (dK_dθj * (L_fact \ y_obs))))
-        # derivative of complexity penalization term
-        penalty = -1 / 2 * tr(L_fact \ dK_dθj)
-        return -1 * (data_fit + penalty)
-    end
+    penalty_lower = 0
+    penalty_upper = 10
+    penalty_amplitude = 10000
 
+    if G != nothing
 
-    # taking some burden off of recalculating the coefficient orders used by the automatic differentiation
-    coeff_orders = coefficient_orders(problem_definition.n_out, problem_definition.n_dif, a=problem_definition.a0)
-    for i in 1:(length(hyper))
-        G[i] = grad(covariance(problem_definition, problem_definition.x_obs, problem_definition.x_obs, hyper; dKdθ_total=i, coeff_orders=coeff_orders))
-    end
+        function GP_grad(dK_dθj::Union{Array{Float64,2},Symmetric{Float64,Array{Float64,2}}})
+            # derivative of goodness of fit term
+            data_fit = 1 / 2 * (transpose(y_obs) * (L_fact \ (dK_dθj * (L_fact_solve_y_obs))))
+            # derivative of complexity penalization term
+            complexity_penalty = -1 / 2 * tr(L_fact \ dK_dθj)
 
-end
+            custom_penalty = 0
 
-
-"creating a Cholesky factorization storage structure"
-struct chol_struct
-    total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}
-    cholesky_object::Cholesky{Float64,Array{Float64,2}}
-end
-
-
-# # initializing Cholesky factorization storage
-# chol_storage = chol_struct(zeros(1), ridge_chol(hcat([1,.1],[.1,1])))
-
-
-"An effort to avoid recalculating Cholesky factorizations"
-function stored_chol(chol_stored::chol_struct, new_hyper::Union{Array{Any,1},Array{Float64,1}}, A::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}; return_values::Bool=false, notification::Bool=true, ridge::Float64=1e-6)
-
-    new_chol = chol_stored.cholesky_object
-    # if the Cholesky factorization wasn't just calculated, calculate a new one.
-    if chol_stored.total_hyperparameters != new_hyper
-        new_chol = ridge_chol(A; notification=notification, ridge=ridge)
-        global chol_storage = chol_struct(copy(new_hyper), new_chol)  # reassigning the gloabl variable
-    end
-    return new_chol
-
-end
-
-
-"""
-find the powers that each coefficient is taken to for each part of the matrix construction
-used for constructing differentiated versions of the kernel
-"""
-function coefficient_orders(n_out::Int, n_dif::Int; a::Array{Float64,2}=ones(n_out, n_dif))
-
-    coeff_orders = zeros(n_out,n_out,n_dif,n_dif,n_out,n_dif)
-    for i in 1:n_out
-        for j in 1:n_out
-            for k in 1:n_dif
-                for l in 1:n_dif
-                    if (i == j) & isodd(k + l)
-                        # the cross terms (of odd differentiation orders) cancel each other out in diagonal matrices
-                    else
-                        for m in 1:n_out
-                            for n in 1:n_dif
-                                if a[m, n] != 0
-                                    if [m, n] == [i, k]
-                                        coeff_orders[i, j, k, l, m, n] += 1
-                                    end
-                                    if [m, n] == [j, l]
-                                        coeff_orders[i, j, k, l, m, n] += 1
-                                    end
-                                end
-                            end
-                        end
-                    end
+            for i in total_hyperparameters[(end - problem_definition.n_kern_hyper):end]
+                if i < penalty_lower
+                    custom_penalty -= 2 * penalty_amplitude * (i - penalty_lower)
+                # elseif i > penalty_upper
+                #     custom_penalty += 2 * penalty_amplitude * (i - penalty_upper)
                 end
             end
+
+            return -1 * (data_fit + complexity_penalty + custom_penalty)
         end
+
+        j = 1
+        for i in 1:(length(total_hyperparameters))
+            if total_hyperparameters[i]!=0
+                G[j] = GP_grad(covariance(problem_definition, total_hyperparameters; dKdθ_total=i))
+                j += 1
+            end
+            # G[i] = grad(covariance(problem_definition, hyper; dKdθ_total=i))
+        end
+
     end
+    if F != nothing
 
-    return coeff_orders
+        n=length(problem_definition.y_obs)
 
+        # goodness of fit term
+        data_fit = -1 / 2 * (transpose(y_obs) * (L_fact_solve_y_obs))
+        # complexity penalization term
+        # complexity_penalty = -1 / 2 * log(det(L_fact))
+        complexity_penalty = -1 / 2 * logdet(L_fact)  # half memory but twice the time
+        # normalization term (functionally useless)
+        normalization = -n / 2 * log(2 * pi)
+
+        custom_penalty = 0
+        for i in total_hyperparameters[(end - problem_definition.n_kern_hyper):end]
+            if i < penalty_lower
+                custom_penalty -= penalty_amplitude * ((i - penalty_lower) ^ 2)
+            # elseif i > penalty_upper
+            #     custom_penalty += penalty_amplitude * ((i - penalty_upper) ^ 2)
+            end
+        end
+
+        return -1 * (data_fit + complexity_penalty + normalization + custom_penalty)
+    end
 end
 
 
-"a small function to get indices that make sense from Julia's reshaping routine"
-proper_index(i::Int) = [convert(Int64, rem(i - 1, n_out)) + 1, convert(Int64, floor((i -1) / n_out)) + 1]
-
-
-"""
-getting the coefficients for constructing differentiated versions of the kernel
-using the powers that each coefficient is taken to for each part of the matrix construction
-"""
-function dif_coefficients(n_out::Int, n_dif::Int, dKdθ_total::Int; coeff_orders::Array{Float64,6}=zeros(1,1,1,1,1,1), a::Union{Array{Any,2},Array{Float64,2}}=ones(n_out, n_dif))
-
-    if coeff_orders == zeros(1,1,1,1,1,1)
-        coeff_orders = coefficient_orders(n_out, n_dif, a=a)
-    end
-
-
-    # ((output pair), (which A matrix to use), (which a coefficent to use))
-    coeff = zeros(n_out,n_out,n_dif,n_dif,n_out,n_dif)
-    proper_indices = proper_index(dKdθ_total)
-    for i in 1:n_out
-        for j in 1:n_out
-            for k in 1:n_dif
-                for l in 1:n_dif
-                    if coeff_orders[i, j, k, l, proper_indices[1], proper_indices[2]] == 1
-                        coeff[i, j, k, l, :, :] = coeff_orders[i, j, k, l, :, :]
-                        coeff[i, j, k, l, proper_indices[1], proper_indices[2]] = 0
-                    elseif coeff_orders[i, j, k, l, proper_indices[1], proper_indices[2]] == 2
-                        coeff[i, j, k, l, :, :] = coeff_orders[i, j, k, l, :, :]
-                    end
-                end
-            end
-        end
-    end
-
-    return coeff
+""
+function reconstruct_total_hyperparameters(prob_def::Jones_problem_definition, non_zero_hyperparameters::Union{Array{Any,1},Array{Float64,1}})
+    new_coeff_array = reconstruct_array(non_zero_hyperparameters[1:end - prob_def.n_kern_hyper], prob_def.a0)
+    coefficient_hyperparameters = collect(Iterators.flatten(new_coeff_array))
+    total_hyperparameters = append!(coefficient_hyperparameters, non_zero_hyperparameters[end - problem_definition.n_kern_hyper + 1:end])
+    @assert length(total_hyperparameters)==(prob_def.n_kern_hyper + length(prob_def.a0))
+    return total_hyperparameters
 end
