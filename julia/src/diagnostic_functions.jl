@@ -27,9 +27,8 @@ end
 function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::Array{Float64,1}; dif::Float64=1e-7, print_stuff::Bool=true)
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
-    G = zeros(length(total_hyperparameters))
+    G = zeros(length(total_hyperparameters[findall(!iszero, total_hyperparameters)]))
     ∇nlogL_Jones(G, prob_def, total_hyperparameters)
-    G = G[findall(!iszero, G)]
     est_G = est_grad(prob_def, total_hyperparameters; dif=dif)
 
     if print_stuff

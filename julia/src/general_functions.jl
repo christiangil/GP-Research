@@ -34,44 +34,86 @@ function symmetric_A(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; i
 end
 
 
-"adds a ridge to a Cholesky factorization if necessary"
-function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; notification::Bool=true, ridge::Float64=1e-6)  where {T} # * maximum(A))
+"""
+A structure that holds a cholesky factorization and the sqrt of the amount that
+the original matrix was scaled by to make the factoization possible
+Works with the most important functions of applied to cholesky objects
+(i.e. size, \\, inv, det, and logdet)
+"""
+struct scaled_chol
+    chol_fact::Cholesky{Float64,Array{Float64,2}}
+    scale::Union{Float64,Int}
+end
 
-    # this would work but it automatically makes A the Cholesky matrix, not the factorization type
-    # if !isposdef!(A)
-    #     if notification
-    #         println("had to add a ridge")
-    #     end
-    #     cholesky!(A + UniformScaling(ridge))
-    # end
+import Base.size, Base.\, Base.inv, LinearAlgebra.det, LinearAlgebra.logdet
+size(A::scaled_chol) = size(A.chol_fact)
+(\)(A::scaled_chol, B::AbstractVecOrMat) = (A.chol_fact \ B) / A.scale
+inv(A::scaled_chol) = inv(A.chol_fact) / A.scale
+det(A::scaled_chol) = det(A.chol_fact) / (A.scale ^ 3)
+logdet(A::scaled_chol) = logdet(A.chol_fact) - log(A.scale ^ 3)
 
 
-    # only add a small ridge if necessary
+"make it easy to get upper or lower verisons of the cholesky factorization"
+function (scaled_cholesky::scaled_chol)(lower_or_upper::String)
+
+    @assert (lower_or_upper in ["L", "U"]) "only \"L\" or \"U\" are accepted as inputs"
+
+    if lower_or_upper=="L"
+        working_array = scaled_cholesky.chol_fact.L
+    elseif lower_or_upper=="U"
+        working_array = scaled_cholesky.chol_fact.U
+    end
+
+    return working_array / sqrt(scaled_cholesky.scale)
+
+end
+
+
+"if needed, adds a ridge (or multiplies the matrix) to make a Cholesky factorization possible"
+function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; notification::Bool=true, ridge::Float64=1e-8)  where {T} # * maximum(A))
+
     factorization = copy(A)
-    no_error = false
-    log_max_A = log10(maximum(A))
-    ridge_magnitude = minimum([convert(Int64, round(log_max_A + log10(ridge))) - 1, -7])
+    scale_magnitude = 0
+    scale_factor = 1
+    # only add a small ridge if necessary
     try
         factorization = cholesky(factorization)
         # factor = cholesky(copy(A))
+
     catch
-        while (!no_error) & (ridge_magnitude<log_max_A)
-            ridge_magnitude += 1
+        original_type = typeof(A)
+        no_error = false
+        log_max_A = log10(maximum(A))
+        ridge_magnitude_min = minimum([convert(Int64, round(log_max_A + log10(ridge))), convert(Int64, round(log10(ridge)))])
+        ridge_magnitude = copy(ridge_magnitude_min)
+
+        while (!no_error) & (scale_magnitude<9)
             no_error = true
             try
-                hold = cholesky(copy(factorization) + UniformScaling(10 ^ ridge_magnitude))
-                factorization = copy(hold)
+                factorization = cholesky(copy(factorization) + UniformScaling(10 ^ ridge_magnitude))
             catch
                 no_error = false
+                ridge_magnitude += 1
+                if (ridge_magnitude)>(log_max_A + scale_magnitude - 2)
+                    scale_magnitude += 2
+                    factorization = copy(A) .* 10 ^ scale_magnitude
+                    ridge_magnitude = copy(ridge_magnitude_min)
+                end
             end
         end
-        if ridge_magnitude>log_max_A
-            @warn "No amount of ridge adding could make the matrix positive definite. Returned matrix is not factorized!"
+
+        if typeof(factorization)==original_type
+            @warn "No amount of ridge adding or scaling could make the matrix positive definite. Returned matrix is not factorized!"
         else
-            println("had to add a ridge of order 10^$ridge_magnitude. log10(maximum(A)) = $log_max_A")
+            println("had to add a ridge of order 10^$ridge_magnitude and multiply matrix by 10^$scale_magnitude. log10(maximum(scaled_A)) = $(log_max_A+scale_magnitude)")
         end
+
+        scale_factor = 10 ^ scale_magnitude
+
     end
-    return factorization
+
+    return scaled_chol(factorization, scale_factor)
+
 end
 
 
@@ -181,3 +223,11 @@ function reconstruct_array(non_zero_entries::Union{Array{Any,1},Array{Float64,1}
     new_array[findall(!iszero, template_array)] = non_zero_entries
     return new_array
 end
+
+
+"Log of the InverseGamma pdf. Equivalent to using Distributions; logpdf(InverseGamma(α, β), x)"
+log_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = -(β / x) - ((1 + α) * log(x)) + (α * log(β)) - log(gamma(α))
+
+
+"derivative of the Log of the InverseGamma pdf"
+dlog_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = (β - x * (1 + α)) / (x ^ 2)

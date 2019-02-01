@@ -5,6 +5,7 @@
 
 using JLD2, FileIO
 
+old_dir = pwd()
 cd(@__DIR__)
 @load "../jld2_files/sunspot_data.jld2" lambda phases quiet
 @load "../jld2_files/rv_data.jld2" doppler_comp genpca_out rvs_out
@@ -50,8 +51,8 @@ end
 a0 = zeros(n_out, n_dif)
 a0[1,1] = 1; a0[2,1] = 1; a0[1,2] = 1000; a0[3,2] = 1000; a0[2,3] = 100; a0 /= 20
 
-include("../src/kernels/Quasi_periodic_kernel.jl")  # sets correct num_kernel_hyperparameters
-build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
+num_kernel_hyperparameters = include_kernel("Quasi_periodic_kernel")  # sets correct num_kernel_hyperparameters
+problem_definition = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
 
 ##########################################
 
@@ -61,4 +62,4 @@ build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_di
     println()
 end
 
-cd("..")
+cd(old_dir)

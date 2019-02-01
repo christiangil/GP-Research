@@ -3,7 +3,7 @@ using HDF5
 using Distributions
 
 "bootstrapping for errors in PCA scores. Takes about 28s per bootstrap on my computer"
-function bootstrap_errors(; boot_amount::Int=10, time_series_spectra::Array{Float64,2}=zeros(2,2), hdf5_loc::String="", save_filename::String="bootstrap.jld2")
+function bootstrap_errors(; boot_amount::Int=10, time_series_spectra::Array{Float64,2}=zeros(2,2), hdf5_loc::String="", save_filename::String="jld2_files/bootstrap.jld2")
 
     @assert ((time_series_spectra != zeros(2,2)) | (hdf5_loc != "")) "either time_series_spectra or hdf5_loc have to be defined"
     if time_series_spectra==zeros(2,2)
@@ -12,7 +12,7 @@ function bootstrap_errors(; boot_amount::Int=10, time_series_spectra::Array{Floa
         time_series_spectra = act[:, :]
     end
 
-    @load "rv_data.jld2" doppler_comp genpca_out rvs_out
+    @load "jld2_files/rv_data.jld2" doppler_comp genpca_out rvs_out
     mu, M, scores0 = genpca_out
     # scores0 = scores0[:, :]
 

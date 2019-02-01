@@ -9,7 +9,7 @@ using JLD2, FileIO
 @load "jld2_files/sunspot_data.jld2" lambda phases quiet
 @load "jld2_files/rv_data.jld2" doppler_comp genpca_out rvs_out
 mu, M, scores = genpca_out
-scores[:, 1] = rvs_out
+scores[:, 1] ./ 3e8
 scores = scores'
 
 # how many components you will use
@@ -20,56 +20,46 @@ n_dif = 3
 # Setting up all of the data things
 # how much of the data you want to use (on time domain)
 start_ind = 100
-end_ind = 140  # 1070
+end_ind = 170  # 1070
 amount_of_measurements = end_ind - start_ind + 1
 total_amount_of_measurements = amount_of_measurements * n_out
 
 # getting proper slice of data
 x_obs = phases[start_ind:end_ind]
 y_obs_hold = scores[1:n_out, start_ind:end_ind]
-
-# normalizing the data (for numerical purposes)
-normals = mean(abs.(y_obs_hold), dims=2)'[:]
-for i in 1:n_out
-    y_obs_hold[i, :] /= normals[i]
-end
+@load "jld2_files/bootstrap.jld2" error_ests
+measurement_noise_hold = error_ests[1:n_out, start_ind:end_ind]
 
 # rearranging the data into one column (not sure reshape() does what I want)
+# and normalizing the data (for numerical purposes)
 y_obs = zeros(total_amount_of_measurements)
-for i in 1:n_out
-    y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :]
-end
-
-# measurement_noise = ones(total_amount_of_measurements)
-
-
-@load "jld2_files/bootstrap.jld2" scores_tot error_ests
-error_ests = error_ests[:, start_ind:end_ind]
 measurement_noise = zeros(total_amount_of_measurements)
+normals = mean(abs.(y_obs_hold), dims=2)'[:]
 for i in 1:n_out
-    measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = error_ests[i, :] / normals[i]
+    y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :] / normals[i]
+    measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :] / normals[i]
 end
 
-y_obs
-measurement_noise
+# # setting noise to 10% of max measurements
 # for i in 1:n_out
 #     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] *= 0.10 * maximum(abs.(y_obs_hold[i, :]))
 # end
 
+# normals
+# y_obs
+# measurement_noise
+
 # a0 = ones(n_out, n_dif) / 20
 a0 = zeros(n_out, n_dif)
-a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.1; a0[2,3] = 0.1; a0  #  /= 20
+a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0  #  /= 20
 
-include("src/kernels/Quasi_periodic_kernel.jl")  # sets correct num_kernel_hyperparameters
-build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
-
-# # initializing Cholesky factorization storage
-# chol_storage = chol_struct(copy(total_hyperparameters), ridge_chol(K_observations(problem_definition, copy(total_hyperparameters))))
+num_kernel_hyperparameters = include_kernel("Quasi_periodic_kernel")  # sets correct num_kernel_hyperparameters
+problem_definition = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
 
 ##############################################################################
 
 # kernel hyper parameters
-kernel_lengths = 2 * ones(num_kernel_hyperparameters)
+kernel_lengths = 20 * ones(num_kernel_hyperparameters)
 total_hyperparameters = append!(collect(Iterators.flatten(a0)), kernel_lengths)
 
 # how finely to sample the domain (for plotting)
@@ -85,10 +75,10 @@ amount_of_total_samp_points = amount_of_samp_points * n_out
 # (aka getting the covariance matrix by evaluating the kernel function at all
 # pairs of points)
 K_samp = covariance(problem_definition, x_samp, x_samp, total_hyperparameters)
-# plot_im(K_samp, file="test.pdf")
+plot_im(K_samp, file="test.pdf")
 
 # getting the Cholesky factorization of the covariance matrix (for drawing GPs)
-L_samp = ridge_chol(K_samp).L  # usually has to add a ridge
+L_samp = ridge_chol(K_samp)("L")
 
 # showing a heatmap of the covariance matrix
 # plot_im(K_samp; file="figs/gp/initial_covariance.pdf")
@@ -120,14 +110,10 @@ using Optim
 # storing initial hyperparameters
 initial_x = total_hyperparameters[findall(!iszero, total_hyperparameters)]
 
-# # initializing Cholesky factorization storage
-# chol_storage = chol_struct(initial_x, ridge_chol(K_observations(problem_definition, initial_x)))
-
-
-
 # @elapsed result = optimize(nlogL_Jones, ∇nlogL_Jones, initial_x, LBFGS(), Optim.Options(show_trace=true))
 # @elapsed result = optimize(nlogL_Jones, ∇nlogL_Jones, initial_x, LBFGS())
-@elapsed result = optimize(Optim.only_fg!(nlogL_Jones_fg!), initial_x, LBFGS())
+custom_fg!(F, G, non_zero_hyperparameters::Array{Float64,1}) = nlogL_Jones_fg!(problem_definition, F, G, non_zero_hyperparameters)
+@elapsed result = optimize(Optim.only_fg!(custom_fg!), initial_x, LBFGS())
 
 final_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, result.minimizer)
 

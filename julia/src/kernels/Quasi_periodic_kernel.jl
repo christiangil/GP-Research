@@ -167,4 +167,4 @@ function Quasi_periodic_kernel(hyperparameters::Union{Array{Float64,1},Array{Any
 end
 
 
-num_kernel_hyperparameters = 3
+return 3  # the number of kernel hyperparameters

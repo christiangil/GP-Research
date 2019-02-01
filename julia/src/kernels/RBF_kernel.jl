@@ -93,4 +93,4 @@ function RBF_kernel(hyperparameters::Union{Array{Float64,1},Array{Any,1}}, dif::
 end
 
 
-num_kernel_hyperparameters = 1
+return 1  # the number of kernel hyperparameters

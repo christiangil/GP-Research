@@ -130,4 +130,4 @@ function Periodic_kernel(hyperparameters::Union{Array{Float64,1},Array{Any,1}}, 
 end
 
 
-num_kernel_hyperparameters = 2
+return 2  # the number of kernel hyperparameters
