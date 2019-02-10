@@ -29,11 +29,10 @@ function bootstrap_errors(; boot_amount::Int=10, time_series_spectra::Array{Floa
         time_series_spectra_tmp = time_series_spectra .* (1 .+ (errors .* randn(num_lambda)))
         mu = vec(mean(time_series_spectra_tmp, dims=2))
         time_series_spectra_tmp .-= mu  # ~60s
-        fixed_comp = M[:,1]
-        fixed_comp_norm = 1/sum(abs2, fixed_comp)
+        fixed_comp_norm = 1/sum(abs2, view(M, :, 1))
         for i in 1:num_spectra
-            scores[i, 1] = (dot(view(time_series_spectra_tmp, :, i), fixed_comp) * fixed_comp_norm)  # Normalize differently, so scores are z (i.e., doppler shift)
-            time_series_spectra_tmp[:, i] -= scores[i, 1] * fixed_comp
+            scores[i, 1] = (dot(view(time_series_spectra_tmp, :, i), view(M, :, 1)) * fixed_comp_norm)  # Normalize differently, so scores are z (i.e., doppler shift)
+            time_series_spectra_tmp[:, i] -= scores[i, 1] * view(M, :, 1)
         end
         for j in 2:num_components
             for i in 1:num_spectra
@@ -43,7 +42,6 @@ function bootstrap_errors(; boot_amount::Int=10, time_series_spectra::Array{Floa
         end
         scores_tot_new[k, :, :] = scores
     end
-
 
     if isfile(save_filename)
         @load save_filename scores_tot

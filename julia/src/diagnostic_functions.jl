@@ -27,8 +27,7 @@ end
 function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::Array{Float64,1}; dif::Float64=1e-7, print_stuff::Bool=true)
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
-    G = zeros(length(total_hyperparameters[findall(!iszero, total_hyperparameters)]))
-    ∇nlogL_Jones(G, prob_def, total_hyperparameters)
+    G = ∇nlogL_Jones(prob_def, total_hyperparameters)
     est_G = est_grad(prob_def, total_hyperparameters; dif=dif)
 
     if print_stuff
@@ -84,9 +83,9 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
     end
 
     if return_anal | return_dif | return_bool
-        anal_dKdθs = zeros(length(total_hyperparameters), problem_definition.n_out * length(x), problem_definition.n_out * length(x))
+        anal_dKdθs = zeros(length(total_hyperparameters), prob_def.n_out * length(x), prob_def.n_out * length(x))
         for i in 1:length(total_hyperparameters)
-            anal_dKdθs[i, :, :] =  covariance(problem_definition, total_hyperparameters; dKdθ_total=i)
+            anal_dKdθs[i, :, :] =  covariance(prob_def, total_hyperparameters; dKdθ_total=i)
         end
         if return_anal
             append!(return_vec, [anal_dKdθs])
@@ -99,7 +98,7 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
         append!(return_vec, [difs])
         # println()
         # for i in 1:length(hyper)
-        #     if difs[i, :, :] != zeros(problem_definition.n_out * length(x), problem_definition.n_out * length(x))
+        #     if difs[i, :, :] != zeros(prob_def.n_out * length(x), prob_def.n_out * length(x))
         #         println("significant differences in dKdθ" * string(i))
         #     end
         # end

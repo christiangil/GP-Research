@@ -278,20 +278,20 @@ end
 "adding measurement noise to K_obs"
 function K_observations(kernel_func, x_obs::Array{Float64,1}, measurement_noise::Array{Float64,1}, kernel_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; ignore_asymmetry::Bool=false)
     K_obs = covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters)
-    return add_diagonal_term(K_obs, measurement_noise; ignore_asymmetry=ignore_asymmetry)
+    return symmetric_A(K_obs + Diagonal(measurement_noise); ignore_asymmetry=ignore_asymmetry)
 end
 
 
 "adding measurement noise to K_obs"
 function K_observations(prob_def::Jones_problem_definition, total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; ignore_asymmetry::Bool=false)
     K_obs = covariance(prob_def, total_hyperparameters)
-    return add_diagonal_term(K_obs, measurement_noise; ignore_asymmetry=ignore_asymmetry)
+    return symmetric_A(K_obs + Diagonal(prob_def.noise); ignore_asymmetry=ignore_asymmetry)
 end
 
 
 "calculating the variance at each GP posterior point"
 function get_σ(L_obs, K_obs_samp, K_samp)
-# function get_σ(L_obs::Union{Cholesky{Float64,Array{Float64,2}},scaled_chol}, K_obs_samp::Array{Float64,2}, K_samp::Array{Float64,2})
+# function get_σ(L_obs::Union{Cholesky{Float64,Array{Float64,2}}}, K_obs_samp::Array{Float64,2}, K_samp::Array{Float64,2})
 
     v = L_obs \ K_obs_samp
     V = zeros(size(K_samp, 1))
@@ -350,7 +350,7 @@ function GP_posteriors_from_covariances(K_samp::Union{Symmetric{Float64,Array{Fl
     mean_post = K_samp_obs * α
 
     if return_σ
-        σ = get_σ(L_fact("L"), K_obs_samp, K_samp)
+        σ = get_σ(L_fact.L, K_obs_samp, K_samp)
         append!(return_vec, [σ])
     end
 
@@ -360,7 +360,7 @@ function GP_posteriors_from_covariances(K_samp::Union{Symmetric{Float64,Array{Fl
             append!(return_vec, [K_post])
         end
         if return_L
-            L_post = ridge_chol(K_post)("L")
+            L_post = ridge_chol(K_post).L
             append!(return_vec, [L_post])
         end
     end
@@ -489,12 +489,8 @@ function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_ze
     y_obs = prob_def.y_obs
     L_fact_solve_y_obs = L_fact \ y_obs
 
-    # prior_lower = 0
-    # prior_upper = 10
-    # prior_amplitude = 10000
-    # prior_params = (prior_lower, prior_upper, prior_amplitude)
-    prior_alpha = 2.
-    prior_beta = 1.
+    prior_alpha = 10.
+    prior_beta = 10.
     prior_params = (prior_alpha, prior_beta)
 
     return total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params
@@ -503,7 +499,7 @@ end
 
 
 "GP nLogL"
-function nlogL(L_fact::Union{Cholesky{Float64,Array{Float64,2}},scaled_chol}, y_obs::Array{Float64,1}, L_fact_solve_y_obs::Array{Float64,1})
+function nlogL(L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, L_fact_solve_y_obs::Array{Float64,1})
 
     n = length(y_obs)
 
@@ -520,23 +516,17 @@ function nlogL(L_fact::Union{Cholesky{Float64,Array{Float64,2}},scaled_chol}, y_
 end
 
 
-function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}},scaled_chol}, y_obs::Array{Float64,1}, L_fact_solve_y_obs::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
+function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, L_fact_solve_y_obs::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
 
     nLogL_val = nlogL(L_fact, y_obs, L_fact_solve_y_obs)
 
     prior_alpha, prior_beta = prior_params
-    # prior_lower, prior_upper, prior_amplitude = prior_params
 
     # adding prior for physical length scales
     prior_term = 0
     for i in 1:prob_def.n_kern_hyper
         kernel_length = total_hyperparameters[end + 1 - i]
         prior_term += log_inverse_gamma(kernel_length, prior_alpha, prior_beta)
-        # if kernel_length < prior_lower
-        #     custom_penalty -= prior_amplitude * ((kernel_length - prior_lower) ^ 2)
-        # elseif kernel_length > prior_upper
-        #     custom_penalty -= prior_amplitude * ((kernel_length - prior_upper) ^ 2)
-        # end
     end
 
     return nLogL_val - prior_term
@@ -552,7 +542,7 @@ end
 
 
 "Partial derivative of GP nLogL w.r.t. a given hyperparameter"
-function dnlogLdθ(dK_dθj::Union{Array{Float64,2},Symmetric{Float64,Array{Float64,2}}}, L_fact::Union{Cholesky{Float64,Array{Float64,2}},scaled_chol}, y_obs::Array{Float64,1}, L_fact_solve_y_obs::Array{Float64,1})
+function dnlogLdθ(dK_dθj::Union{Array{Float64,2},Symmetric{Float64,Array{Float64,2}}}, L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, L_fact_solve_y_obs::Array{Float64,1})
 
     # derivative of goodness of fit term
     data_fit = 1 / 2 * (transpose(y_obs) * (L_fact \ (dK_dθj * (L_fact_solve_y_obs))))
@@ -564,8 +554,10 @@ function dnlogLdθ(dK_dθj::Union{Array{Float64,2},Symmetric{Float64,Array{Float
 end
 
 
-"Replaces G with gradient of nLogL for non-zero hyperparameters"
-function ∇nlogL_Jones(G, prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}},scaled_chol}, y_obs::Array{Float64,1}, L_fact_solve_y_obs::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
+"Returns gradient of nLogL for non-zero hyperparameters"
+function ∇nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, L_fact_solve_y_obs::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
+
+    G = zeros(length(total_hyperparameters[findall(!iszero, total_hyperparameters)]))
 
     j = 1
     for i in 1:(length(total_hyperparameters))
@@ -576,27 +568,36 @@ function ∇nlogL_Jones(G, prob_def::Jones_problem_definition, total_hyperparame
     end
 
     prior_alpha, prior_beta = prior_params
-    # prior_lower, prior_upper, prior_amplitude = prior_params
 
     # adding prior for physical length scales
     for i in 1:prob_def.n_kern_hyper
         kernel_length = total_hyperparameters[end + 1 - i]
         prior_term = dlog_inverse_gamma(kernel_length, prior_alpha, prior_beta)
-        # if  kernel_length < prior_lower
-        #     prior_term = 2 * prior_amplitude * (kernel_length - prior_lower)
-        # elseif kernel_length > prior_upper
-        #     prior_term = -2 * prior_amplitude * (kernel_length - prior_upper)
-        # end
         G[end + 1 - i] -= prior_term
     end
+
+    return G
 
 end
 
 
-function ∇nlogL_Jones(G, prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1})
+"Replaces G with gradient of nLogL for non-zero hyperparameters"
+function ∇nlogL_Jones!(G::Array{Float64,1}, prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, L_fact_solve_y_obs::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
+    G = ∇nlogL_Jones(prob_def, total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params)
+end
+
+
+"Returns gradient of nLogL for non-zero hyperparameters"
+function ∇nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1})
     non_zero_hyperparameters = total_hyperparameters[findall(!iszero, total_hyperparameters)]
     total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters)
-    ∇nlogL_Jones(G, prob_def, total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params)
+    return ∇nlogL_Jones(prob_def, total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params)
+end
+
+
+"Replaces G with gradient of nLogL for non-zero hyperparameters"
+function ∇nlogL_Jones!(G::Array{Float64,1}, prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1})
+    G = ∇nlogL_Jones(prob_def, total_hyperparameters)
 end
 
 
@@ -604,9 +605,9 @@ end
 function nlogL_Jones_fg!(prob_def::Jones_problem_definition, F, G, non_zero_hyperparameters::Array{Float64,1})
 
     total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters)
-
+    # println(total_hyperparameters)
     if G != nothing
-        ∇nlogL_Jones(G, prob_def, total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params)
+        ∇nlogL_Jones!(G, prob_def, total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params)
     end
     if F != nothing
         return nlogL_Jones(prob_def, total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params)

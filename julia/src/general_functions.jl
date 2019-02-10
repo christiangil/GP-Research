@@ -1,5 +1,8 @@
 using LinearAlgebra
 using Distributed
+using IterativeSolvers
+using PositiveFactorizations
+
 
 "a generalized version of the built in append!() function"
 function append(a::Array{T,1}, b...) where {T}
@@ -34,85 +37,18 @@ function symmetric_A(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; i
 end
 
 
-"""
-A structure that holds a cholesky factorization and the sqrt of the amount that
-the original matrix was scaled by to make the factoization possible
-Works with the most important functions of applied to cholesky objects
-(i.e. size, \\, inv, det, and logdet)
-"""
-struct scaled_chol
-    chol_fact::Cholesky{Float64,Array{Float64,2}}
-    scale::Union{Float64,Int}
-end
-
-import Base.size, Base.\, Base.inv, LinearAlgebra.det, LinearAlgebra.logdet
-size(A::scaled_chol) = size(A.chol_fact)
-(\)(A::scaled_chol, B::AbstractVecOrMat) = (A.chol_fact \ B) / A.scale
-inv(A::scaled_chol) = inv(A.chol_fact) / A.scale
-det(A::scaled_chol) = det(A.chol_fact) / (A.scale ^ 3)
-logdet(A::scaled_chol) = logdet(A.chol_fact) - log(A.scale ^ 3)
-
-
-"make it easy to get upper or lower verisons of the cholesky factorization"
-function (scaled_cholesky::scaled_chol)(lower_or_upper::String)
-
-    @assert (lower_or_upper in ["L", "U"]) "only \"L\" or \"U\" are accepted as inputs"
-
-    if lower_or_upper=="L"
-        working_array = scaled_cholesky.chol_fact.L
-    elseif lower_or_upper=="U"
-        working_array = scaled_cholesky.chol_fact.U
-    end
-
-    return working_array / sqrt(scaled_cholesky.scale)
-
-end
-
-
 "if needed, adds a ridge (or multiplies the matrix) to make a Cholesky factorization possible"
-function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; notification::Bool=true, ridge::Float64=1e-8)  where {T} # * maximum(A))
+function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; notification::Bool=true)  where {T} # * maximum(A))
 
-    factorization = copy(A)
-    scale_magnitude = 0
-    scale_factor = 1
-    # only add a small ridge if necessary
+    # only add a small ridge (based on the smallest eigenvalue) if necessary
     try
-        factorization = cholesky(factorization)
-        # factor = cholesky(copy(A))
-
+        return cholesky(Positive, A)
     catch
-        original_type = typeof(A)
-        no_error = false
-        log_max_A = log10(maximum(A))
-        ridge_magnitude_min = minimum([convert(Int64, round(log_max_A + log10(ridge))), convert(Int64, round(log10(ridge)))])
-        ridge_magnitude = copy(ridge_magnitude_min)
-
-        while (!no_error) & (scale_magnitude<9)
-            no_error = true
-            try
-                factorization = cholesky(copy(factorization) + UniformScaling(10 ^ ridge_magnitude))
-            catch
-                no_error = false
-                ridge_magnitude += 1
-                if (ridge_magnitude)>(log_max_A + scale_magnitude - 2)
-                    scale_magnitude += 2
-                    factorization = copy(A) .* 10 ^ scale_magnitude
-                    ridge_magnitude = copy(ridge_magnitude_min)
-                end
-            end
-        end
-
-        if typeof(factorization)==original_type
-            @warn "No amount of ridge adding or scaling could make the matrix positive definite. Returned matrix is not factorized!"
-        else
-            println("had to add a ridge of order 10^$ridge_magnitude and multiply matrix by 10^$scale_magnitude. log10(maximum(scaled_A)) = $(log_max_A+scale_magnitude)")
-        end
-
-        scale_factor = 10 ^ scale_magnitude
-
+        smallest_eigen = IterativeSolvers.lobpcg(A, false, 1).λ[1]
+        ridge = 1.10 * abs(smallest_eigen)
+        println("tried adding a ridge of size 10^$(log10(ridge)) to matrix whose maximum value is 10^$(log10(maximum(abs.(A))))")
+        return cholesky(Positive, A + UniformScaling(ridge))
     end
-
-    return scaled_chol(factorization, scale_factor)
 
 end
 
@@ -207,17 +143,8 @@ function clear_variables()
 end
 
 
-function add_diagonal_term(original_array::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}, diag_terms::Array{Float64,1}; ignore_asymmetry::Bool=false)
-    @assert (size(original_array, 1) == length(diag_terms)) ["diagonal term is the wrong length"]
-    # for i in 1:size(original_array, 1)
-    #     original_array[i, i] +=  diag_terms[i] ^ 2
-    # end
-    return symmetric_A(original_array + Diagonal(diag_terms); ignore_asymmetry=ignore_asymmetry)
-end
-
-
 "Create a new array filling the non-zero entries of a template array with a vector of values"
-function reconstruct_array(non_zero_entries::Union{Array{Any,1},Array{Float64,1}}, template_array::Array{Float64,2})
+function reconstruct_array(non_zero_entries, template_array::Array{Float64,2})
     @assert length(findall(!iszero, template_array))==length(non_zero_entries)
     new_array = zeros(size(template_array))
     new_array[findall(!iszero, template_array)] = non_zero_entries
@@ -230,4 +157,4 @@ log_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = -(β / x) - ((1 
 
 
 "derivative of the Log of the InverseGamma pdf"
-dlog_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = (β - x * (1 + α)) / (x ^ 2)
+dlog_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = (β - x * (1 + α)) / (x * x)

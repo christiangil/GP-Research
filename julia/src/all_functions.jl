@@ -15,6 +15,9 @@
 # Pkg.add("Optim")
 # Pkg.add("Distributions")
 # Pkg.add("SymEngine")
+# Pkg.add("Flux")
+# Pkg.add("IterativeSolvers")
+# Pkg.add("PositiveFactorizations")
 # # Pkg.update()
 
 # importing functions

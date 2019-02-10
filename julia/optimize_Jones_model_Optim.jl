@@ -41,9 +41,9 @@ for i in 1:n_out
 end
 
 # # setting noise to 10% of max measurements
-# for i in 1:n_out
-#     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] *= 0.10 * maximum(abs.(y_obs_hold[i, :]))
-# end
+for i in 1:n_out
+    measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] .= 0.10 * maximum(abs.(y_obs[i, :]))
+end
 
 # normals
 # y_obs
@@ -55,11 +55,11 @@ a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0
 
 num_kernel_hyperparameters = include_kernel("Quasi_periodic_kernel")  # sets correct num_kernel_hyperparameters
 problem_definition = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
-
+# const problem_definition = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
 ##############################################################################
 
 # kernel hyper parameters
-kernel_lengths = 20 * ones(num_kernel_hyperparameters)
+kernel_lengths = 2 * ones(num_kernel_hyperparameters)
 total_hyperparameters = append!(collect(Iterators.flatten(a0)), kernel_lengths)
 
 # how finely to sample the domain (for plotting)
@@ -78,7 +78,7 @@ K_samp = covariance(problem_definition, x_samp, x_samp, total_hyperparameters)
 plot_im(K_samp, file="test.pdf")
 
 # getting the Cholesky factorization of the covariance matrix (for drawing GPs)
-L_samp = ridge_chol(K_samp)("L")
+L_samp = ridge_chol(K_samp).L
 
 # showing a heatmap of the covariance matrix
 # plot_im(K_samp; file="figs/gp/initial_covariance.pdf")
@@ -104,16 +104,18 @@ custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1, 
 custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2, file="figs/gp/cond_initial_gp_2.pdf")
 custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3, file="figs/gp/cond_initial_gp_3.pdf")
 
+
 # numerically maximize the likelihood to find the best hyperparameters
 using Optim
 
 # storing initial hyperparameters
 initial_x = total_hyperparameters[findall(!iszero, total_hyperparameters)]
 
-# @elapsed result = optimize(nlogL_Jones, ∇nlogL_Jones, initial_x, LBFGS(), Optim.Options(show_trace=true))
-# @elapsed result = optimize(nlogL_Jones, ∇nlogL_Jones, initial_x, LBFGS())
 custom_fg!(F, G, non_zero_hyperparameters::Array{Float64,1}) = nlogL_Jones_fg!(problem_definition, F, G, non_zero_hyperparameters)
-@elapsed result = optimize(Optim.only_fg!(custom_fg!), initial_x, LBFGS())
+lower = [-1000., -1000, -1000, -1000, -1000, 0, 0, 0]
+upper = [1000., 1000, 1000, 1000, 1000, 50, 50, 50]
+@elapsed result = optimize(Optim.only_fg!(custom_fg!), lower, upper, initial_x, Fminbox(LBFGS()))
+# @elapsed result2 = optimize(Optim.only_fg!(custom_fg!), initial_x, LBFGS())
 
 final_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, result.minimizer)
 
@@ -123,7 +125,7 @@ println(nlogL_Jones(problem_definition, total_hyperparameters))
 
 println("new hyperparameters")
 println(final_total_hyperparameters)
-println(result.minimum)
+# println(result.minimum)
 
 # K_post = covariance(problem_definition, x_samp, x_samp, final_total_hyperparameters)
 # plot_im(K_post, file="test.pdf")
