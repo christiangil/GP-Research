@@ -65,8 +65,8 @@ include_kernel("Quasi_periodic_kernel")
 ##########################################
 
 @testset "taking gradients" begin
-    @test est_dKdθ(sample_problem_def, 0.5 .+ rand(3); return_bool=true)
-    @test test_grad(sample_problem_def, 0.5 .+ rand(3))
+    @test est_dKdθ(sample_problem_def, 1 .+ rand(3); return_bool=true)
+    @test test_grad(sample_problem_def, 1 .+ rand(3))
     println()
 end
 

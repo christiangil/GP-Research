@@ -306,7 +306,9 @@ function get_σ(L_obs, K_obs_samp, K_samp)
         end
 
     end
+
     σ = sqrt.(V)
+    
     return σ
 
 end
@@ -334,7 +336,7 @@ function covariance_permutations(prob_def::Jones_problem_definition, x_samp::Arr
 end
 
 
-function GP_posteriors_from_covariances(K_samp::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}, K_obs::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}, K_samp_obs::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}, K_obs_samp::Union{Transpose{Float64,Array{Float64,2}},Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}; return_σ::Bool=false, return_K::Bool=false, return_L::Bool=false)
+function GP_posteriors_from_covariances(y_obs::Array{Float64,1}, K_samp::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}, K_obs::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}, K_samp_obs::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}, K_obs_samp::Union{Transpose{Float64,Array{Float64,2}},Symmetric{Float64,Array{Float64,2}},Array{Float64,2}}; return_σ::Bool=false, return_K::Bool=false, return_L::Bool=false)
     return_vec = []
 
     # (RW alg. 2.1)
@@ -370,10 +372,10 @@ end
 
 
 "conditions a GP with data"
-function GP_posteriors(x_obs::Array{Float64,1}, x_samp::Array{Float64,1}, measurement_noise::Array{Float64,1}, total_hyperparameters::Array{Float64,1}; return_σ::Bool=false, return_K::Bool=false, return_L::Bool=false)
+function GP_posteriors(x_obs::Array{Float64,1}, y_obs::Array{Float64,1}, x_samp::Array{Float64,1}, measurement_noise::Array{Float64,1}, total_hyperparameters::Array{Float64,1}; return_σ::Bool=false, return_K::Bool=false, return_L::Bool=false)
 
     (K_samp, K_obs, K_samp_obs, K_obs_samp) = covariance_permutations(x_obs, x_samp, measurement_noise, total_hyperparameters)
-    mean_post, return_vec = GP_posteriors_from_covariances(K_samp, K_obs, K_samp_obs, K_obs_samp; return_σ=return_σ, return_K=return_σ, return_L=return_σ)
+    mean_post, return_vec = GP_posteriors_from_covariances(y_obs, K_samp, K_obs, K_samp_obs, K_obs_samp; return_σ=return_σ, return_K=return_σ, return_L=return_σ)
     return mean_post, return_vec
 
 end
@@ -383,7 +385,7 @@ end
 function GP_posteriors(prob_def::Jones_problem_definition, x_samp::Array{Float64,1}, total_hyperparameters::Array{Float64,1}; return_σ::Bool=false, return_K::Bool=false, return_L::Bool=false)
 
     (K_samp, K_obs, K_samp_obs, K_obs_samp) = covariance_permutations(prob_def, x_samp, total_hyperparameters)
-    mean_post, return_vec = GP_posteriors_from_covariances(K_samp, K_obs, K_samp_obs, K_obs_samp; return_σ=return_σ, return_K=return_K, return_L=return_L)
+    mean_post, return_vec = GP_posteriors_from_covariances(prob_def.y_obs, K_samp, K_obs, K_samp_obs, K_obs_samp; return_σ=return_σ, return_K=return_K, return_L=return_L)
     return mean_post, return_vec
 
 end

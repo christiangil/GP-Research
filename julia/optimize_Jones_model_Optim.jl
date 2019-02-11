@@ -84,9 +84,9 @@ L_samp = ridge_chol(K_samp).L
 # plot_im(K_samp; file="figs/gp/initial_covariance.pdf")
 # plot_im(L_samp)
 
-custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=1, file="figs/gp/initial_gp_0.pdf")
-custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=2, file="figs/gp/initial_gp_1.pdf")
-custom_line_plot(x_samp, L_samp, x_obs, y_obs, output=3, file="figs/gp/initial_gp_2.pdf")
+custom_line_plot(x_samp, L_samp, problem_definition, output=1, file="figs/gp/initial_gp_0.pdf")
+custom_line_plot(x_samp, L_samp, problem_definition, output=2, file="figs/gp/initial_gp_1.pdf")
+custom_line_plot(x_samp, L_samp, problem_definition, output=3, file="figs/gp/initial_gp_2.pdf")
 
 # calculate posterior quantities
 mean_post, return_vec = GP_posteriors(problem_definition, x_samp, total_hyperparameters, return_K=true, return_L=true, return_σ=true)
@@ -100,9 +100,9 @@ mean_post, return_vec = GP_posteriors(problem_definition, x_samp, total_hyperpar
 # much closer to the data, no?
 
 # for 1D GPs
-custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1, file="figs/gp/cond_initial_gp_1.pdf")
-custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2, file="figs/gp/cond_initial_gp_2.pdf")
-custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3, file="figs/gp/cond_initial_gp_3.pdf")
+custom_line_plot(x_samp, L_post, problem_definition, σ=σ, mean=mean_post, output=1, file="figs/gp/cond_initial_gp_1.pdf")
+custom_line_plot(x_samp, L_post, problem_definition, σ=σ, mean=mean_post, output=2, file="figs/gp/cond_initial_gp_2.pdf")
+custom_line_plot(x_samp, L_post, problem_definition, σ=σ, mean=mean_post, output=3, file="figs/gp/cond_initial_gp_3.pdf")
 
 
 # numerically maximize the likelihood to find the best hyperparameters
@@ -140,6 +140,6 @@ mean_post, return_vec = GP_posteriors(problem_definition, x_samp, final_total_hy
 # plot_im(K_post)
 
 # for 1D GPs
-custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=1, file="figs/gp/fit_gp_1.pdf")
-custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=2, file="figs/gp/fit_gp_2.pdf")
-custom_line_plot(x_samp, L_post, x_obs, y_obs, σ=σ, mean=mean_post, output=3, file="figs/gp/fit_gp_3.pdf")
+custom_line_plot(x_samp, L_post, problem_definition, σ=σ, mean=mean_post, output=1, file="figs/gp/fit_gp_1.pdf")
+custom_line_plot(x_samp, L_post, problem_definition, σ=σ, mean=mean_post, output=2, file="figs/gp/fit_gp_2.pdf")
+custom_line_plot(x_samp, L_post, problem_definition, σ=σ, mean=mean_post, output=3, file="figs/gp/fit_gp_3.pdf")

@@ -47,7 +47,15 @@ end
 
 
 # quick and dirty function for creating plots that show what I want
-function custom_line_plot(x_samp::Array{Float64,1}, L, x_obs::Array{Float64,1}, y_obs::Array{Float64,1}; output::Int=1, draws::Int=5000, σ::Array{Float64,1}=zeros(1), mean::Array{Float64,1}=zeros(amount_of_total_samp_points), show::Int=10, file::String="")
+function custom_line_plot(x_samp::Array{Float64,1}, L::LowerTriangular{Float64,Array{Float64,2}}, prob_def::Jones_problem_definition; output::Int=1, draws::Int=5000, σ::Array{Float64,1}=zeros(1), mean::Array{Float64,1}=zeros(1), show::Int=5, file::String="", LogL::Float64=0.)
+
+    amount_of_samp_points = length(x_samp)
+    amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out
+    amount_of_measurements = length(prob_def.x_obs)
+
+    if mean==zeros(1)
+        mean = zeros(amount_of_total_samp_points)
+    end
 
     # same curves are drawn every time?
     # srand(100)
@@ -59,7 +67,7 @@ function custom_line_plot(x_samp::Array{Float64,1}, L, x_obs::Array{Float64,1}, 
     output_indices = (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)
 
     # geting the y values for the proper output
-    y = y_obs[(amount_of_measurements * (output - 1) + 1):(amount_of_measurements * output)]
+    y = prob_def.y_obs[(amount_of_measurements * (output - 1) + 1):(amount_of_measurements * output)]
 
     # initializing storage for example GPs to be plotted
     show_curves = zeros(show, amount_of_samp_points)
@@ -109,11 +117,15 @@ function custom_line_plot(x_samp::Array{Float64,1}, L, x_obs::Array{Float64,1}, 
     for i in 1:show
         plot(x_samp, show_curves[i, :], alpha=0.5, zorder=1)
     end
-    scatter(x_obs, y, color="black", zorder=2)
+    scatter(prob_def.x_obs, y, color="black", zorder=2)
 
     xlabel("phases (days?)")
     ylabel("pca scores")
     title("PCA " * string(output-1), fontsize=30)
+
+    if LogL != 0.
+        text(minimum(prob_def.x_obs), 0.9 * maximum(maximum(y), maximum(show_curves)), string(round(LogL)), fontsize=20)
+    end
 
     if file!=""
         savefig(file)
