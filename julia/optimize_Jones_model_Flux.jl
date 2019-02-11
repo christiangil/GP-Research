@@ -126,26 +126,26 @@ ps = Flux.params(non_zero_hyper_param)
 nLogL_custom() = nLogL_custom(non_zero_hyper_param)
 
 # Initializing other training things
-iteration_amount = 100
+iteration_amount = 20
 flux_data = Iterators.repeated((), iteration_amount)    # the function is called $iteration_amount times with no arguments
 opt = ADAM(0.1)
 
-# global current_iteration = 0
-# function update_iteration!()
-#     global current_iteration += 1
-# end
-#
-# #callback function to observe training
-# callback_func_expens = function ()
-#     LogL = data(nLogL_custom())
-#     total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))
-#     mean_post, return_vec = GP_posteriors(problem_definition, x_samp, total_hyperparameters, return_K=true, return_L=true, return_σ=true)
-#     σ, K_post, L_post = return_vec
-#     update_iteration!()
-#     custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=1, file="figs/gp/training/training_gp1_$current_iteration.png", LogL=LogL)
-#     custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=2, file="figs/gp/training/training_gp2_$current_iteration.png", LogL=LogL)
-#     custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=3, file="figs/gp/training/training_gp3_$current_iteration.png", LogL=LogL)
-# end
+global current_iteration = 0
+function update_iteration!()
+    global current_iteration += 1
+end
+
+#callback function to observe training
+callback_func_expens = function ()
+    LogL = data(nLogL_custom())
+    total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))
+    mean_post, return_vec = GP_posteriors(problem_definition, x_samp, total_hyperparameters, return_K=true, return_L=true, return_σ=true)
+    σ, K_post, L_post = return_vec
+    update_iteration!()
+    custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=1, file="figs/gp/training/training_gp1_$current_iteration.png", LogL=LogL)
+    custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=2, file="figs/gp/training/training_gp2_$current_iteration.png", LogL=LogL)
+    custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=3, file="figs/gp/training/training_gp3_$current_iteration.png", LogL=LogL)
+end
 
 callback_func_simp = function ()
     println("Current nLogL: ", data(nLogL_custom()))
@@ -154,7 +154,7 @@ callback_func_simp = function ()
 end
 
 
-Flux.train!(nLogL_custom, ps, flux_data, opt, cb=Flux.throttle(callback_func_simp, 10))
+Flux.train!(nLogL_custom, ps, flux_data, opt, cb=Flux.throttle(callback_func_expens, 5))
 # Flux.train!(nLogL_custom, ps, flux_data, opt)
 
 final_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))

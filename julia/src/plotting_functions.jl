@@ -124,7 +124,7 @@ function custom_line_plot(x_samp::Array{Float64,1}, L::LowerTriangular{Float64,A
     title("PCA " * string(output-1), fontsize=30)
 
     if LogL != 0.
-        text(minimum(prob_def.x_obs), 0.9 * maximum(maximum(y), maximum(show_curves)), string(round(LogL)), fontsize=20)
+        text(minimum(prob_def.x_obs), 0.9 * maximum([maximum(y), maximum(show_curves)]), "nLogL: " * string(round(LogL)), fontsize=20)
     end
 
     if file!=""
