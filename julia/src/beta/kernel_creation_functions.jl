@@ -48,7 +48,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     num_kernel_hyperparameters = sym_amount-2
     # begin to write the function including assertions that the amount of hyperparameters are correct
     write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"kernels/$kernel_name.jl\").\n\"\"\"\n")
-    write(io, "function " * kernel_name * "(hyperparameters::Union{Array{Float64,1},Array{Any,1}}, dif::Float64; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(1))\n\n")
+    write(io, "function " * kernel_name * "(hyperparameters::Array{Any,1}, dif::Float64; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(1))\n\n")
     write(io, "    @assert length(hyperparameters)==$num_kernel_hyperparameters \"hyperparameters is the wrong length\"\n")
     write(io, "    if dorder==zeros(1)\n")
     write(io, "        dorder = zeros(length(hyperparameters) + 2)\n")
@@ -114,6 +114,29 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
                 symbolic_kernel_str = replace(symbolic_kernel_str, " 0.0 - "=>" -")
                 symbolic_kernel_str = replace(symbolic_kernel_str, " 0.0 + "=>" ")
                 symbolic_kernel_str = replace(symbolic_kernel_str, " 1.0*"=>" ")
+
+                # replacing all calls to ^
+                symbols_str = symbols_str[2:end]
+                symbols_str[1] = "dif"
+                for symb in symbols_str
+                    replace(symbolic_kernel_str, symb=>"($symb)")
+                end
+                pow_index = findfirst(isequal(")^"), symbolic_kernel_str)
+                while typeof(pow_index)!=Nothing
+                    paren_count = 1
+                    begin_index = copy(pow_index) - 1
+                    while paren_count>0
+                        if symbolic_kernel_str[begin_index]==")"
+                            paren_count+=1
+                        elseif symbolic_kernel_str[begin_index]=="("
+                            paren_count-=1
+                        end
+                        begin_index-=1
+                    end
+                    write(io, symbolic_kernel_str)
+                    replace(symbolic_kernel_str, symbolic_kernel_str=>"($symb)")
+                    pow_index = findfirst(isequal(")^"), symbolic_kernel_str)
+                end
             end
 
             write(io, symbolic_kernel_str)

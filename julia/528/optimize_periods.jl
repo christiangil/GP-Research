@@ -1,5 +1,5 @@
 #adding in custom functions
-include("src/all_functions.jl")
+include("../src/all_functions.jl")
 
 # can use this if you want to replicate results
 # srand(1234)
@@ -36,36 +36,30 @@ using JLD2, FileIO
 # measurement_noise = zeros(total_amount_of_measurements)
 # normals = mean(abs.(y_obs_hold), dims=2)'[:]
 # for i in 1:n_out
-#         y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :] / normals[i]
-#         measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :] / normals[i]
+#     y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :] / normals[i]
+#     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :] / normals[i]
 # end
 #
 # # # setting noise to 10% of max measurements
 # for i in 1:n_out
-#         measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] .= 0.10 * maximum(abs.(y_obs[i, :]))
+#     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] .= 0.10 * maximum(abs.(y_obs[i, :]))
 # end
 #
-# # normals
-# # y_obs
-# # measurement_noise
-#
-# # a0 = ones(n_out, n_dif) / 20
 # a0 = zeros(n_out, n_dif)
-# a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0    #    /= 20
+# a0[1,1] = -0.53477; a0[2,1] = -1.54269; a0[1,2] = -1.96109; a0[3,2] = -2.08949; a0[2,3] = 0.170251; a0    #    /= 20
 #
 # num_kernel_hyperparameters = include_kernel("Quasi_periodic_kernel")    # sets correct num_kernel_hyperparameters
-# sample_problem_def = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
-# @save "jld2_files/sample_problem_def.jld2" sample_problem_def
-# # const problem_definition = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
+# problem_def_528 = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
+# @save "jld2_files/problem_def_528.jld2" problem_def_528
 
 include_kernel("Quasi_periodic_kernel")
-@load "jld2_files/sample_problem_def.jld2" sample_problem_def
-problem_definition = sample_problem_def
+@load "jld2_files/problem_def_528.jld2" problem_def_528
+problem_definition = problem_def_528
 
 ##############################################################################
 
 # kernel hyper parameters
-kernel_lengths = 2 * ones(problem_definition.n_kern_hyper)
+kernel_lengths = [0.583594, 1.83475, 2.58466]
 total_hyperparameters = append!(collect(Iterators.flatten(problem_definition.a0)), kernel_lengths)
 
 # how finely to sample the domain (for plotting)
@@ -126,25 +120,31 @@ ps = Flux.params(non_zero_hyper_param)
 nLogL_custom() = nLogL_custom(non_zero_hyper_param)
 
 # Initializing other training things
-iteration_amount = 20
+iteration_amount = 100
 flux_data = Iterators.repeated((), iteration_amount)    # the function is called $iteration_amount times with no arguments
 opt = ADAM(0.1)
 
 global current_iteration = 0
-function update_iteration!()
-    global current_iteration += 1
-end
 
 #callback function to observe training
 callback_func_expens = function ()
+
+    function update_iteration!()
+        if @isdefined current_iteration
+            global current_iteration += 1
+        else
+            global current_iteration = 1
+        end
+    end
+
     LogL = data(nLogL_custom())
     total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))
     mean_post, return_vec = GP_posteriors(problem_definition, x_samp, total_hyperparameters, return_K=true, return_L=true, return_σ=true)
     σ, K_post, L_post = return_vec
     update_iteration!()
-    custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=1, file="figs/gp/training/training_gp1_$current_iteration.png", LogL=LogL)
-    custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=2, file="figs/gp/training/training_gp2_$current_iteration.png", LogL=LogL)
-    custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=3, file="figs/gp/training/training_gp3_$current_iteration.png", LogL=LogL)
+    custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=1, file="figs/gp/training/training_gp1_$current_iteration.png", LogL=LogL, waves=total_hyperparameters[end-problem_definition.n_kern_hyper+1:end])
+    custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=2, file="figs/gp/training/training_gp2_$current_iteration.png", LogL=LogL, waves=total_hyperparameters[end-problem_definition.n_kern_hyper+1:end])
+    custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=3, file="figs/gp/training/training_gp3_$current_iteration.png", LogL=LogL, waves=total_hyperparameters[end-problem_definition.n_kern_hyper+1:end])
 end
 
 callback_func_simp = function ()

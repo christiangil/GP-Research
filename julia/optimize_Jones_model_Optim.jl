@@ -20,7 +20,7 @@ n_dif = 3
 # Setting up all of the data things
 # how much of the data you want to use (on time domain)
 start_ind = 100
-end_ind = 170  # 1070
+end_ind = 170    # <= 730 70 datapoints is like 5 weeks
 amount_of_measurements = end_ind - start_ind + 1
 total_amount_of_measurements = amount_of_measurements * n_out
 

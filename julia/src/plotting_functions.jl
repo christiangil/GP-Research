@@ -47,7 +47,7 @@ end
 
 
 # quick and dirty function for creating plots that show what I want
-function custom_line_plot(x_samp::Array{Float64,1}, L::LowerTriangular{Float64,Array{Float64,2}}, prob_def::Jones_problem_definition; output::Int=1, draws::Int=5000, σ::Array{Float64,1}=zeros(1), mean::Array{Float64,1}=zeros(1), show::Int=5, file::String="", LogL::Float64=0.)
+function custom_line_plot(x_samp::Array{Float64,1}, L::LowerTriangular{Float64,Array{Float64,2}}, prob_def::Jones_problem_definition; output::Int=1, draws::Int=5000, σ::Array{Float64,1}=zeros(1), mean::Array{Float64,1}=zeros(1), show::Int=5, file::String="", LogL::Float64=0., waves::Array{Float64,1}=zeros(1) )
 
     amount_of_samp_points = length(x_samp)
     amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out
@@ -125,6 +125,10 @@ function custom_line_plot(x_samp::Array{Float64,1}, L::LowerTriangular{Float64,A
 
     if LogL != 0.
         text(minimum(prob_def.x_obs), 0.9 * maximum([maximum(y), maximum(show_curves)]), "nLogL: " * string(round(LogL)), fontsize=20)
+    end
+
+    if waves != zeros(1)
+        text(minimum(prob_def.x_obs), 1. * minimum([minimum(y), minimum(show_curves)]), "Wavelengths: " * string(waves), fontsize=20)
     end
 
     if file!=""

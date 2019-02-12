@@ -1,0 +1,7 @@
+draw multivariate data from known type of GP
+
+add (circular?) keplerian signal to first component
+
+along a grid in fine frequency space, find likelihoods for best fit orbital parameters at that period with fixed (test with true, then try with different/reasonable) GP hyperparameters
+
+for better likelihoods fit again with orbital params + GP hyperparameters
