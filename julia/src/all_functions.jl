@@ -11,18 +11,22 @@
 # Pkg.add("PyPlot")
 # Pkg.add("PyCall")
 # Pkg.add("LaTeXStrings")
-# # Pkg.add("https://github.com/eford/RvSpectraKitLearn.jl.git")
+# # pkg"add https://github.com/eford/RvSpectraKitLearn.jl"
 # Pkg.add("Optim")
 # Pkg.add("Distributions")
 # Pkg.add("SymEngine")
 # Pkg.add("Flux")
 # Pkg.add("IterativeSolvers")
 # Pkg.add("PositiveFactorizations")
+# pkg"add https://github.com/JuliaPhysics/PhysicalConstants.jl"
+# Pkg.add("UnitfulAstro")
+# Pkg.add("Unitful")
 # # Pkg.update()
 
 # importing functions
 include("general_functions.jl")
 include("GP_functions.jl")
+include("RV_functions.jl")
 include("PCA_functions.jl")
 include("kernel_base_functions.jl")
 include("kernel_creation_functions.jl")
