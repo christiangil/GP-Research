@@ -6,7 +6,7 @@ include("../src/all_functions.jl")
 
 # loading in data
 using JLD2, FileIO
-# @load "jld2_files/sunspot_data.jld2" lambda phases quiet
+@load "jld2_files/sunspot_data.jld2" lambda phases quiet
 # @load "jld2_files/rv_data.jld2" doppler_comp genpca_out rvs_out
 # mu, M, scores = genpca_out
 # scores[:, 1] ./ 3e8
@@ -85,6 +85,5 @@ fake_data = (L_post * randn(amount_of_total_samp_points)) + mean_post
 P = 6u"d"
 m_star = 1u"Msun"
 m_planet = 1u"Mjup"
-rv(6u"d", P, m_star, m_planet)
-
-velocity_semi_amplitude(P::Float64, 0, 0, m_star::Float64, m_planet::Float64)
+times = convert_phases_to_seconds.(problem_definition.x_obs)
+planet_rvs = rv.(times, P, m_star, m_planet)

@@ -59,3 +59,16 @@ function rv(t::Union{Float64, Quantity}, P::Union{Float64, Quantity}, m_star::Un
     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
     return rv(K, t, P; e=e, i=i, ω=ω, γ=γ)
 end
+
+
+"Convert the solar phase information from SOAP 2.0 into days"
+function convert_phases_to_days(phase::Float64; P_rot = 25.05)
+    # default P_rot is the solar rotation period used by SOAP 2.0 in days
+    return phase / (2 * pi / P_rot)
+end
+
+
+"Convert the solar phase information from SOAP 2.0 into seconds"
+function convert_phases_to_seconds(phase::Float64; P_rot = 25.05)
+    return convert_and_strip_units(u"s", convert_phases_to_days(phase; P_rot = P_rot)u"d")
+end

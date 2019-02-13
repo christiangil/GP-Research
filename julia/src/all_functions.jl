@@ -21,7 +21,7 @@
 # pkg"add https://github.com/JuliaPhysics/PhysicalConstants.jl"
 # Pkg.add("UnitfulAstro")
 # Pkg.add("Unitful")
-# # Pkg.update()
+# Pkg.update()
 
 # importing functions
 include("general_functions.jl")
