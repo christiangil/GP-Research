@@ -41,9 +41,9 @@ using JLD2, FileIO
 # end
 #
 # # # setting noise to 10% of max measurements
-# for i in 1:n_out
-#         measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] .= 0.10 * maximum(abs.(y_obs[i, :]))
-# end
+# # for i in 1:n_out
+# #         measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] .= 0.10 * maximum(abs.(y_obs[i, :]))
+# # end
 #
 # # normals
 # # y_obs
@@ -126,7 +126,7 @@ ps = Flux.params(non_zero_hyper_param)
 nLogL_custom() = nLogL_custom(non_zero_hyper_param)
 
 # Initializing other training things
-iteration_amount = 20
+iteration_amount = 200
 flux_data = Iterators.repeated((), iteration_amount)    # the function is called $iteration_amount times with no arguments
 opt = ADAM(0.1)
 
@@ -154,7 +154,7 @@ callback_func_simp = function ()
 end
 
 
-Flux.train!(nLogL_custom, ps, flux_data, opt, cb=Flux.throttle(callback_func_expens, 5))
+Flux.train!(nLogL_custom, ps, flux_data, opt, cb=Flux.throttle(callback_func_simp, 5))
 # Flux.train!(nLogL_custom, ps, flux_data, opt)
 
 final_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))
@@ -165,21 +165,16 @@ println(nlogL_Jones(problem_definition, total_hyperparameters))
 
 println("new hyperparameters")
 println(final_total_hyperparameters)
-println(nlogL_Jones(problem_definition, final_total_hyperparameters))
-
-# K_post = covariance(problem_definition, x_samp, x_samp, final_total_hyperparameters)
-# plot_im(K_post, file="test.pdf")
+LogL = nlogL_Jones(problem_definition, final_total_hyperparameters)
+println(LogL)
 
 # reruning analysis of posterior with the "most likley" kernel amplitude and lengthscale
 # recalculating posterior covariance and mean function
 mean_post, return_vec = GP_posteriors(problem_definition, x_samp, final_total_hyperparameters, return_K=true, return_L=true, return_σ=true)
 σ, K_post, L_post = return_vec
 
-# plot the posterior covariance of the "most likely" posterior matrix
-# (colors show how correlated points are to each other)
-# plot_im(K_post)
-
+waves = final_total_hyperparameters[end-problem_definition.n_kern_hyper+1:end]
 # for 1D GPs
-custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=1, file="figs/gp/fit_gp_1.pdf")
-custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=2, file="figs/gp/fit_gp_2.pdf")
-custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=3, file="figs/gp/fit_gp_3.pdf")
+custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=1, file="figs/gp/fit_gp_1.png", LogL=LogL, waves=waves)
+custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=2, file="figs/gp/fit_gp_2.png", LogL=LogL, waves=waves)
+custom_line_plot(x_samp, L_post, problem_definition; σ=σ, mean=mean_post, output=3, file="figs/gp/fit_gp_3.png", LogL=LogL, waves=waves)

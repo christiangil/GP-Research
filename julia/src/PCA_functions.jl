@@ -26,7 +26,7 @@ function bootstrap_errors(; boot_amount::Int=10, time_series_spectra::Array{Floa
     scores_tot_new = zeros(boot_amount, num_spectra, num_components)
     for k in 1:boot_amount
         scores = zeros(num_spectra, num_components)
-        time_series_spectra_tmp = time_series_spectra .* (1 .+ (errors .* randn(num_lambda)))
+        time_series_spectra_tmp = time_series_spectra .* (1 .+ (errors .* randn(size(time_series_spectra))))
         mu = vec(mean(time_series_spectra_tmp, dims=2))
         time_series_spectra_tmp .-= mu  # ~60s
         fixed_comp_norm = 1/sum(abs2, view(M, :, 1))
