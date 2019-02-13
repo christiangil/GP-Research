@@ -82,8 +82,9 @@ mean_post, return_vec = GP_posteriors(problem_definition, x_samp, total_hyperpar
 
 fake_data = (L_post * randn(amount_of_total_samp_points)) + mean_post
 
-e = 0.1
 P = 6u"d"
 m_star = 1u"Msun"
 m_planet = 1u"Mjup"
-rv(0.2, P, m_star, m_planet)
+rv(6u"d", P, m_star, m_planet)
+
+velocity_semi_amplitude(P::Float64, 0, 0, m_star::Float64, m_planet::Float64)

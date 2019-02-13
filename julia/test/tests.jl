@@ -64,9 +64,34 @@ include_kernel("Quasi_periodic_kernel")
 
 ##########################################
 
-@testset "taking gradients" begin
+@testset "hyperparameter gradients" begin
     @test est_dKdθ(sample_problem_def, 1 .+ rand(3); return_bool=true)
     @test test_grad(sample_problem_def, 1 .+ rand(3))
+    println()
+end
+
+@testset "velocity semi-amplitudes" begin
+    # testing Jupiter and Earth's radial velocity amplitudes
+    # https://en.wikipedia.org/wiki/Doppler_spectroscopy
+    m_star = 1u"Msun"
+    P = 11.86u"yr"
+    m_planet = 1u"Mjup"
+    @test isapprox(velocity_semi_amplitude(P, m_star, m_planet), 12.4; rtol=1e-2)
+    P = 1u"yr"
+    m_planet = 1u"Mearth"
+    @test isapprox(velocity_semi_amplitude(P, m_star, m_planet), 0.09; rtol=1e-2)
+    println()
+end
+
+@testset "radial velocities" begin
+    # making sure RVs are being calculated sensibly
+    m_star = 1u"Msun"
+    P = 1u"yr"
+    m_planet = 1u"Mearth"
+    @test isapprox(rv(0., P, m_star, m_planet), -rv(1/2 * P, P, m_star, m_planet))
+    @test isapprox(rv(1/4 * P, P, m_star, m_planet), 0; atol=1e-8)
+    @test isapprox(rv(0., P, m_star, m_planet, i=0.), 0)
+    @test isapprox(rv(0., P, m_star, m_planet, i=pi/4), 1 / sqrt(2) * rv(0., P, m_star, m_planet))
     println()
 end
 
