@@ -308,7 +308,7 @@ function get_σ(L_obs, K_obs_samp, K_samp)
     end
 
     σ = sqrt.(V)
-    
+
     return σ
 
 end

@@ -6,7 +6,7 @@ include("../src/all_functions.jl")
 
 # loading in data
 using JLD2, FileIO
-@load "jld2_files/sunspot_data.jld2" lambda phases quiet
+# @load "jld2_files/sunspot_data.jld2" lambda phases quiet
 # @load "jld2_files/rv_data.jld2" doppler_comp genpca_out rvs_out
 # mu, M, scores = genpca_out
 # scores[:, 1] ./ 3e8
@@ -75,15 +75,24 @@ amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
 # pairs of points)
 K_samp = covariance(problem_definition, x_samp, x_samp, total_hyperparameters)
 L_samp = ridge_chol(K_samp).L
-
-# calculate posterior quantities
-mean_post, return_vec = GP_posteriors(problem_definition, x_samp, total_hyperparameters, return_K=true, return_L=true, return_σ=true)
-σ, K_post, L_post = return_vec
-
-fake_data = (L_post * randn(amount_of_total_samp_points)) + mean_post
+fake_data = (L_samp * randn(amount_of_total_samp_points)) + mean_post
 
 P = 6u"d"
 m_star = 1u"Msun"
 m_planet = 1u"Mjup"
-times = convert_phases_to_seconds.(problem_definition.x_obs)
+times = convert_phases_to_seconds.(x_samp)
 planet_rvs = rv.(times, P, m_star, m_planet)
+fake_data[1:amount_of_samp_points] += planet_rvs
+
+span_x = x_samp[end] - x_samp[1]
+# Nyquist frequency, named after electronic engineer Harry Nyquist, is half of
+# the sampling rate of a discrete signal processing system
+# (https://en.wikipedia.org/wiki/Nyquist_frequency)
+nyquist_samp = span_x / amount_of_samp_points
+# if the frequency locations are unknown, then it is necessary to sample at
+# least at twice the Nyquist criteria; in other words, you must pay at least a
+# factor of 2 for not knowing the location of the spectrum. Note that minimum
+# sampling requirements do not necessarily guarantee stability.
+# https://en.wikipedia.org/wiki/Nyquist%E2%80%93Shannon_sampling_theorem#Nonuniform_sampling
+uneven_nyquist_samp = nyquist_samp / 2
+period_grid = collect(uneven_nyquist_samp:uneven_nyquist_samp:(span_x / 2))
