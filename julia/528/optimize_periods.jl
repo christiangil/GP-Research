@@ -75,7 +75,7 @@ amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
 # pairs of points)
 K_samp = covariance(problem_definition, x_samp, x_samp, total_hyperparameters)
 L_samp = ridge_chol(K_samp).L
-fake_data = (L_samp * randn(amount_of_total_samp_points)) + mean_post
+fake_data = (L_samp * randn(amount_of_total_samp_points))
 
 P = 6u"d"
 m_star = 1u"Msun"
@@ -96,3 +96,7 @@ nyquist_samp = span_x / amount_of_samp_points
 # https://en.wikipedia.org/wiki/Nyquist%E2%80%93Shannon_sampling_theorem#Nonuniform_sampling
 uneven_nyquist_samp = nyquist_samp / 2
 period_grid = collect(uneven_nyquist_samp:uneven_nyquist_samp:(span_x / 2))
+
+test = rand()
+ϕ(test, 2.; e=0.01, iter=true)
+ϕ(test, 2.; e=0.01)

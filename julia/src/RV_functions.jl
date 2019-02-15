@@ -21,12 +21,25 @@ function velocity_semi_amplitude(P::Union{Float64, Quantity}, m_star::Union{Floa
 end
 
 
-"Equation of center approximating true anomaly from (https://en.wikipedia.org/wiki/Equation_of_the_center) O(e^8)"
-function ϕ(t::Float64, P::Float64; e::Float64=0.)
+"""
+Iterative solution for true anomaly from mean anomaly from (http://www.csun.edu/~hcmth017/master/node16.html)
+for small e, can use equation of center approximating true anomaly from (https://en.wikipedia.org/wiki/Equation_of_the_center) O(e^8)
+"""
+function ϕ(t::Float64, P::Float64; e::Float64=0., iter=true)
     @assert (0 <= e <= 1) "eccentricity has to be between 0 and 1"
     M = 2 * pi * ((t / P) % 1)
     if e == 0.
         return M
+    elseif iter
+        dif_thres = 1e-8
+        dif = 1
+        true_anom = copy(M)
+        while dif > dif_thres
+            true_anom_old = copy(true_anom)
+            true_anom -= (true_anom - e * sin(true_anom) - M) / (1 - e * cos(true_anom))
+            dif = abs((true_anom - true_anom_old) / true_anom)
+        end
+        return true_anom
     else
         e_list = zeros(7)
         e_list = [e_list[i] * e for i in 1:7]
