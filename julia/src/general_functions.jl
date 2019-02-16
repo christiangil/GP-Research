@@ -158,3 +158,17 @@ log_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = -(β / x) - ((1 
 
 "derivative of the Log of the InverseGamma pdf"
 dlog_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = (β - x * (1 + α)) / (x * x)
+
+
+"solve a linear system of equations (optionally with noise values)"
+function solve_linear_system(A_orig::Array{Float64,2}, data::Array{Float64,1}; noise::Array{Float64,1}=ones(1))
+    A = copy(A_orig)
+    if size(A, 2) == length(data)
+        A = A'
+    end
+    if noise == ones(1)
+        return A \ (A' \ zeros(size(A, 2)) .+ data)
+    else
+        return A \ (A' \ zeros(size(A, 2)) .* noise .* noise .+ data)
+    end
+end

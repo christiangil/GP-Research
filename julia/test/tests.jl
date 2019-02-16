@@ -27,17 +27,18 @@ end
 @testset "true anomaly" begin
     # see if the low eccentricity approximation is working
     test_time = rand()
-    @test isapprox(ϕ(test_time, 2.; e=0.01), ϕ(test_time, 2.; e=0.01 iter=false); rtol=1e-2)
+    @test isapprox(ϕ(test_time, 2.; e=0.01), ϕ(test_time, 2.; e=0.01, iter=false); rtol=1e-2)
 end
+
 @testset "radial velocities" begin
     # making sure RVs are being calculated sensibly
     m_star = 1u"Msun"
     P = 1u"yr"
     m_planet = 1u"Mearth"
-    @test isapprox(rv(0., P, m_star, m_planet), -rv(1/2 * P, P, m_star, m_planet))
-    @test isapprox(rv(1/4 * P, P, m_star, m_planet), 0; atol=1e-8)
-    @test isapprox(rv(0., P, m_star, m_planet, i=0.), 0)
-    @test isapprox(rv(0., P, m_star, m_planet, i=pi/4), 1 / sqrt(2) * rv(0., P, m_star, m_planet))
+    @test isapprox(kepler_rv(0., P, m_star, m_planet), -kepler_rv(1/2 * P, P, m_star, m_planet))
+    @test isapprox(kepler_rv(1/4 * P, P, m_star, m_planet), 0; atol=1e-8)
+    @test isapprox(kepler_rv(0., P, m_star, m_planet, i=0.), 0)
+    @test isapprox(kepler_rv(0., P, m_star, m_planet, i=pi/4), 1 / sqrt(2) * kepler_rv(0., P, m_star, m_planet))
     println()
 end
 
@@ -52,8 +53,8 @@ end
     measurement_noise = noise_mag .* ones(amount_of_samp_points)
 
     A = hcat(cos.(x_samp), sin.(x_samp), ones(length(x_samp)))
-    est_coeffs = (A \ (A' \ zeros(3) .* measurement_noise
-        .* measurement_noise .+ fake_data))
+
+    est_coeffs = solve_linear_system(A, fake_data; noise=measurement_noise)
 
     println("Estimating keplerian params")
     println("true parameters:      ", true_coeffs)
