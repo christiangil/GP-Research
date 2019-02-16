@@ -55,11 +55,11 @@ using JLD2, FileIO
 #
 # num_kernel_hyperparameters = include_kernel("Quasi_periodic_kernel")    # sets correct num_kernel_hyperparameters
 # sample_problem_def = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
-# @save "jld2_files/sample_problem_def.jld2" sample_problem_def
+# @save "jld2_files/sample_problem_def.jld2" sample_problem_def normals
 # # const problem_definition = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
 
 include_kernel("Quasi_periodic_kernel")
-@load "jld2_files/sample_problem_def.jld2" sample_problem_def
+@load "jld2_files/sample_problem_def.jld2" sample_problem_def normals
 problem_definition = sample_problem_def
 
 ##############################################################################

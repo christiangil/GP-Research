@@ -25,7 +25,7 @@ end
 Iterative solution for true anomaly from mean anomaly from (http://www.csun.edu/~hcmth017/master/node16.html)
 for small e, can use equation of center approximating true anomaly from (https://en.wikipedia.org/wiki/Equation_of_the_center) O(e^8)
 """
-function ϕ(t::Float64, P::Float64; e::Float64=0., iter=true)
+function ϕ(t::Float64, P::Float64; e::Float64=0., iter::Bool=true)
     @assert (0 <= e <= 1) "eccentricity has to be between 0 and 1"
     M = 2 * pi * ((t / P) % 1)
     if e == 0.
@@ -56,15 +56,19 @@ function ϕ(t::Float64, P::Float64; e::Float64=0., iter=true)
 end
 
 
+function ϕ(t::Float64, P::Quantity; e::Float64=0., iter::Bool=true)
+    return ϕ(t, convert_and_strip_units(u"s", P); e=e, iter=iter)
+end
+
+
 "Radial velocity formula"
-function rv(K::Float64, t::Float64, P::Union{Float64, Quantity}; e::Float64=0., i::Float64=pi/2, ω::Float64=0., γ::Float64=0.)
-    P = convert_and_strip_units(u"s", P)
+function kepler_rv(K::Float64, t::Float64, P::Float64; e::Float64=0., i::Float64=pi/2, ω::Float64=0., γ::Float64=0.)
     return K * (e * cos(ω) + cos(ω + ϕ(t, P, e=e))) + γ
 end
 
 
 "RV fomula that deals with Unitful planet and star masses"
-function rv(t::Union{Float64, Quantity}, P::Union{Float64, Quantity}, m_star::Union{Float64, Quantity}, m_planet::Union{Float64, Quantity}; e::Float64=0., ω::Float64=0., i::Float64=pi/2, γ::Float64=0.)
+function kepler_rv(t::Union{Float64, Quantity}, P::Union{Float64, Quantity}, m_star::Union{Float64, Quantity}, m_planet::Union{Float64, Quantity}; e::Float64=0., ω::Float64=0., i::Float64=pi/2, γ::Float64=0.)
     m_star = convert_and_strip_units(u"kg", m_star)
     m_planet = convert_and_strip_units(u"kg", m_planet)
     P = convert_and_strip_units(u"s", P)

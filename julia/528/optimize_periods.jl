@@ -9,7 +9,7 @@ using JLD2, FileIO
 # @load "jld2_files/sunspot_data.jld2" lambda phases quiet
 # @load "jld2_files/rv_data.jld2" doppler_comp genpca_out rvs_out
 # mu, M, scores = genpca_out
-# scores[:, 1] ./ 3e8
+# scores[:, 1] .* 3e8
 # scores = scores'
 #
 # # how many components you will use
@@ -37,10 +37,10 @@ using JLD2, FileIO
 # normals = mean(abs.(y_obs_hold), dims=2)'[:]
 # for i in 1:n_out
 #     y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :] / normals[i]
-#     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :] / normals[i]
+#     # measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :] / normals[i]
 # end
 #
-# # # setting noise to 10% of max measurements
+# # setting noise to 10% of max measurements
 # for i in 1:n_out
 #     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] .= 0.10 * maximum(abs.(y_obs[i, :]))
 # end
@@ -50,10 +50,10 @@ using JLD2, FileIO
 #
 # num_kernel_hyperparameters = include_kernel("Quasi_periodic_kernel")    # sets correct num_kernel_hyperparameters
 # problem_def_528 = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
-# @save "jld2_files/problem_def_528.jld2" problem_def_528
+# @save "jld2_files/problem_def_528.jld2" problem_def_528 normals
 
 include_kernel("Quasi_periodic_kernel")
-@load "jld2_files/problem_def_528.jld2" problem_def_528
+@load "jld2_files/problem_def_528.jld2" problem_def_528 normals
 problem_definition = problem_def_528
 
 ##############################################################################
@@ -77,11 +77,17 @@ K_samp = covariance(problem_definition, x_samp, x_samp, total_hyperparameters)
 L_samp = ridge_chol(K_samp).L
 fake_data = (L_samp * randn(amount_of_total_samp_points))
 
+measurement_noise = zeros(amount_of_total_samp_points)
+# setting noise to 10% of max measurements
+for i in 1:n_out
+    measurement_noise[((i - 1) * amount_of_samp_points + 1):(i * amount_of_samp_points)] .= 0.10 * maximum(abs.(fake_data[i, :]))
+end
+
 P = 6u"d"
 m_star = 1u"Msun"
 m_planet = 1u"Mjup"
 times = convert_phases_to_seconds.(x_samp)
-planet_rvs = rv.(times, P, m_star, m_planet)
+planet_rvs = kepler_rv.(times, P, m_star, m_planet)
 fake_data[1:amount_of_samp_points] += planet_rvs
 
 span_x = x_samp[end] - x_samp[1]
@@ -97,6 +103,36 @@ nyquist_samp = span_x / amount_of_samp_points
 uneven_nyquist_samp = nyquist_samp / 2
 period_grid = collect(uneven_nyquist_samp:uneven_nyquist_samp:(span_x / 2))
 
-test = rand()
-ϕ(test, 2.; e=0.01, iter=true)
-ϕ(test, 2.; e=0.01)
+function kepler_rv_linear(t, P, x)
+    P = convert_and_strip_units(u"s", P)
+    return (x[1] .* cos.(ϕ.(t, P))) .+ (x[2] .* sin.(ϕ.(t, P))) .+ (x[3] .* ones(length(t)))
+end
+
+A = hcat(cos.(ϕ.(times, P)), sin.(ϕ.(times, P)), ones(length(times)))
+x = (A \ ((A' \ zeros(3) .* measurement_noise[1:amount_of_samp_points]
+    .* measurement_noise[1:amount_of_samp_points]
+    .+ fake_data[1:amount_of_samp_points]) ./ 2))
+
+simple_rv(times, P, x)
+
+planet_rvs
+
+
+
+
+
+
+amount_of_samp_points = 50
+true_coeffs = rand(3)
+x_samp = 5 .* pi .* sort(rand(amount_of_samp_points))
+fake_data = true_coeffs[1] .* cos.(x_samp) .+ true_coeffs[2] .* sin.(x_samp) .+ true_coeffs[3]
+noise_mag =  0.01 * maximum(fake_data)
+fake_data += noise_mag .* randn(amount_of_samp_points)
+measurement_noise = noise_mag .* ones(amount_of_samp_points)
+
+
+A = hcat(cos.(x_samp), sin.(x_samp), ones(length(x_samp)))
+est_coeffs = (A \ (A' \ zeros(3) .* measurement_noise
+    .* measurement_noise .+ fake_data))
+
+est_coeffs ./ true_coeffs
