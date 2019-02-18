@@ -20,18 +20,24 @@ x_samp = sort(minimum(problem_definition.x_obs) .+ (maximum(problem_definition.x
 # total amount of output points
 amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
 
+measurement_noise = zeros(amount_of_total_samp_points)
+
 # Finding how correlated the sampled inputs are to each other
 # (aka getting the covariance matrix by evaluating the kernel function at all
 # pairs of points)
-K_samp = covariance(problem_definition, x_samp, x_samp, total_hyperparameters)
+K_samp = symmetric_A(covariance(problem_definition, x_samp, x_samp, total_hyperparameters) + Diagonal(measurement_noise))
 L_samp = ridge_chol(K_samp).L
 fake_data = (L_samp * randn(amount_of_total_samp_points))
 
-measurement_noise = zeros(amount_of_total_samp_points)
+
 # setting noise to 10% of max measurements
 for i in 1:problem_definition.n_out
     measurement_noise[((i - 1) * amount_of_samp_points + 1):(i * amount_of_samp_points)] .= 0.10 * maximum(abs.(fake_data[i, :]))
 end
+
+K_samp = symmetric_A(covariance(problem_definition, x_samp, x_samp, total_hyperparameters) + Diagonal(measurement_noise))
+L_samp = ridge_chol(K_samp).L
+fake_data = (L_samp * randn(amount_of_total_samp_points))
 
 P = 6u"d"
 m_star = 1u"Msun"
@@ -40,12 +46,18 @@ times_obs = convert_phases_to_seconds.(x_samp)
 planet_rvs = kepler_rv.(times_obs, P, m_star, m_planet)
 fake_data[1:amount_of_samp_points] += planet_rvs
 
+kepler_rv_linear_terms = hcat(cos.(ϕ.(times_obs, P)), sin.(ϕ.(times_obs, P)), ones(length(times_obs)))
+kepler_linear_terms = vcat(kepler_rv_linear_terms, zeros(amount_of_total_samp_points - amount_of_samp_points, 3))
 
-# 
+x = general_lst_sq(kepler_linear_terms, fake_data; covariance=K_samp)
+# x = general_lst_sq(kepler_rv_linear_terms, fake_data[1:amount_of_samp_points]; covariance=K_samp[1:amount_of_samp_points,1:amount_of_samp_points])
+
+
+kepler_rv_linear(times_obs, P, x)
+
+#
 # function length_nyquist_sampling(x)
 #     maxim
-
-
 
 
 span_x = x_samp[end] - x_samp[1]
@@ -59,10 +71,3 @@ nyquist_samp = span_x / amount_of_samp_points
 # https://en.wikipedia.org/wiki/Nyquist%E2%80%93Shannon_sampling_theorem#Nonuniform_sampling
 uneven_nyquist_samp = nyquist_samp / 2
 period_grid = collect(uneven_nyquist_samp:uneven_nyquist_samp:(span_x / 2))
-
-kepler_rv_linear_terms = hcat(cos.(ϕ.(times, P)), sin.(ϕ.(times, P)), ones(length(times)))
-
-
-
-x = solve_linear_system(kepler_rv_linear_terms, fake_data[1:amount_of_samp_points]; noise=measurement_noise[1:amount_of_samp_points])
-kepler_rv_linear(times, P, x)

@@ -84,11 +84,11 @@ coefficients[1] = K * cos(ω)
 coefficients[2] = -K * sin(ω)
 coefficients[3] = K * e * cos(ω) + γ
 """
-function kepler_rv_linear(t::Union{Float64, Quantity}, P::Union{Float64, Quantity}, coefficients::Array{Float64,1})
+function kepler_rv_linear(t, P::Union{Float64, Quantity}, coefficients::Array{Float64,1})
     @assert length(coefficients) == 3 "wrong number of coefficients"
     P = convert_and_strip_units(u"s", P)
-    t = convert_and_strip_units(u"s", t)
-    return (coefficients[1] .* cos.(ϕ.(t, P))) .+ (coefficients[2] .* sin.(ϕ.(t, P))) .+ (coefficients[3] .* ones(length(t)))
+    t = convert_and_strip_units.(u"s", t)
+    return (coefficients[1] .* cos.(ϕ.(t, P))) + (coefficients[2] .* sin.(ϕ.(t, P))) + (coefficients[3] .* ones(length(t)))
 end
 
 

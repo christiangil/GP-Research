@@ -160,15 +160,30 @@ log_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = -(β / x) - ((1 
 dlog_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = (β - x * (1 + α)) / (x * x)
 
 
-"solve a linear system of equations (optionally with noise values)"
-function solve_linear_system(A_orig::Array{Float64,2}, data::Array{Float64,1}; noise::Array{Float64,1}=ones(1))
-    A = copy(A_orig)
+"""
+Solve a linear system of equations (optionally with variance values at each point or covariance array)
+see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
+"""
+function general_lst_sq(design_matrix::Array{Float64,2}, data::Array{Float64,1}; covariance::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64}}=ones(1))
+    @assert ndims(covariance) < 3 "the covariance variable needs to be a 1D or 2D array"
+
+    # prevent the original terms from being modified
+    A = copy(design_matrix)
+
+    # make sure term array is the right shape
     if size(A, 2) == length(data)
         A = A'
     end
-    if noise == ones(1)
-        return A \ (A' \ zeros(size(A, 2)) .+ data)
+
+    if covariance == ones(1)
+        return A \ data
     else
-        return A \ (A' \ zeros(size(A, 2)) .* noise .* noise .+ data)
+        if ndims(covariance) == 1
+            Σ = Diagonal(covariance)
+        else
+            Σ = copy(covariance)
+        end
+        Σ_fact = ridge_chol(Σ)
+        return ridge_chol((A' * (Σ_fact \ A))) \ (A' * (Σ_fact \ data))
     end
 end

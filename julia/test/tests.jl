@@ -28,6 +28,7 @@ end
     # see if the low eccentricity approximation is working
     test_time = rand()
     @test isapprox(ϕ(test_time, 2.; e=0.01), ϕ(test_time, 2.; e=0.01, iter=false); rtol=1e-2)
+    println()
 end
 
 @testset "radial velocities" begin
@@ -54,13 +55,14 @@ end
 
     A = hcat(cos.(x_samp), sin.(x_samp), ones(length(x_samp)))
 
-    est_coeffs = solve_linear_system(A, fake_data; noise=measurement_noise)
+    est_coeffs = general_lst_sq(A, fake_data; covariance=measurement_noise)
 
-    println("Estimating keplerian params")
-    println("true parameters:      ", true_coeffs)
-    println("estimated parameters: ", est_coeffs)
+    # println("Estimating keplerian params")
+    # println("true parameters:      ", true_coeffs)
+    # println("estimated parameters: ", est_coeffs)
 
     @test isapprox(est_coeffs, true_coeffs, rtol=1e-2)
+    println()
 end
 
 cd(old_dir)
