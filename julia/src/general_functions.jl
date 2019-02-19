@@ -2,6 +2,7 @@ using LinearAlgebra
 using Distributed
 using IterativeSolvers
 using PositiveFactorizations
+using Printf
 
 
 "a generalized version of the built in append!() function"
@@ -127,7 +128,7 @@ end
 
 "Return evenly spaced numbers over a specified interval equivalent to range but without the keywords"
 linspace(start::Union{Float64,Int}, stop::Union{Float64,Int}, length::Int) = collect(range(start, stop=stop, length=length))
-
+log_linspace(start::Union{Float64,Int}, stop::Union{Float64,Int}, length::Int) = exp.(linspace(log(start), log(stop), length))
 
 "set all variables equal to nothing to save some memory"
 function clear_variables()
@@ -181,9 +182,8 @@ function general_lst_sq(design_matrix::Array{Float64,2}, data::Array{Float64,1};
         if ndims(covariance) == 1
             Σ = Diagonal(covariance)
         else
-            Σ = copy(covariance)
+            Σ = ridge_chol(covariance)
         end
-        Σ_fact = ridge_chol(Σ)
-        return ridge_chol((A' * (Σ_fact \ A))) \ (A' * (Σ_fact \ data))
+        return ridge_chol((A' * (Σ \ A))) \ (A' * (Σ \ data))
     end
 end

@@ -4,8 +4,8 @@ using JLD2, FileIO
 old_dir = pwd()
 cd(@__DIR__)
 
-@load "jld2_files/sunspot_data.jld2" lambda phases quiet
-@load "jld2_files/rv_data.jld2" doppler_comp genpca_out rvs_out
+@load "../jld2_files/sunspot_data.jld2" lambda phases quiet
+@load "../jld2_files/rv_data.jld2" doppler_comp genpca_out rvs_out
 mu, M, scores = genpca_out
 scores[:, 1] ./ 3e8
 scores = scores'
@@ -25,7 +25,7 @@ total_amount_of_measurements = amount_of_measurements * n_out
 # getting proper slice of data
 x_obs = phases[start_ind:end_ind]
 y_obs_hold = scores[1:n_out, start_ind:end_ind]
-@load "jld2_files/bootstrap.jld2" error_ests
+@load "../jld2_files/bootstrap.jld2" error_ests
 measurement_noise_hold = error_ests[1:n_out, start_ind:end_ind]
 
 # rearranging the data into one column (not sure reshape() does what I want)
@@ -39,9 +39,9 @@ for i in 1:n_out
 end
 
 # # setting noise to 10% of max measurements
-for i in 1:n_out
-    measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] .= 0.10 * maximum(abs.(y_obs[i, :]))
-end
+# for i in 1:n_out
+#     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] .= 0.10 * maximum(abs.(y_obs[i, :]))
+# end
 
 # normals
 # y_obs
@@ -53,7 +53,7 @@ a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0
 
 num_kernel_hyperparameters = include_kernel("Quasi_periodic_kernel")  # sets correct num_kernel_hyperparameters
 sample_problem_def = build_problem_definition(Quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, measurement_noise, a0)
-@save "jld2_files/sample_problem_def.jld2" sample_problem_def
+@save "../jld2_files/sample_problem_def.jld2" sample_problem_def normals
 
 cd(old_dir)
 clear_variables()

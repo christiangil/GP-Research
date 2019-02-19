@@ -6,68 +6,52 @@ using JLD2, FileIO
 
 include_kernel("Quasi_periodic_kernel")
 @load "jld2_files/problem_def_528.jld2" problem_def_528 normals
-problem_definition = problem_def_528
 
 # kernel hyper parameters
-kernel_lengths = [0.583594, 1.83475, 2.58466]
-total_hyperparameters = append!(collect(Iterators.flatten(problem_definition.a0)), kernel_lengths)
+kernel_lengths = [0.6, 2, 2.5]
+total_hyperparameters = append!(collect(Iterators.flatten(problem_def_528.a0)), kernel_lengths)
 
-# how finely to sample the domain
-amount_of_samp_points = 50
-
-x_samp = sort(minimum(problem_definition.x_obs) .+ (maximum(problem_definition.x_obs) - minimum(problem_definition.x_obs)) .* rand(amount_of_samp_points))
-
-# total amount of output points
-amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
-
-measurement_noise = zeros(amount_of_total_samp_points)
-
-# Finding how correlated the sampled inputs are to each other
-# (aka getting the covariance matrix by evaluating the kernel function at all
-# pairs of points)
-K_samp = symmetric_A(covariance(problem_definition, x_samp, x_samp, total_hyperparameters) + Diagonal(measurement_noise))
-L_samp = ridge_chol(K_samp).L
-fake_data = (L_samp * randn(amount_of_total_samp_points))
-
-
-# setting noise to 10% of max measurements
-for i in 1:problem_definition.n_out
-    measurement_noise[((i - 1) * amount_of_samp_points + 1):(i * amount_of_samp_points)] .= 0.10 * maximum(abs.(fake_data[i, :]))
-end
-
-K_samp = symmetric_A(covariance(problem_definition, x_samp, x_samp, total_hyperparameters) + Diagonal(measurement_noise))
-L_samp = ridge_chol(K_samp).L
-fake_data = (L_samp * randn(amount_of_total_samp_points))
+amount_of_samp_points = length(problem_def_528.x_obs)
+amount_of_total_samp_points = amount_of_samp_points * problem_def_528.n_out
 
 P = 6u"d"
 m_star = 1u"Msun"
 m_planet = 1u"Mjup"
-times_obs = convert_phases_to_seconds.(x_samp)
+times_obs = convert_phases_to_seconds.(problem_def_528.x_obs)
 planet_rvs = kepler_rv.(times_obs, P, m_star, m_planet)
+fake_data = copy(problem_def_528.y_obs)
 fake_data[1:amount_of_samp_points] += planet_rvs
 
-kepler_rv_linear_terms = hcat(cos.(ϕ.(times_obs, P)), sin.(ϕ.(times_obs, P)), ones(length(times_obs)))
-kepler_linear_terms = vcat(kepler_rv_linear_terms, zeros(amount_of_total_samp_points - amount_of_samp_points, 3))
-
-x = general_lst_sq(kepler_linear_terms, fake_data; covariance=K_samp)
-# x = general_lst_sq(kepler_rv_linear_terms, fake_data[1:amount_of_samp_points]; covariance=K_samp[1:amount_of_samp_points,1:amount_of_samp_points])
-
-
-kepler_rv_linear(times_obs, P, x)
-
-#
-# function length_nyquist_sampling(x)
-#     maxim
-
-
-span_x = x_samp[end] - x_samp[1]
+time_span = times_obs[end] - times_obs[1]
 # Nyquist frequency is half of the sampling rate of a discrete signal processing system
 # (https://en.wikipedia.org/wiki/Nyquist_frequency)
-nyquist_samp = span_x / amount_of_samp_points
 # if the frequency locations are unknown, then it is necessary to sample at
 # least at twice the Nyquist criteria; in other words, you must pay at least a
 # factor of 2 for not knowing the location of the spectrum. Note that minimum
 # sampling requirements do not necessarily guarantee stability.
 # https://en.wikipedia.org/wiki/Nyquist%E2%80%93Shannon_sampling_theorem#Nonuniform_sampling
-uneven_nyquist_samp = nyquist_samp / 2
-period_grid = collect(uneven_nyquist_samp:uneven_nyquist_samp:(span_x / 2))
+uneven_nyquist_spacing = (time_span / amount_of_samp_points)
+
+period_grid = log_linspace(uneven_nyquist_spacing, time_span / 2, 100)
+
+K_obs = K_observations(problem_def_528, total_hyperparameters)
+likelihoods = zeros(length(period_grid))
+for i in 1:length(period_grid)
+    period = period_grid[i]
+    kepler_rv_linear_terms = hcat(cos.(ϕ.(times_obs, period)), sin.(ϕ.(times_obs, period)), ones(length(times_obs)))
+    kepler_linear_terms = vcat(kepler_rv_linear_terms, zeros(amount_of_total_samp_points - amount_of_samp_points, 3))
+    x = general_lst_sq(kepler_linear_terms, fake_data; covariance=K_obs)
+    new_data = copy(fake_data)
+    new_data[1:amount_of_samp_points] -= kepler_rv_linear(times_obs, period, x)
+    likelihoods[i] = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data)
+end
+
+ax = init_plot()
+ticklabel_format(style="sci", axis="y", scilimits=(0,0))
+fig = semilogx(period_grid .* convert_and_strip_units(u"d", 1u"s"), -likelihoods, color="black")
+xlabel("Periods (days)")
+ylabel("GP likelihoods")
+axvline(x=convert_and_strip_units(u"d", P))
+title_string = @sprintf "%.0f day, %.2f Earth masses" convert_and_strip_units(u"d",P) convert_and_strip_units(u"Mearth",m_planet)
+title(title_string, fontsize=30)
+savefig("test.pdf")

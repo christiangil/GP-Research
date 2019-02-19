@@ -2,6 +2,7 @@ using JLD2, FileIO
 
 old_dir = pwd()
 cd(@__DIR__)
+pwd()
 
 @testset "hyperparameter gradients" begin
     include_kernel("Quasi_periodic_kernel")

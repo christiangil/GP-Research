@@ -33,6 +33,12 @@ function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, 
 end
 
 
+"build_problem_definition setting empty values for y_obs and measurement noise"
+function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, n_dif::Int, n_out::Int, x_obs::Array{Float64,1}, a0::Array{Float64,2})
+    build_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, zeros(length(x_obs) * n_out), zeros(length(x_obs) * n_out), a0, coefficient_orders(n_out, n_dif, a=a0))
+end
+
+
 # include("kernels/RBF_kernel.jl")  # sets correct num_kernel_hyperparameters
 # build_problem_definition(RBF_kernel, num_kernel_hyperparameters, 1, 1, zeros(1), zeros(1,1), zeros(1,1))
 
@@ -478,7 +484,7 @@ end
 
 
 "Calculates the quantities shared by the LogL and ∇LogL calculations"
-function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_zero_hyperparameters::Union{Array{Any,1},Array{Float64,1}})
+function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_zero_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; y_obs::Array{Float64,1}=zeros(1))
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
@@ -488,7 +494,10 @@ function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_ze
     L_fact = ridge_chol(K_obs)
     # inv_K_obs = inv(L_fact)
 
-    y_obs = prob_def.y_obs
+    if y_obs == zeros(1)
+        y_obs = prob_def.y_obs
+    end
+
     L_fact_solve_y_obs = L_fact \ y_obs
 
     prior_alpha = 10.
@@ -518,6 +527,10 @@ function nlogL(L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{F
 end
 
 
+"GP nLogL"
+nlogL(L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}) = nlogL(L_fact, y_obs, L_fact \ y_obs)
+
+
 function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, L_fact_solve_y_obs::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
 
     nLogL_val = nlogL(L_fact, y_obs, L_fact_solve_y_obs)
@@ -536,9 +549,9 @@ function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::
 end
 
 
-function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1})
+function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}; y_obs::Array{Float64,1}=zeros(1))
     non_zero_hyperparameters = total_hyperparameters[findall(!iszero, total_hyperparameters)]
-    total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters)
+    total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters, y_obs=y_obs)
     return nlogL_Jones(prob_def, total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs, prior_params)
 end
 

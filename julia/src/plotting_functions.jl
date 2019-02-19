@@ -31,6 +31,7 @@ function init_plot()
     figure(figsize=(10,6))
     ax = subplot(111)
     set_font_sizes(ax)
+    return ax
 end
 
 
