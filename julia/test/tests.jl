@@ -51,20 +51,19 @@ end
     x_samp = 5 .* pi .* sort(rand(amount_of_samp_points))
     fake_data = true_coeffs[1] .* cos.(x_samp) .+ true_coeffs[2] .* sin.(x_samp) .+ true_coeffs[3]
     noise_mag =  0.01 * maximum(fake_data)
-    fake_data += noise_mag .* randn(amount_of_samp_points)
+    noise_vect = noise_mag .* randn(amount_of_samp_points)
+    fake_data += noise_vect
     measurement_noise = noise_mag .* ones(amount_of_samp_points)
 
     A = hcat(cos.(x_samp), sin.(x_samp), ones(length(x_samp)))
 
     est_coeffs = general_lst_sq(A, fake_data; covariance=measurement_noise)
 
-    # println("Estimating keplerian params")
-    # println("true parameters:      ", true_coeffs)
-    # println("estimated parameters: ", est_coeffs)
-
     @test isapprox(est_coeffs, true_coeffs, rtol=1e-2)
+    @test isapprox(std(noise_vect), std(remove_kepler(x_samp, 2*pi, fake_data, measurement_noise)); rtol=5e-1)
     println()
 end
+
 
 cd(old_dir)
 clear_variables()

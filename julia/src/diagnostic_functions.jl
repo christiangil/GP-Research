@@ -4,26 +4,25 @@ using Statistics
 "estimate the gradient of nlogL with forward differences"
 function est_grad(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}; dif::Float64=0.0001)
 
+    # original value
     val = nlogL_Jones(prob_def, total_hyperparameters)
 
+    #estimate gradient
     grad = zeros(length(total_hyperparameters))
     for i in 1:length(total_hyperparameters)
         if total_hyperparameters[i]!=0
             hold = copy(total_hyperparameters)
             hold[i] += dif
-            # println(hold)
-            # println(nlogL(hold))
             non_zero_hyperparameters = total_hyperparameters[findall(!iszero, total_hyperparameters)]
             total_hyperparameters, L_fact, y_obs, L_fact_solve_y_obs = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters)
             grad[i] =  (nlogL_Jones(prob_def, hold) - val) / dif
         end
     end
-    # println(nlogL(hyper))
     return grad[findall(!iszero, grad)]
 end
 
 
-"prints analytical and numerically estimated ∇nlogL"
+"test that the analytical and numerically estimated ∇nlogL are approximately the same"
 function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::Array{Float64,1}; dif::Float64=1e-7, print_stuff::Bool=true)
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
@@ -66,7 +65,7 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
     return_vec = []
     coeff_orders = coefficient_orders(prob_def.n_out, prob_def.n_dif, a=prob_def.a0)
 
-    # println(total_hyperparameters)
+    # construct estimated dKdθs
     if return_est | return_dif | return_bool
         val = covariance(prob_def, total_hyperparameters)
         est_dKdθs = zeros(length(total_hyperparameters), prob_def.n_out * length(x), prob_def.n_out * length(x))
@@ -82,6 +81,7 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
         end
     end
 
+    # construct analytical dKdθs
     if return_anal | return_dif | return_bool
         anal_dKdθs = zeros(length(total_hyperparameters), prob_def.n_out * length(x), prob_def.n_out * length(x))
         for i in 1:length(total_hyperparameters)
@@ -93,17 +93,11 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
     end
 
     if return_dif | return_bool
-        # difs = signficant_difference(est_dKdθs, anal_dKdθs, dif)
         difs = est_dKdθs - anal_dKdθs
         append!(return_vec, [difs])
-        # println()
-        # for i in 1:length(hyper)
-        #     if difs[i, :, :] != zeros(prob_def.n_out * length(x), prob_def.n_out * length(x))
-        #         println("significant differences in dKdθ" * string(i))
-        #     end
-        # end
     end
 
+    # find whether the analytical and estimated dKdθs are approximately the same
     if return_bool
         no_differences = true
         min_thres = 5e-3

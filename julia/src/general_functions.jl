@@ -23,7 +23,7 @@ function symmetric_A(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; i
         if max_dif == zero(max_dif)
             return Symmetric(A)
         # an arbitrary threshold that is meant to catch numerical errors
-    elseif (max_dif < maximum([1e-6 * maximum(abs.(A)), 1e-8])) | ignore_asymmetry
+        elseif (max_dif < maximum([1e-6 * maximum(abs.(A)), 1e-8])) | ignore_asymmetry
             # return the symmetrized version of the matrix
             return Symmetric((A + transpose(A)) / 2)
         else
@@ -38,7 +38,7 @@ function symmetric_A(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; i
 end
 
 
-"if needed, adds a ridge (or multiplies the matrix) to make a Cholesky factorization possible"
+"if needed, adds a ridge based on the smallest eignevalue to make a Cholesky factorization possible"
 function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; notification::Bool=true)  where {T} # * maximum(A))
 
     # only add a small ridge (based on the smallest eigenvalue) if necessary
@@ -54,8 +54,10 @@ function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; no
 end
 
 
-"gets the coefficients and differentiation orders necessary for two multiplied
-functions with an arbitrary amount of parameters"
+"""
+gets the coefficients and differentiation orders necessary for two multiplied
+functions with an arbitrary amount of parameters
+"""
 function product_rule(dorder::Array{T,1}) where {T}
 
     # initializing the final matrix with a single combined function with no derivatives
@@ -115,20 +117,22 @@ function chop_array(A::Array{Float64}; dif = 1e-6)
 end
 
 
-"return approximate derivatives based on central differences"
-# a bit finicky based on h values
-# f is the function of x
-# x is the place you want the derivative at
-# n is the order of derivative
-# h is the step size
+"""
+return approximate derivatives based on central differences, a bit finicky based on h values
+f is the function of x
+x is the place you want the derivative at
+n is the order of derivative
+h is the step size
+"""
 function finite_differences(f, x::Float64, n::Int, h::Float64)
     return sum([(-1) ^ i * binomial(n, i) * f(x + (n / 2 - i) * h) for i in 0:n] / h ^ n)
 end
 
 
-"Return evenly spaced numbers over a specified interval equivalent to range but without the keywords"
+"Return evenly spaced numbers over a specified interval. Equivalent to range but without the keywords"
 linspace(start::Union{Float64,Int}, stop::Union{Float64,Int}, length::Int) = collect(range(start, stop=stop, length=length))
 log_linspace(start::Union{Float64,Int}, stop::Union{Float64,Int}, length::Int) = exp.(linspace(log(start), log(stop), length))
+
 
 "set all variables equal to nothing to save some memory"
 function clear_variables()
@@ -185,5 +189,39 @@ function general_lst_sq(design_matrix::Array{Float64,2}, data::Array{Float64,1};
             Σ = ridge_chol(covariance)
         end
         return ridge_chol((A' * (Σ \ A))) \ (A' * (Σ \ data))
+    end
+end
+
+
+"Return an amount of indices of local maxima of a data array"
+function find_modes(data::Array{Float64,1}; amount::Int=3)
+
+    # creating boolean list for inds at modes
+    mode_inds = [(data[i]>=data[i-1]) & (data[i]>=data[i+1]) for i in 2:(length(data)-1)]
+    prepend!(mode_inds, data[1]>data[2])
+    append!(mode_inds, data[end]>data[end-1])
+
+    # get data values at each mode
+    data_modes = data[mode_inds]
+
+    # get index values of modes in the original list
+    mode_inds = collect(1:length(data))[mode_inds]
+
+    # collect highest mode indices
+    best_mode_inds = Array{Int64}(undef, amount)
+    data_min = minimum(data)
+    for i in 1:amount
+        hold = argmax(data_modes)
+        best_mode_inds[i] = mode_inds[hold]
+        data_modes[hold] = data_min
+    end
+    return best_mode_inds
+end
+
+
+"assert all passed variables are positive"
+function assert_positive(vars...)
+    for i in vars
+        @assert i>0 "passed a negative/0 variable that needs to be positive"
     end
 end

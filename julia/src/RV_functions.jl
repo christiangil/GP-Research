@@ -15,6 +15,7 @@ function velocity_semi_amplitude(P::Union{Float64, Quantity}, m_star::Union{Floa
     m_star = convert_and_strip_units(u"kg", m_star)
     m_planet = convert_and_strip_units(u"kg", m_planet)
     P = convert_and_strip_units(u"s", P)
+    assert_positive(P, m_star, m_planet)
     G = strip_units(PhysicalConstants.CODATA2014.G)  # SI units
     sma = cbrt(P * P * G * (m_star + m_planet) / (4 * pi * pi))
     return sqrt(G/(1 - e * e)) * m_planet * sin(i) / sqrt(sma * (m_star + m_planet))
@@ -72,6 +73,7 @@ function kepler_rv(t::Union{Float64, Quantity}, P::Union{Float64, Quantity}, m_s
     m_star = convert_and_strip_units(u"kg", m_star)
     m_planet = convert_and_strip_units(u"kg", m_planet)
     P = convert_and_strip_units(u"s", P)
+    assert_positive(P, m_star, m_planet)
     t = convert_and_strip_units(u"s", t)
     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
     return kepler_rv(K, t, P; e=e, i=i, ω=ω, γ=γ)
@@ -102,4 +104,20 @@ end
 "Convert the solar phase information from SOAP 2.0 into seconds"
 function convert_phases_to_seconds(phase::Float64; P_rot = 25.05)
     return convert_and_strip_units(u"s", convert_phases_to_days(phase; P_rot = P_rot)u"d")
+end
+
+
+"Remove the best-fit circular Keplerian signal from the Jones multivariate time series"
+function remove_kepler(times_obs::Array{Float64,1}, period::Float64, y_obs_w_planet::Array{Float64,1}, covariance::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64}})
+    for i in 1:ndims(covariance)
+        @assert size(covariance,i)==length(y_obs_w_planet) "covariance incompatible with y_obs_w_planet"
+    end
+    amount_of_total_samp_points = length(y_obs_w_planet)
+    amount_of_samp_points = length(times_obs)
+    kepler_rv_linear_terms = hcat(cos.(ϕ.(times_obs, period)), sin.(ϕ.(times_obs, period)), ones(length(times_obs)))
+    kepler_linear_terms = vcat(kepler_rv_linear_terms, zeros(amount_of_total_samp_points - amount_of_samp_points, 3))
+    x = general_lst_sq(kepler_linear_terms, y_obs_w_planet; covariance=covariance)
+    new_data = copy(y_obs_w_planet)
+    new_data[1:amount_of_samp_points] -= kepler_rv_linear(times_obs, period, x)
+    return new_data
 end
