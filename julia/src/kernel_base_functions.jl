@@ -1,3 +1,4 @@
+# the base kernel functions that can be combined for use with GPs
 using SpecialFunctions
 using SymEngine
 
@@ -129,7 +130,7 @@ end
 
 
 """
-Bessel (function of he first kind) kernel
+Bessel (function of the first kind) kernel
 Bessel functions of the first kind, denoted as Jα(x), are solutions of Bessel's
 differential equation that are finite at the origin (x = 0) for integer or positive α
 http://crsouza.com/2010/03/17/kernel-functions-for-machine-learning-applications/#bessel

@@ -1,3 +1,4 @@
+# functions related to calculating the PCA scores of time series spectra
 using JLD2, FileIO
 using HDF5
 using Distributions

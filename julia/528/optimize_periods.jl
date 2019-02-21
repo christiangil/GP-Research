@@ -31,32 +31,20 @@ fake_data = copy(problem_def_528.y_obs)
 fake_data[1:amount_of_samp_points] += planet_rvs
 
 # sample linearly in frequency space so that we get periods from the 1 / uneven Nyquist
-# frequency to 4 times the total timespan of the dat
-freq_grid = linspace(time_span / 4, nyquist_frequency(times_obs; uneven=true), 5)
+# frequency to 4 times the total timespan of the data
+freq_grid = linspace(1 / (times_obs[end] - times_obs[1]) / 4, nyquist_frequency(times_obs; uneven=true), 300)
 period_grid = 1 ./ reverse(freq_grid)
 
-K_obs = K_observations(problem_def_528, total_hyperparameters)
 
 
-function kep_signal_likelihood(period_grid::Array{Float64,1}, fake_data::Array{Float64,1}, problem_definition::Jones_problem_definition, total_hyperparameters::Array{Float64,1})
-    K_obs = K_observations(problem_definition, total_hyperparameters)
-    times_obs = convert_phases_to_years.(problem_definition.x_obs)
-    likelihoods = zeros(length(period_grid))
-    new_data = zeros(length(fake_data))
-    for i in 1:length(period_grid)
-        new_data .= fake_data
-        remove_kepler!(new_data, times_obs, period_grid[i], K_obs)
-        likelihoods[i] = nlogL_Jones(problem_definition, total_hyperparameters, y_obs=new_data)
-    end
-    return likelihoods
-end
+
 
 likelihoods = kep_signal_likelihood(period_grid, fake_data, problem_def_528, total_hyperparameters)
 
 begin
     ax = init_plot()
     ticklabel_format(style="sci", axis="y", scilimits=(0,0))
-    fig = semilogx(period_grid .* convert_and_strip_units(u"d", 1u"s"), -likelihoods, color="black")
+    fig = semilogx(period_grid .* convert_and_strip_units(u"d", 1u"yr"), -likelihoods, color="black")
     xlabel("Periods (days)")
     ylabel("GP likelihoods")
     axvline(x=convert_and_strip_units(u"d", P))
@@ -67,39 +55,53 @@ end
 
 # three best periods
 best_period_grid = period_grid[find_modes(-likelihoods)]
-new_y_obs = remove_kepler(fake_data, times_obs, best_period_grid[1], K_obs)
+best_period_grid * convert_and_strip_units(u"d", 1u"yr")  # in days instead of years
+K_obs = K_observations(problem_def_528, total_hyperparameters)
 
 using Flux; using Flux: @epochs; using Flux.Tracker: track, @grad, data
 
-# Allowing Flux to use the analytical gradients we have calculated
-nLogL_custom(non_zero_hyper) = nlogL_Jones(problem_def_528, non_zero_hyper; y_obs=new_y_obs)
-nLogL_custom(non_zero_hyper::TrackedArray) = track(nLogL_custom, non_zero_hyper)
-@grad nLogL_custom(non_zero_hyper) = nLogL_custom(data(non_zero_hyper)), Δ -> tuple(Δ .* ∇nlogL_Jones(problem_def_528, data(non_zero_hyper); y_obs=new_y_obs))
+for period in best_period_grid
 
-# Setting model parameters for Flux
-non_zero_hyper_param = param(total_hyperparameters[findall(!iszero, total_hyperparameters)])
-ps = Flux.params(non_zero_hyper_param)
+    new_y_obs = remove_kepler(fake_data, times_obs, period, K_obs)
 
-# Final function wrapper for Flux
-nLogL_custom() = nLogL_custom(non_zero_hyper_param)
+    # Allowing Flux to use the analytical gradients we have calculated
+    nLogL_custom(non_zero_hyper) = nlogL_Jones(problem_def_528, non_zero_hyper; y_obs=new_y_obs)
+    nLogL_custom(non_zero_hyper::TrackedArray) = track(nLogL_custom, non_zero_hyper)
+    @grad nLogL_custom(non_zero_hyper) = nLogL_custom(data(non_zero_hyper)), Δ -> tuple(Δ .* ∇nlogL_Jones(problem_def_528, data(non_zero_hyper); y_obs=new_y_obs))
 
-# Initializing other training things
-iteration_amount = 100
-flux_data = Iterators.repeated((), iteration_amount)    # the function is called $iteration_amount times with no arguments
-opt = ADAM(0.1)
+    # Setting model parameters for Flux
+    non_zero_hyper_param = param(total_hyperparameters[findall(!iszero, total_hyperparameters)])
+    ps = Flux.params(non_zero_hyper_param)
 
-Flux.train!(nLogL_custom, ps, flux_data, opt, cb=Flux.throttle(callback_func_simp, 5))
-# Flux.train!(nLogL_custom, ps, flux_data, opt)
+    # Final function wrapper for Flux
+    nLogL_custom() = nLogL_custom(non_zero_hyper_param)
 
-final_total_hyperparameters = reconstruct_total_hyperparameters(problem_def_528, data(non_zero_hyper_param))
+    # Initializing other training things
+    iteration_amount = 10
+    flux_data = Iterators.repeated((), iteration_amount)    # the function is called $iteration_amount times with no arguments
+    opt = ADAM(0.1)
 
-begin
+    global grad_norm = 1e4
+    global epoch_num = 0
+    while grad_norm>1e2
+        global epoch_num += 10
+        Flux.train!(nLogL_custom, ps, flux_data, opt)
+        global grad_norm = norm(∇nlogL_Jones(problem_def_528, data(non_zero_hyper_param); y_obs=new_y_obs))
+        println("Epoch $epoch_num gradient norm: ", grad_norm)
+    end
+
+    final_total_hyperparameters = reconstruct_total_hyperparameters(problem_def_528, data(non_zero_hyper_param))
+
     println("starting hyperparameters")
     println(total_hyperparameters)
+    println(nlogL_Jones(problem_def_528, total_hyperparameters), "\n")
 
     println("ending hyperparameters")
     println(final_total_hyperparameters)
+    println(nlogL_Jones(problem_def_528, final_total_hyperparameters), "\n")
 
     println("original hyperparameters")
     println(total_hyperparameters_og)
+    println(nlogL_Jones(problem_def_528, total_hyperparameters_og), "\n")
+
 end

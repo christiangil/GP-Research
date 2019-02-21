@@ -1,7 +1,8 @@
+# these are all general purpose functions that aren't specifically related to
+# radial velocity or GP calculations
 using LinearAlgebra
 using Distributed
 using IterativeSolvers
-using PositiveFactorizations
 using Printf
 
 
@@ -55,6 +56,7 @@ function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}})  w
 
 end
 
+
 """
 gets the coefficients and differentiation orders necessary for two multiplied
 functions with an arbitrary amount of parameters
@@ -106,8 +108,7 @@ use isapprox instead if you care about boolean result
 """
 function signficant_difference(A1::Array{Float64}, A2::Array{Float64}, dif::Float64)
     A1mA2 = abs.(A1 - A2);
-    A1mA2[A1mA2 .< (maximum([maximum(A1), maximum(A2)]) * dif)] .= 0;
-    return A1mA2
+    return chop_array(A1mA2; dif=(maximum([maximum(A1), maximum(A2)]) * dif))
 end
 
 
@@ -173,23 +174,19 @@ see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
 function general_lst_sq(design_matrix::Array{Float64,2}, data::Array{Float64,1}; Σ::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64}}=ones(1))
     @assert ndims(Σ) < 3 "the Σ variable needs to be a 1D or 2D array"
 
-    # prevent the original terms from being modified
-    A = copy(design_matrix)
-
-    # make sure term array is the right shape
-    if size(A, 2) == length(data)
-        A = A'
-    end
-
     if Σ == ones(1)
-        return A \ data
+        return design_matrix \ data
     else
         if ndims(Σ) == 1
             Σ = Diagonal(Σ)
         else
             Σ = ridge_chol(Σ)
         end
-        return ridge_chol(A' * (Σ \ A)) \ (A' * (Σ \ data))
+        # try
+        #     return ridge_chol(design_matrix' * (Σ \ design_matrix)) \ (design_matrix' * (Σ \ data))
+        # catch
+        return (design_matrix' * (Σ \ design_matrix)) \ (design_matrix' * (Σ \ data))
+        # end
     end
 end
 

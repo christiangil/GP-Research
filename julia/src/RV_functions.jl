@@ -1,3 +1,4 @@
+# these functions are related to calculating RV quantities
 using UnitfulAstro
 using Unitful
 using LinearAlgebra
@@ -5,6 +6,9 @@ using LinearAlgebra
 
 "Strip Unitful units"
 strip_units(quant::Quantity) = ustrip(float(quant))
+
+
+"Convert Unitful units from one to another and strip the final units"
 convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Quantity) = strip_units(uconvert(new_unit, quant))
 convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Float64) = quant
 
@@ -50,11 +54,9 @@ function ϕ(t::Float64, P::Float64; e::Float64=0.)
     end
 end
 
-
 function ϕ(t::Float64, P::Quantity; e::Float64=0.)
     return ϕ(t, convert_and_strip_units(u"yr", P); e=e, iter=iter)
 end
-
 
 """
 Calculate true anomaly for small e using equation of center approximating true
@@ -80,7 +82,6 @@ function ϕ_approx(t::Float64, P::Float64; e::Float64=0.)
     end
 end
 
-
 function ϕ_approx(t::Float64, P::Quantity; e::Float64=0.)
     return ϕ_approx(t, convert_and_strip_units(u"yr", P); e=e, iter=iter)
 end
@@ -95,8 +96,6 @@ function kepler_rv(K::Float64, t::Float64, P::Float64; e::Float64=0., i::Float64
     return K * (e * cos(ω) + cos(ω + ϕ(t, P, e=e))) + γ
 end
 
-
-"RV fomula that deals with Unitful planet and star masses"
 function kepler_rv(t::Union{Float64, Quantity}, P::Union{Float64, Quantity}, m_star::Union{Float64, Quantity}, m_planet::Union{Float64, Quantity}; e::Float64=0., i::Float64=pi/2, ω::Float64=0., γ::Float64=0.)
     m_star = convert_and_strip_units(u"Msun", m_star)
     m_planet = convert_and_strip_units(u"Msun", m_planet)
@@ -130,14 +129,13 @@ function convert_phases_to_days(phase::Float64; P_rot=25.05)
     return phase / (2 * pi / P_rot)
 end
 
-
 "Convert the solar phase information from SOAP 2.0 into years"
 function convert_phases_to_years(phase::Float64; P_rot = 25.05)
     return convert_and_strip_units(u"yr", convert_phases_to_days(phase; P_rot=P_rot)u"d")
 end
 
 
-"Remove the best-fit circular Keplerian signal from the Jones multivariate time series"
+"Remove the best-fit circular Keplerian signal from the data"
 function remove_kepler!(data::Array{Float64,1}, times::Array{Float64,1}, P::Float64, covariance::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64}})
     assert_positive(P)
     for i in 1:ndims(covariance)
@@ -146,7 +144,11 @@ function remove_kepler!(data::Array{Float64,1}, times::Array{Float64,1}, P::Floa
     amount_of_total_samp_points = length(data)
     amount_of_samp_points = length(times)
     kepler_rv_linear_terms = hcat(cos.(ϕ.(times, P)), sin.(ϕ.(times, P)), ones(length(times)))
-    kepler_linear_terms = vcat(kepler_rv_linear_terms, zeros(amount_of_total_samp_points - amount_of_samp_points, 3))
+    if amount_of_total_samp_points > amount_of_samp_points
+        kepler_linear_terms = vcat(kepler_rv_linear_terms, zeros(amount_of_total_samp_points - amount_of_samp_points, 3))
+    else
+        kepler_linear_terms = kepler_rv_linear_terms
+    end
     x = general_lst_sq(kepler_linear_terms, data; Σ=covariance)
     data[1:amount_of_samp_points] -= kepler_rv_linear(times, P, x)
 end
@@ -155,4 +157,19 @@ function remove_kepler(y_obs_w_planet::Array{Float64,1}, times::Array{Float64,1}
     y_obs_wo_planet = copy(y_obs_w_planet)
     remove_kepler!(y_obs_wo_planet, times, P, covariance)
     return y_obs_wo_planet
+end
+
+
+"Find GP likelihoods for best fit Keplerian orbit of a specified period"
+function kep_signal_likelihood(period_grid::Array{Float64,1}, fake_data::Array{Float64,1}, problem_definition::Jones_problem_definition, total_hyperparameters::Array{Float64,1})
+    K_obs = K_observations(problem_definition, total_hyperparameters)
+    times_obs = convert_phases_to_years.(problem_definition.x_obs)
+    likelihoods = zeros(length(period_grid))
+    new_data = zeros(length(fake_data))
+    for i in 1:length(period_grid)
+        new_data .= fake_data
+        remove_kepler!(new_data, times_obs, period_grid[i], K_obs)
+        likelihoods[i] = nlogL_Jones(problem_definition, total_hyperparameters, y_obs=new_data)
+    end
+    return likelihoods
 end

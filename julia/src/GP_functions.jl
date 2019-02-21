@@ -1,3 +1,4 @@
+# these functions are directly related to calculating GP quantities
 using SpecialFunctions
 using LinearAlgebra
 using Test
@@ -22,7 +23,6 @@ struct Jones_problem_definition
     coeff_orders::Array{Float64,6}
 end
 
-
 "Ensure that Jones_problem_definition is constructed correctly"
 function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, n_dif::Int, n_out::Int, x_obs::Array{Float64,1}, y_obs::Array{Float64,1}, noise::Array{Float64,1}, a0::Array{Float64,2}, coeff_orders::Array{Float64,6})
     @assert isfinite(kernel_func(ones(num_kernel_hyperparameters), randn(); dorder=zeros(2 + num_kernel_hyperparameters)))  # make sure the kernel is valid by testing a sample input
@@ -35,12 +35,10 @@ function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, 
     return Jones_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, noise, a0, coeff_orders)
 end
 
-
 "construct the coefficient_orders for Jones_problem_definition if they weren't passed"
 function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, n_dif::Int, n_out::Int, x_obs::Array{Float64,1}, y_obs::Array{Float64,1}, noise::Array{Float64,1}, a0::Array{Float64,2})
     build_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, noise, a0, coefficient_orders(n_out, n_dif, a=a0))
 end
-
 
 "build_problem_definition setting empty values for y_obs and measurement noise"
 function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, n_dif::Int, n_out::Int, x_obs::Array{Float64,1}, a0::Array{Float64,2})
@@ -70,7 +68,6 @@ function kernel(kernel_func, kernel_hyperparameters::Union{Array{Any,1},Array{Fl
 
 end
 
-
 function kernel(prob_def::Jones_problem_definition, kernel_hyperparameters::Union{Array{Any,1},Array{Float64,1}}, t1::Union{Float64,Array{Float64,1}}, t2::Union{Float64,Array{Float64,1}}; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(2), dKdθ_kernel::Int=0)
     return kernel(prob_def.kernel, kernel_hyperparameters, t1, t2; dorder=dorder, dKdθ_kernel=dKdθ_kernel)
 end
@@ -78,7 +75,7 @@ end
 
 """
 Creates the covariance matrix by evaluating the kernel function for each pair of passed inputs
-symmetric = a paramter stating whether the covariance is guarunteed to be symmetric about the diagonal
+symmetric = a parameter stating whether the covariance is guarunteed to be symmetric about the diagonal
 """
 function covariance(kernel_func, x1list::Union{Array{Float64,1},Array{Float64,2}}, x2list::Union{Array{Float64,1},Array{Float64,2}}, kernel_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; dorder::Union{Array{Float64,1},Array{Int,1}}=[0, 0], symmetric::Bool=false, dKdθ_kernel::Int=0)
 
@@ -265,7 +262,6 @@ function covariance(prob_def::Jones_problem_definition, x1list::Union{Array{Floa
 
 end
 
-
 function covariance(prob_def::Jones_problem_definition, total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; dKdθ_total::Int=0)
     return covariance(prob_def, prob_def.x_obs, prob_def.x_obs, total_hyperparameters; dKdθ_total=dKdθ_total)
 end
@@ -276,7 +272,6 @@ function K_observations(kernel_func, x_obs::Array{Float64,1}, measurement_noise:
     K_obs = covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters)
     return symmetric_A(K_obs + Diagonal(measurement_noise); ignore_asymmetry=ignore_asymmetry)
 end
-
 
 "adding measurement noise to K_obs"
 function K_observations(prob_def::Jones_problem_definition, total_hyperparameters::Union{Array{Any,1},Array{Float64,1}}; ignore_asymmetry::Bool=false)
@@ -318,7 +313,6 @@ function covariance_permutations(x_obs::Array{Float64,1}, x_samp::Array{Float64,
     K_obs_samp = transpose(K_samp_obs)
     return K_samp, K_obs, K_samp_obs, K_obs_samp
 end
-
 
 "calcuate all of the different versions of the covariance matrices for measured and sampled points"
 function covariance_permutations(prob_def::Jones_problem_definition, x_samp::Array{Float64,1}, total_hyperparameters::Array{Float64,1})
@@ -375,7 +369,6 @@ function GP_posteriors(x_obs::Array{Float64,1}, y_obs::Array{Float64,1}, x_samp:
 
 end
 
-
 "conditions a GP with data"
 function GP_posteriors(prob_def::Jones_problem_definition, x_samp::Array{Float64,1}, total_hyperparameters::Array{Float64,1}; return_σ::Bool=false, return_K::Bool=false, return_L::Bool=false)
 
@@ -387,8 +380,8 @@ end
 
 
 """
-find the powers that each coefficient is taken to for each part of the matrix construction
-used for constructing differentiated versions of the kernel
+find the powers that each Jones coefficient is taken to for each part of the
+matrix construction. Used for constructing differentiated versions of the kernel
 """
 function coefficient_orders(n_out::Int, n_dif::Int; a::Union{Array{Float64,2},Array{Any,2}}=ones(1,1))
 
@@ -430,7 +423,7 @@ end
 
 
 """
-getting the coefficients for constructing differentiated versions of the kernel
+Getting the coefficients for constructing differentiated versions of the kernel
 using the powers that each coefficient is taken to for each part of the matrix construction
 """
 function dif_coefficients(n_out::Int, n_dif::Int, dKdθ_total::Int; coeff_orders::Array{Float64,6}=zeros(1,1,1,1,1,1), a::Union{Array{Any,2},Array{Float64,2}}=ones(1,1))
@@ -495,7 +488,7 @@ function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_ze
 end
 
 
-"GP nLogL"
+"generic GP nLogL"
 function nlogL(L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, α::Array{Float64,1})
 
     n = length(y_obs)
@@ -512,11 +505,10 @@ function nlogL(L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{F
 
 end
 
-
-"GP nLogL"
 nlogL(L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}) = nlogL(L_fact, y_obs, L_fact \ y_obs)
 
 
+"nlogL for Jones GP"
 function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, α::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
 
     nLogL_val = nlogL(L_fact, y_obs, α)
@@ -533,7 +525,6 @@ function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::
     return nLogL_val - prior_term
 
 end
-
 
 function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}; y_obs::Array{Float64,1}=zeros(1))
     non_zero_hyperparameters = total_hyperparameters[findall(!iszero, total_hyperparameters)]
@@ -587,7 +578,7 @@ end
 
 
 "Replaces G with gradient of nLogL for non-zero hyperparameters"
-function ∇nlogL_Jones!(G::Array{Float64,1}, prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1})
+function ∇nlogL_Jones!(G::Array{Float64,1}, prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}; y_obs::Array{Float64,1}=zeros(1))
     non_zero_hyperparameters = total_hyperparameters[findall(!iszero, total_hyperparameters)]
     total_hyperparameters, L_fact, y_obs, α, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs)
     ∇nlogL_Jones!(G, prob_def, total_hyperparameters, L_fact, y_obs, α, prior_params)
@@ -597,7 +588,7 @@ end
 "Returns gradient of nLogL for non-zero hyperparameters"
 function ∇nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}; y_obs::Array{Float64,1}=zeros(1))
     G = zeros(length(total_hyperparameters[findall(!iszero, total_hyperparameters)]))
-    ∇nlogL_Jones!(G, prob_def, total_hyperparameters)
+    ∇nlogL_Jones!(G, prob_def, total_hyperparameters; y_obs=y_obs)
     return G
 end
 
@@ -617,7 +608,7 @@ function nlogL_Jones_fg!(prob_def::Jones_problem_definition, F, G, non_zero_hype
 end
 
 
-"reinsert the zero coefficients to the non-zero hyperparameter list"
+"reinsert the zero coefficients into the non-zero hyperparameter list"
 function reconstruct_total_hyperparameters(prob_def::Jones_problem_definition, non_zero_hyperparameters::Union{Array{Any,1},Array{Float64,1}})
 
     new_coeff_array = reconstruct_array(non_zero_hyperparameters[1:end - prob_def.n_kern_hyper], prob_def.a0)
@@ -631,7 +622,7 @@ function reconstruct_total_hyperparameters(prob_def::Jones_problem_definition, n
 end
 
 
-"imports the specified kernel and returns the number of hyperparameters"
+"imports the specified kernel and returns the number of hyperparameters it uses"
 function include_kernel(kernel_name::String)
     try
         return include("src/kernels/$kernel_name.jl")

@@ -38,7 +38,7 @@ end
 @testset "true anomaly" begin
     # see if the low eccentricity approximation is working
     test_time = rand()
-    @test isapprox(ϕ(test_time, 2.; e=0.01), ϕ(test_time, 2.; e=0.01, iter=false); rtol=1e-2)
+    @test isapprox(ϕ(test_time, 2.; e=0.01), ϕ_approx(test_time, 2.; e=0.01); rtol=1e-2)
     println()
 end
 
@@ -67,10 +67,10 @@ end
 
     A = hcat(cos.(x_samp), sin.(x_samp), ones(length(x_samp)))
 
-    est_coeffs = general_lst_sq(A, fake_data; covariance=measurement_noise)
+    est_coeffs = general_lst_sq(A, fake_data; Σ=measurement_noise)
 
     @test isapprox(est_coeffs, true_coeffs, rtol=1e-2)
-    @test isapprox(std(noise_vect), std(remove_kepler(x_samp, 2*pi, fake_data, measurement_noise)); rtol=5e-1)
+    @test isapprox(std(noise_vect), std(remove_kepler(fake_data, x_samp, 2*pi, measurement_noise)); rtol=5e-1)
     println()
 end
 

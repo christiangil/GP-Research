@@ -1,16 +1,16 @@
 # run this to have access to all of the functions Christian has written
 
+
+# # All of the packages I am using
 # using Pkg
 # Pkg.add("SpecialFunctions")
 # Pkg.add("JLD2")
 # Pkg.add("FileIO")
 # Pkg.add("MultivariateStats")
 # Pkg.add("HDF5")
-# # Pkg.add("Rsvg")
-# # Pkg.add("Plots")
 # Pkg.add("PyPlot")
 # # pkg"add https://github.com/eford/RvSpectraKitLearn.jl"
-# Pkg.add("Optim")
+# # Pkg.add("Optim")
 # Pkg.add("Distributions")
 # Pkg.add("SymEngine")
 # Pkg.add("Flux")
@@ -29,7 +29,7 @@ include("kernel_creation_functions.jl")
 include("plotting_functions.jl")
 include("diagnostic_functions.jl")
 
-# running testss
+# running tests
 include("../test/runtests.jl")
 
 # clear_variables()
