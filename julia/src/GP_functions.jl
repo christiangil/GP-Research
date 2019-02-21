@@ -337,22 +337,22 @@ function GP_posteriors_from_covariances(y_obs::Array{Float64,1}, K_samp::Union{S
     # (RW alg. 2.1)
 
     # tells Julia to perform and store the Cholesky factorization
-    L_fact = ridge_chol(K_obs)
+    K_obs = ridge_chol(K_obs)
 
     # these are all equivalent but have different computational costs
     # α = inv(L_fact) * y_obs
     # α = transpose(L) \ (L \ y_obs)
-    α = L_fact \ y_obs
+    α = K_obs \ y_obs
 
     mean_post = K_samp_obs * α
 
     if return_σ
-        σ = get_σ(L_fact.L, K_obs_samp, K_samp)
+        σ = get_σ(K_obs.L, K_obs_samp, K_samp)
         append!(return_vec, [σ])
     end
 
     if return_L || return_K
-        K_post = symmetric_A(K_samp - (K_samp_obs * (L_fact \ K_obs_samp)))
+        K_post = symmetric_A(K_samp - (K_samp_obs * (K_obs \ K_obs_samp)))
         if return_K
             append!(return_vec, [K_post])
         end
@@ -478,22 +478,19 @@ function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_ze
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
 
-    K_obs = K_observations(prob_def, total_hyperparameters; ignore_asymmetry=true)
-    # L_fact = stored_chol(chol_storage, hyper, K_obs; notification=false)
-    L_fact = ridge_chol(K_obs)
-    # inv_K_obs = inv(L_fact)
+    K_obs = ridge_chol(K_observations(prob_def, total_hyperparameters; ignore_asymmetry=true))
 
     if y_obs == zeros(1)
         y_obs = prob_def.y_obs
     end
 
-    α = L_fact \ y_obs
+    α = K_obs \ y_obs
 
     prior_alpha = 10.
     prior_beta = 10.
     prior_params = (prior_alpha, prior_beta)
 
-    return total_hyperparameters, L_fact, y_obs, α, prior_params
+    return total_hyperparameters, K_obs, y_obs, α, prior_params
 
 end
 
@@ -558,10 +555,8 @@ function dnlogLdθ(dK_dθj::Union{Array{Float64,2},Symmetric{Float64,Array{Float
 end
 
 
-"Returns gradient of nLogL for non-zero hyperparameters"
-function ∇nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, α::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
-
-    G = zeros(length(total_hyperparameters[findall(!iszero, total_hyperparameters)]))
+"Replaces G with gradient of nLogL for non-zero hyperparameters"
+function ∇nlogL_Jones!(G::Array{Float64,1}, prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, α::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
 
     j = 1
     for i in 1:(length(total_hyperparameters))
@@ -580,28 +575,30 @@ function ∇nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameter
         G[end + 1 - i] -= prior_term
     end
 
-    return G
-
-end
-
-
-"Replaces G with gradient of nLogL for non-zero hyperparameters"
-function ∇nlogL_Jones!(G::Array{Float64,1}, prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, α::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
-    G = ∇nlogL_Jones(prob_def, total_hyperparameters, L_fact, y_obs, α, prior_params)
 end
 
 
 "Returns gradient of nLogL for non-zero hyperparameters"
-function ∇nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}; y_obs::Array{Float64,1}=zeros(1))
-    non_zero_hyperparameters = total_hyperparameters[findall(!iszero, total_hyperparameters)]
-    total_hyperparameters, L_fact, y_obs, α, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs)
-    return ∇nlogL_Jones(prob_def, total_hyperparameters, L_fact, y_obs, α, prior_params)
+function ∇nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}, L_fact::Union{Cholesky{Float64,Array{Float64,2}}}, y_obs::Array{Float64,1}, α::Array{Float64,1}, prior_params::Tuple{Float64,Float64})
+    G = zeros(length(total_hyperparameters[findall(!iszero, total_hyperparameters)]))
+    ∇nlogL_Jones!(G, prob_def, total_hyperparameters, L_fact, y_obs, α, prior_params)
+    return G
 end
 
 
 "Replaces G with gradient of nLogL for non-zero hyperparameters"
 function ∇nlogL_Jones!(G::Array{Float64,1}, prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1})
-    G = ∇nlogL_Jones(prob_def, total_hyperparameters)
+    non_zero_hyperparameters = total_hyperparameters[findall(!iszero, total_hyperparameters)]
+    total_hyperparameters, L_fact, y_obs, α, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs)
+    ∇nlogL_Jones!(G, prob_def, total_hyperparameters, L_fact, y_obs, α, prior_params)
+end
+
+
+"Returns gradient of nLogL for non-zero hyperparameters"
+function ∇nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}; y_obs::Array{Float64,1}=zeros(1))
+    G = zeros(length(total_hyperparameters[findall(!iszero, total_hyperparameters)]))
+    ∇nlogL_Jones!(G, prob_def, total_hyperparameters)
+    return G
 end
 
 

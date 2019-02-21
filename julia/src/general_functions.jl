@@ -39,20 +39,21 @@ end
 
 
 "if needed, adds a ridge based on the smallest eignevalue to make a Cholesky factorization possible"
-function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; notification::Bool=true)  where {T} # * maximum(A))
+function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}})  where {T} # * maximum(A))
 
     # only add a small ridge (based on the smallest eigenvalue) if necessary
     try
-        return cholesky(Positive, A)
+        return cholesky(A)
     catch
         smallest_eigen = IterativeSolvers.lobpcg(A, false, 1).λ[1]
         ridge = 1.10 * abs(smallest_eigen)
-        println("tried adding a ridge of size 10^$(log10(ridge)) to matrix whose maximum value is 10^$(log10(maximum(abs.(A))))")
-        return cholesky(Positive, A + UniformScaling(ridge))
+        @warn "added a ridge"
+        # println("ridge size:          10^$(log10(ridge))")
+        # println("max value of array:  10^$(log10(maximum(abs.(A))))")
+        return cholesky(A + UniformScaling(ridge))
     end
 
 end
-
 
 """
 gets the coefficients and differentiation orders necessary for two multiplied
@@ -169,8 +170,8 @@ dlog_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = (β - x * (1 + 
 Solve a linear system of equations (optionally with variance values at each point or covariance array)
 see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
 """
-function general_lst_sq(design_matrix::Array{Float64,2}, data::Array{Float64,1}; covariance::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64}}=ones(1))
-    @assert ndims(covariance) < 3 "the covariance variable needs to be a 1D or 2D array"
+function general_lst_sq(design_matrix::Array{Float64,2}, data::Array{Float64,1}; Σ::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64}}=ones(1))
+    @assert ndims(Σ) < 3 "the Σ variable needs to be a 1D or 2D array"
 
     # prevent the original terms from being modified
     A = copy(design_matrix)
@@ -180,15 +181,15 @@ function general_lst_sq(design_matrix::Array{Float64,2}, data::Array{Float64,1};
         A = A'
     end
 
-    if covariance == ones(1)
+    if Σ == ones(1)
         return A \ data
     else
-        if ndims(covariance) == 1
-            Σ = Diagonal(covariance)
+        if ndims(Σ) == 1
+            Σ = Diagonal(Σ)
         else
-            Σ = ridge_chol(covariance)
+            Σ = ridge_chol(Σ)
         end
-        return ridge_chol((A' * (Σ \ A))) \ (A' * (Σ \ data))
+        return ridge_chol(A' * (Σ \ A)) \ (A' * (Σ \ data))
     end
 end
 
@@ -224,4 +225,19 @@ function assert_positive(vars...)
     for i in vars
         @assert i>0 "passed a negative/0 variable that needs to be positive"
     end
+end
+
+
+"""
+Nyquist frequency is half of the sampling rate of a discrete signal processing system
+(https://en.wikipedia.org/wiki/Nyquist_frequency)
+divide by another factor of 4 for uneven spacing
+"""
+function nyquist_frequency(times; uneven::Bool=false)
+    time_span = times[end] - times[1]
+    nyquist_freq = amount_of_samp_points / time_span / 2
+    if uneven==true
+        nyquist_freq /= 4
+    end
+    return nyquist_freq
 end

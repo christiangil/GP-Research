@@ -25,29 +25,33 @@ amount_of_total_samp_points = amount_of_samp_points * problem_def_528.n_out
 P = 6u"d"
 m_star = 1u"Msun"
 m_planet = 1u"Mjup"
-times_obs = convert_phases_to_seconds.(problem_def_528.x_obs)
+times_obs = convert_phases_to_years.(problem_def_528.x_obs)
 planet_rvs = kepler_rv.(times_obs, P, m_star, m_planet)
 fake_data = copy(problem_def_528.y_obs)
 fake_data[1:amount_of_samp_points] += planet_rvs
 
-time_span = times_obs[end] - times_obs[1]
-# Nyquist frequency is half of the sampling rate of a discrete signal processing system
-# (https://en.wikipedia.org/wiki/Nyquist_frequency)
-# if the frequency locations are unknown, then it is necessary to sample at
-# least at twice the Nyquist criteria; in other words, you must pay at least a
-# factor of 2 for not knowing the location of the spectrum. Note that minimum
-# sampling requirements do not necessarily guarantee stability.
-# https://en.wikipedia.org/wiki/Nyquist%E2%80%93Shannon_sampling_theorem#Nonuniform_sampling
-uneven_nyquist_spacing = (time_span / amount_of_samp_points)
-
-period_grid = log_linspace(uneven_nyquist_spacing, time_span / 2, 300)
+# sample linearly in frequency space so that we get periods from the 1 / uneven Nyquist
+# frequency to 4 times the total timespan of the dat
+freq_grid = linspace(time_span / 4, nyquist_frequency(times_obs; uneven=true), 5)
+period_grid = 1 ./ reverse(freq_grid)
 
 K_obs = K_observations(problem_def_528, total_hyperparameters)
-likelihoods = zeros(length(period_grid))
-for i in 1:length(period_grid)
-    period = period_grid[i]
-    likelihoods[i] = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=remove_kepler(times_obs, period, fake_data, K_obs))
+
+
+function kep_signal_likelihood(period_grid::Array{Float64,1}, fake_data::Array{Float64,1}, problem_definition::Jones_problem_definition, total_hyperparameters::Array{Float64,1})
+    K_obs = K_observations(problem_definition, total_hyperparameters)
+    times_obs = convert_phases_to_years.(problem_definition.x_obs)
+    likelihoods = zeros(length(period_grid))
+    new_data = zeros(length(fake_data))
+    for i in 1:length(period_grid)
+        new_data .= fake_data
+        remove_kepler!(new_data, times_obs, period_grid[i], K_obs)
+        likelihoods[i] = nlogL_Jones(problem_definition, total_hyperparameters, y_obs=new_data)
+    end
+    return likelihoods
 end
+
+likelihoods = kep_signal_likelihood(period_grid, fake_data, problem_def_528, total_hyperparameters)
 
 begin
     ax = init_plot()
@@ -63,10 +67,9 @@ end
 
 # three best periods
 best_period_grid = period_grid[find_modes(-likelihoods)]
-fake_data
-new_y_obs = remove_kepler(times_obs, best_period_grid[1], fake_data, K_obs)
+new_y_obs = remove_kepler(fake_data, times_obs, best_period_grid[1], K_obs)
 
-using Flux; using Flux.Tracker: track, @grad, data
+using Flux; using Flux: @epochs; using Flux.Tracker: track, @grad, data
 
 # Allowing Flux to use the analytical gradients we have calculated
 nLogL_custom(non_zero_hyper) = nlogL_Jones(problem_def_528, non_zero_hyper; y_obs=new_y_obs)
@@ -84,14 +87,6 @@ nLogL_custom() = nLogL_custom(non_zero_hyper_param)
 iteration_amount = 100
 flux_data = Iterators.repeated((), iteration_amount)    # the function is called $iteration_amount times with no arguments
 opt = ADAM(0.1)
-
-callback_func_simp = function ()
-    println("Current nLogL: ", data(nLogL_custom()))
-    # println(data(non_zero_hyper_param))
-    println("Current gradient norm: ", norm(∇nlogL_Jones(problem_def_528, data(non_zero_hyper_param); y_obs=new_y_obs)))
-    println()
-end
-
 
 Flux.train!(nLogL_custom, ps, flux_data, opt, cb=Flux.throttle(callback_func_simp, 5))
 # Flux.train!(nLogL_custom, ps, flux_data, opt)
