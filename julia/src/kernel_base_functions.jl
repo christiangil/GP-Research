@@ -4,7 +4,7 @@ using SymEngine
 
 
 "checks the length of hyperparameters against the passed proper_length and adds a unity kernel_amplitude if necessary."
-function check_hyperparameters(hyper::Union{Array{Float64,1},Array{Basic,1}}, proper_length::Int)
+function check_hyperparameters(hyper::Union{Array{T,1},Array{Basic,1}}, proper_length::Int) where {T<:Real}
     if length(hyper) < proper_length
         @assert (length(hyper) + 1) == proper_length "incompatible amount of hyperparameters passed (too few)"
         hyper = prepend!(copy(hyper), [1.])
@@ -15,7 +15,7 @@ end
 
 
 "Linear GP kernel"
-function Linear_kernel_base(hyperparameters::Union{Array{Float64,1},Array{Basic,1}}, x1, x2)
+function Linear_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, x1, x2) where {T<:Real}
 
     hyperparameters = check_hyperparameters(hyperparameters, 1+1)
     sigma_b, sigma_a = hyperparameters
@@ -25,7 +25,7 @@ end
 
 
 "Radial basis function GP kernel (aka squared exonential, ~gaussian)"
-function RBF_kernel_base(hyperparameters::Union{Array{Float64,1},Array{Basic,1}}, dif::Union{Basic,Float64})
+function RBF_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
     dif_sq = dif * dif
 
@@ -37,7 +37,7 @@ end
 
 
 "Periodic kernel (for random cyclic functions)"
-function Periodic_kernel_base(hyperparameters::Union{Array{Float64,1},Array{Basic,1}}, dif::Union{Basic,Float64})
+function Periodic_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
     # abs_dif = sqrt(dif^2)
     # abs_dif = abs(dif)
@@ -56,7 +56,7 @@ end
 
 
 "Quasi-periodic kernel"
-function Quasi_periodic_kernel_base(hyperparameters::Union{Array{Float64,1},Array{Basic,1}}, dif::Union{Basic,Float64})
+function Quasi_periodic_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
     hyperparameters = check_hyperparameters(hyperparameters, 3+1)
     kernel_amplitude, RBF_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
@@ -66,7 +66,7 @@ end
 
 
 "Ornstein–Uhlenbeck (Exponential) kernel"
-function OU_kernel_base(hyperparameters::Union{Array{Float64,1},Array{Basic,1}}, dif::Union{Basic,Float64})
+function OU_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
     hyperparameters = check_hyperparameters(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
@@ -76,7 +76,7 @@ end
 
 
 "general Matern kernel"
-function Matern_kernel_base(hyperparameters::Union{Array{Float64,1},Array{Basic,1}}, dif::Union{Basic,Float64}, nu)
+function Matern_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}, nu::Real) where {T<:Real}
 
     hyperparameters = check_hyperparameters(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
@@ -92,7 +92,7 @@ end
 
 
 "Matern 3/2 kernel"
-function Matern32_kernel_base(hyperparameters::Union{Array{Float64,1},Array{Basic,1}}, dif::Union{Basic,Float64})
+function Matern32_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
     hyperparameters = check_hyperparameters(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
@@ -103,7 +103,7 @@ end
 
 
 "Matern 5/2 kernel"
-function Matern52_kernel_base(hyperparameters::Union{Array{Float64,1},Array{Basic,1}}, dif::Union{Basic,Float64})
+function Matern52_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
     hyperparameters = check_hyperparameters(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
@@ -117,7 +117,7 @@ end
 Rational Quadratic kernel (equivalent to adding together many SE kernels
 with different lengthscales. When α→∞, the RQ is identical to the SE.)
 """
-function RQ_kernel_base(hyperparameters::Union{Array{Float64,1},Array{Basic,1}}, dif::Union{Basic,Float64})
+function RQ_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
     dif_sq = dif * dif
 
@@ -135,7 +135,7 @@ Bessel functions of the first kind, denoted as Jα(x), are solutions of Bessel's
 differential equation that are finite at the origin (x = 0) for integer or positive α
 http://crsouza.com/2010/03/17/kernel-functions-for-machine-learning-applications/#bessel
 """
-function Bessel_kernel_base(hyperparameters::Union{Array{Float64,1},Array{Basic,1}}, dif::Union{Basic,Float64}; nu=0)
+function Bessel_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}; nu=0) where {T<:Real}
 
     hyperparameters = check_hyperparameters(hyperparameters, 2+1)
     kernel_amplitude, kernel_length, n = hyperparameters

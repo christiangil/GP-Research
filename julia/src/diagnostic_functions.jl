@@ -2,7 +2,7 @@
 using Statistics
 
 "estimate the gradient of nlogL with forward differences"
-function est_grad(prob_def::Jones_problem_definition, total_hyperparameters::Array{Float64,1}; dif::Float64=0.0001)
+function est_grad(prob_def::Jones_problem_definition, total_hyperparameters::Array{T,1}; dif::Real=0.0001) where {T<:Real}
 
     # original value
     val = nlogL_Jones(prob_def, total_hyperparameters)
@@ -23,7 +23,7 @@ end
 
 
 "test that the analytical and numerically estimated ∇nlogL are approximately the same"
-function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::Array{Float64,1}; dif::Float64=1e-7, print_stuff::Bool=true)
+function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::Array{T,1}; dif::Real=1e-7, print_stuff::Bool=true) where {T<:Real}
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
     G = ∇nlogL_Jones(prob_def, total_hyperparameters)
@@ -51,7 +51,7 @@ end
 
 
 "estimate the covariance derivatives with forward differences"
-function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::Array{Float64,1}; return_est::Bool=true, return_anal::Bool=false, return_dif::Bool=false, return_bool::Bool=false, dif::Float64=1e-6, print_stuff::Bool=true)
+function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::Array{T,1}; return_est::Bool=true, return_anal::Bool=false, return_dif::Bool=false, return_bool::Bool=false, dif::Real=1e-6, print_stuff::Bool=true) where {T<:Real}
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
 
@@ -126,7 +126,7 @@ end
 
 
 "Compare the performance of two different kernel functions"
-function func_comp(n::Int, kernel1, kernel2; hyperparameters::Array{Float64,1}=[1.,2], dif::Float64=0.1)
+function func_comp(n::Int, kernel1, kernel2; hyperparameters::Array{T,1}=[1.,2], dif::Real=0.1) where {T<:Real}
     @time [kernel1(hyperparameters, dif) for i in 1:n]
     @time [kernel2(hyperparameters, dif) for i in 1:n]
 end

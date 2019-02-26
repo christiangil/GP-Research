@@ -7,16 +7,15 @@ using Printf
 
 
 "a generalized version of the built in append!() function"
-function append(a::Array{T,1}, b...) where {T}
+function multiple_append!(a::Array{T,1}, b...) where {T<:Real}
     for i in 1:length(b)
         append!(a, b[i])
     end
-    return a
 end
 
 
 "if array is symmetric, return the symmetric version"
-function symmetric_A(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}}; ignore_asymmetry::Bool=false) where {T}
+function symmetric_A(A::Union{Array{T1,2},Symmetric{T2,Array{T2,2}}}; ignore_asymmetry::Bool=false) where {T1<:Any, T2<:Real}
 
     if size(A, 1) == size(A, 2)
         max_dif = maximum(abs.(A - transpose(A)))
@@ -40,7 +39,7 @@ end
 
 
 "if needed, adds a ridge based on the smallest eignevalue to make a Cholesky factorization possible"
-function ridge_chol(A::Union{Array{T,2},Symmetric{Float64,Array{Float64,2}}})  where {T} # * maximum(A))
+function ridge_chol(A::Union{Array{T1,2},Symmetric{T2,Array{T2,2}}}) where {T1<:Any, T2<:Real}
 
     # only add a small ridge (based on the smallest eigenvalue) if necessary
     try
@@ -61,7 +60,7 @@ end
 gets the coefficients and differentiation orders necessary for two multiplied
 functions with an arbitrary amount of parameters
 """
-function product_rule(dorder::Array{T,1}) where {T}
+function product_rule(dorder::Array{T,1}) where {T<:Any}
 
     # initializing the final matrix with a single combined function with no derivatives
     total = transpose(append!([1], zeros(2 * length(dorder))))
@@ -106,14 +105,14 @@ end
 find differences between two arrays and set values smaller than a threshold to be zero
 use isapprox instead if you care about boolean result
 """
-function signficant_difference(A1::Array{Float64}, A2::Array{Float64}, dif::Float64)
+function signficant_difference(A1::Array{T1}, A2::Array{T2}, dif::Real) where {T1<:Real, T2<:Real}
     A1mA2 = abs.(A1 - A2);
-    return chop_array(A1mA2; dif=(maximum([maximum(A1), maximum(A2)]) * dif))
+    return chop_array!(A1mA2; dif=(maximum([maximum(A1), maximum(A2)]) * dif))
 end
 
 
 "function similar to Mathematica's Chop[]"
-function chop_array(A::Array{Float64}; dif = 1e-6)
+function chop_array!(A::Array{T}; dif::Real=1e-6) where {T<:Real}
     A[abs.(A) .< dif] = 0;
     return A
 end
@@ -126,14 +125,14 @@ x is the place you want the derivative at
 n is the order of derivative
 h is the step size
 """
-function finite_differences(f, x::Float64, n::Int, h::Float64)
+function finite_differences(f, x::Real, n::Int, h::Real)
     return sum([(-1) ^ i * binomial(n, i) * f(x + (n / 2 - i) * h) for i in 0:n] / h ^ n)
 end
 
 
 "Return evenly spaced numbers over a specified interval. Equivalent to range but without the keywords"
-linspace(start::Union{Float64,Int}, stop::Union{Float64,Int}, length::Int) = collect(range(start, stop=stop, length=length))
-log_linspace(start::Union{Float64,Int}, stop::Union{Float64,Int}, length::Int) = exp.(linspace(log(start), log(stop), length))
+linspace(start::Real, stop::Real, length::Int) = collect(range(start, stop=stop, length=length))
+log_linspace(start::Real, stop::Real, length::Int) = exp.(linspace(log(start), log(stop), length))
 
 
 "set all variables equal to nothing to save some memory"
@@ -151,7 +150,7 @@ end
 
 
 "Create a new array filling the non-zero entries of a template array with a vector of values"
-function reconstruct_array(non_zero_entries, template_array::Array{Float64,2})
+function reconstruct_array(non_zero_entries, template_array::Array{T,2}) where {T<:Real}
     @assert length(findall(!iszero, template_array))==length(non_zero_entries)
     new_array = zeros(size(template_array))
     new_array[findall(!iszero, template_array)] = non_zero_entries
@@ -160,18 +159,18 @@ end
 
 
 "Log of the InverseGamma pdf. Equivalent to using Distributions; logpdf(InverseGamma(α, β), x)"
-log_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = -(β / x) - ((1 + α) * log(x)) + (α * log(β)) - log(gamma(α))
+log_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = -(β / x) - ((1 + α) * log(x)) + (α * log(β)) - log(gamma(α))
 
 
 "derivative of the Log of the InverseGamma pdf"
-dlog_inverse_gamma(x::Float64, α::Float64=1., β::Float64=1.) = (β - x * (1 + α)) / (x * x)
+dlog_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = (β - x * (1 + α)) / (x * x)
 
 
 """
 Solve a linear system of equations (optionally with variance values at each point or covariance array)
 see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
 """
-function general_lst_sq(design_matrix::Array{Float64,2}, data::Array{Float64,1}; Σ::Union{Symmetric{Float64,Array{Float64,2}},Array{Float64}}=ones(1))
+function general_lst_sq(design_matrix::Array{T1,2}, data::Array{T2,1}; Σ::Union{Symmetric{T3,Array{T4,2}},Array{T4}}=ones(1)) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
     @assert ndims(Σ) < 3 "the Σ variable needs to be a 1D or 2D array"
 
     if Σ == ones(1)
@@ -192,18 +191,19 @@ end
 
 
 "Return an amount of indices of local maxima of a data array"
-function find_modes(data::Array{Float64,1}; amount::Int=3)
+function find_modes(data::Array{T,1}; amount::Int=3) where {T<:Real}
 
-    # creating boolean list for inds at modes
-    mode_inds = [(data[i]>=data[i-1]) & (data[i]>=data[i+1]) for i in 2:(length(data)-1)]
-    prepend!(mode_inds, data[1]>data[2])
-    append!(mode_inds, data[end]>data[end-1])
+    # creating index list for inds at modes
+    mode_inds = [i for i in 2:(length(data)-1) if (data[i]>=data[i-1]) & (data[i]>=data[i+1])]
+    if data[1] > data[2]
+        prepend!(mode_inds, 1)
+    end
+    if data[end] > data[end-1]
+        append!(mode_inds, length(data))
+    end
 
     # get data values at each mode
     data_modes = data[mode_inds]
-
-    # get index values of modes in the original list
-    mode_inds = collect(1:length(data))[mode_inds]
 
     # collect highest mode indices
     best_mode_inds = Array{Int64}(undef, amount)
@@ -230,7 +230,7 @@ Nyquist frequency is half of the sampling rate of a discrete signal processing s
 (https://en.wikipedia.org/wiki/Nyquist_frequency)
 divide by another factor of 4 for uneven spacing
 """
-function nyquist_frequency(times; uneven::Bool=false)
+function nyquist_frequency(times::Array{T,1}; uneven::Bool=false) where {T<:Real}
     time_span = times[end] - times[1]
     nyquist_freq = amount_of_samp_points / time_span / 2
     if uneven==true

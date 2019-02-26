@@ -35,10 +35,6 @@ fake_data[1:amount_of_samp_points] += planet_rvs
 freq_grid = linspace(1 / (times_obs[end] - times_obs[1]) / 4, nyquist_frequency(times_obs; uneven=true), 300)
 period_grid = 1 ./ reverse(freq_grid)
 
-
-
-
-
 likelihoods = kep_signal_likelihood(period_grid, fake_data, problem_def_528, total_hyperparameters)
 
 begin

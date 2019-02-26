@@ -5,7 +5,7 @@ using PyPlot
 
 
 "set axes and tick label font sizes for PyPlot plots"
-function set_font_sizes(ax; axes::Union{Float64,Int}=20., ticks::Union{Float64,Int}=15., title::Union{Float64,Int}=30.)
+function set_font_sizes(ax; axes::Real=20., ticks::Real=15., title::Real=30.)
 
     # this doesn't work. set title size at plot creating
     # setp(ax[:title], fontsize=title)
@@ -48,7 +48,7 @@ end
 
 
 # quick and dirty function for creating plots that show what I want
-function custom_line_plot(x_samp::Array{Float64,1}, L::LowerTriangular{Float64,Array{Float64,2}}, prob_def::Jones_problem_definition; output::Int=1, draws::Int=5000, σ::Array{Float64,1}=zeros(1), mean::Array{Float64,1}=zeros(1), show::Int=5, file::String="", LogL::Float64=0., waves::Array{Float64,1}=zeros(1) )
+function custom_line_plot(x_samp::Array{T1,1}, L::LowerTriangular{T2,Array{T3,2}}, prob_def::Jones_problem_definition; output::Int=1, draws::Int=5000, σ::Array{T4,1}=zeros(1), mean::Array{T5,1}=zeros(1), show::Int=5, file::String="", LogL::Real=0., waves::Array{T6,1}=zeros(1)) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
 
     amount_of_samp_points = length(x_samp)
     amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out

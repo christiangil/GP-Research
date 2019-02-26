@@ -38,7 +38,11 @@ end
 @testset "true anomaly" begin
     # see if the low eccentricity approximation is working
     test_time = rand()
-    @test isapprox(ϕ(test_time, 2.; e=0.01), ϕ_approx(test_time, 2.; e=0.01); rtol=1e-2)
+    P=2.
+    ecc=0.01
+    @test isapprox(ϕ(test_time, P; e=ecc), ϕ_approx(test_time, P; e=ecc); rtol=1e-2)
+    @test ϕ(test_time, P; e=ecc)!=mean_anomaly(test_time, P)
+    @test ϕ_approx(test_time, P; e=ecc)!=mean_anomaly(test_time, P)
     println()
 end
 
