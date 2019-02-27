@@ -1,9 +1,6 @@
 using JLD2, FileIO
 using Test
 
-old_dir = pwd()
-cd(@__DIR__)
-
 @testset "cholesky factorizations" begin
     A = [4. 12 -16; 12 37 -43; -16 -43 98]
     A = ridge_chol(A)
@@ -15,8 +12,12 @@ cd(@__DIR__)
 end
 
 @testset "hyperparameter gradients" begin
+    old_dir = pwd()
+    cd(@__DIR__)
     include_kernel("Quasi_periodic_kernel")
     @load "../jld2_files/sample_problem_def.jld2" sample_problem_def
+    cd(old_dir)
+
     @test est_dKdθ(sample_problem_def, 1 .+ rand(3); return_bool=true)
     @test test_grad(sample_problem_def, 1 .+ rand(3))
     println()
@@ -77,6 +78,3 @@ end
     @test isapprox(std(noise_vect), std(remove_kepler(fake_data, x_samp, 2*pi, measurement_noise)); rtol=5e-1)
     println()
 end
-
-cd(old_dir)
-clear_variables()

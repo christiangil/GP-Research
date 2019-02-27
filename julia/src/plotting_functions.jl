@@ -48,7 +48,7 @@ end
 
 
 # quick and dirty function for creating plots that show what I want
-function custom_line_plot(x_samp::Array{T1,1}, L::LowerTriangular{T2,Array{T3,2}}, prob_def::Jones_problem_definition; output::Int=1, draws::Int=5000, σ::Array{T4,1}=zeros(1), mean::Array{T5,1}=zeros(1), show::Int=5, file::String="", LogL::Real=0., waves::Array{T6,1}=zeros(1)) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
+function custom_line_plot(x_samp::Array{T1,1}, L::LowerTriangular{T2,Array{T3,2}}, prob_def::Jones_problem_definition; output::Integer=1, draws::Integer=5000, σ::Array{T4,1}=zeros(1), mean::Array{T5,1}=zeros(1), show::Integer=5, file::String="", LogL::Real=0., waves::Array{T6,1}=zeros(1)) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
 
     amount_of_samp_points = length(x_samp)
     amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out

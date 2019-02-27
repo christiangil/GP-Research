@@ -9,10 +9,10 @@ A structure that holds all of the relevant information for doing the analysis in
 the Jones et al. 2017+ paper (https://arxiv.org/pdf/1711.01318.pdf).
 """
 struct Jones_problem_definition{T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
-    kernel  # kernel function
-    n_kern_hyper::Int  # amount of hyperparameters for the kernel function
-    n_dif::Int  # amount of times you are differenting the base kernel
-    n_out::Int  # amount of scores you are jointly modelling
+    kernel::Function  # kernel function
+    n_kern_hyper::Integer  # amount of hyperparameters for the kernel function
+    n_dif::Integer  # amount of times you are differenting the base kernel
+    n_out::Integer  # amount of scores you are jointly modelling
     x_obs::Array{T1,1} # the observation times/phases
     y_obs::Array{T2,1}  # the flattened, observed data
     noise::Array{T3,1}  # the measurement noise at all observations
@@ -24,7 +24,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real
 end
 
 "Ensure that Jones_problem_definition is constructed correctly"
-function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, n_dif::Int, n_out::Int, x_obs::Array{T1,1}, y_obs::Array{T2,1}, noise::Array{T3,1}, a0::Array{T4,2}, coeff_orders::Array{T5,6}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+function build_problem_definition(kernel_func::Function, num_kernel_hyperparameters::Integer, n_dif::Integer, n_out::Integer, x_obs::Array{T1,1}, y_obs::Array{T2,1}, noise::Array{T3,1}, a0::Array{T4,2}, coeff_orders::Array{T5,6}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
     @assert isfinite(kernel_func(ones(num_kernel_hyperparameters), randn(); dorder=zeros(2 + num_kernel_hyperparameters)))  # make sure the kernel is valid by testing a sample input
     @assert n_dif>0
     @assert n_out>0
@@ -36,12 +36,12 @@ function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, 
 end
 
 "construct the coefficient_orders for Jones_problem_definition if they weren't passed"
-function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, n_dif::Int, n_out::Int, x_obs::Array{T1,1}, y_obs::Array{T2,1}, noise::Array{T3,1}, a0::Array{T4,2}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+function build_problem_definition(kernel_func::Function, num_kernel_hyperparameters::Integer, n_dif::Integer, n_out::Integer, x_obs::Array{T1,1}, y_obs::Array{T2,1}, noise::Array{T3,1}, a0::Array{T4,2}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
     build_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, y_obs, noise, a0, coefficient_orders(n_out, n_dif, a=a0))
 end
 
 "build_problem_definition setting empty values for y_obs and measurement noise"
-function build_problem_definition(kernel_func, num_kernel_hyperparameters::Int, n_dif::Int, n_out::Int, x_obs::Array{T1,1}, a0::Array{T2,2}) where {T1<:Real, T2<:Real}
+function build_problem_definition(kernel_func::Function, num_kernel_hyperparameters::Integer, n_dif::Integer, n_out::Integer, x_obs::Array{T1,1}, a0::Array{T2,2}) where {T1<:Real, T2<:Real}
     build_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, zeros(length(x_obs) * n_out), zeros(length(x_obs) * n_out), a0)
 end
 
@@ -53,7 +53,7 @@ kernel_hyperparameters = the hyperparameters for the base kernel (e.g. [kernel_p
 dorder = the amount of derivatives to take wrt t1 and t2
 dKdθ_kernel = which hyperparameter to take a derivative wrt
 """
-function kernel(kernel_func, kernel_hyperparameters::Union{Array{Any,1},Array{T1,1}}, t1::Union{T2,Array{T3,1}}, t2::Union{T4,Array{T5,1}}; dorder::Array{T6,1}=zeros(2), dKdθ_kernel::Int=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
+function kernel(kernel_func::Function, kernel_hyperparameters::Union{Array{Any,1},Array{T1,1}}, t1::Union{T2,Array{T3,1}}, t2::Union{T4,Array{T5,1}}; dorder::Array{T6,1}=zeros(2), dKdθ_kernel::Integer=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
 
     @assert dKdθ_kernel <= length(kernel_hyperparameters) "Asking to differentiate by hyperparameter that the kernel doesn't have"
 
@@ -68,7 +68,7 @@ function kernel(kernel_func, kernel_hyperparameters::Union{Array{Any,1},Array{T1
 
 end
 
-function kernel(prob_def::Jones_problem_definition, kernel_hyperparameters::Union{Array{Any,1},Array{T1,1}}, t1::Union{T2,Array{T3,1}}, t2::Union{T4,Array{T5,1}}; dorder::Array{T6,1}=zeros(2), dKdθ_kernel::Int=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
+function kernel(prob_def::Jones_problem_definition, kernel_hyperparameters::Union{Array{Any,1},Array{T1,1}}, t1::Union{T2,Array{T3,1}}, t2::Union{T4,Array{T5,1}}; dorder::Array{T6,1}=zeros(2), dKdθ_kernel::Integer=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
     return kernel(prob_def.kernel, kernel_hyperparameters, t1, t2; dorder=dorder, dKdθ_kernel=dKdθ_kernel)
 end
 
@@ -77,7 +77,7 @@ end
 Creates the covariance matrix by evaluating the kernel function for each pair of passed inputs
 symmetric = a parameter stating whether the covariance is guarunteed to be symmetric about the diagonal
 """
-function covariance(kernel_func, x1list::Union{Array{T1,1},Array{T2,2}}, x2list::Union{Array{T3,1},Array{T4,2}}, kernel_hyperparameters::Union{Array{Any,1},Array{T5,1}}; dorder::Array{T6,1}=[0, 0], symmetric::Bool=false, dKdθ_kernel::Int=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
+function covariance(kernel_func::Function, x1list::Union{Array{T1,1},Array{T2,2}}, x2list::Union{Array{T3,1},Array{T4,2}}, kernel_hyperparameters::Union{Array{Any,1},Array{T5,1}}; dorder::Array{T6,1}=[0, 0], symmetric::Bool=false, dKdθ_kernel::Integer=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
 
     # @assert dKdθ <= length()
     # are the list of x's passed identical
@@ -132,7 +132,7 @@ end
 Calculating the covariance between all outputs for a combination of dependent GPs
 written so that the intermediate K's don't have to be calculated over and over again
 """
-function covariance(prob_def::Jones_problem_definition, x1list::Union{Array{T1,1},Array{T2,2}}, x2list::Union{Array{T3,1},Array{T4,2}}, total_hyperparameters::Union{Array{Any,1},Array{T5,1}}; dKdθ_total::Int=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+function covariance(prob_def::Jones_problem_definition, x1list::Union{Array{T1,1},Array{T2,2}}, x2list::Union{Array{T3,1},Array{T4,2}}, total_hyperparameters::Union{Array{Any,1},Array{T5,1}}; dKdθ_total::Integer=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
 
     @assert dKdθ_total >= 0
     @assert length(total_hyperparameters) == prob_def.n_kern_hyper + length(prob_def.a0)
@@ -262,13 +262,13 @@ function covariance(prob_def::Jones_problem_definition, x1list::Union{Array{T1,1
 
 end
 
-function covariance(prob_def::Jones_problem_definition, total_hyperparameters::Union{Array{Any,1},Array{T,1}}; dKdθ_total::Int=0) where {T<:Real}
+function covariance(prob_def::Jones_problem_definition, total_hyperparameters::Union{Array{Any,1},Array{T,1}}; dKdθ_total::Integer=0) where {T<:Real}
     return covariance(prob_def, prob_def.x_obs, prob_def.x_obs, total_hyperparameters; dKdθ_total=dKdθ_total)
 end
 
 
 "adding measurement noise to K_obs"
-function K_observations(kernel_func, x_obs::Array{T1,1}, measurement_noise::Array{T2,1}, kernel_hyperparameters::Union{Array{Any,1},Array{T3,1}}; ignore_asymmetry::Bool=false) where {T1<:Real, T2<:Real, T3<:Real}
+function K_observations(kernel_func::Function, x_obs::Array{T1,1}, measurement_noise::Array{T2,1}, kernel_hyperparameters::Union{Array{Any,1},Array{T3,1}}; ignore_asymmetry::Bool=false) where {T1<:Real, T2<:Real, T3<:Real}
     K_obs = covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters)
     return symmetric_A(K_obs + Diagonal(measurement_noise); ignore_asymmetry=ignore_asymmetry)
 end
@@ -383,7 +383,7 @@ end
 find the powers that each Jones coefficient is taken to for each part of the
 matrix construction. Used for constructing differentiated versions of the kernel
 """
-function coefficient_orders(n_out::Int, n_dif::Int; a::Union{Array{T,2},Array{Any,2}}=ones(1,1)) where {T<:Real}
+function coefficient_orders(n_out::Integer, n_dif::Integer; a::Union{Array{T,2},Array{Any,2}}=ones(1,1)) where {T<:Real}
 
     if a == ones(1,1)
         a = ones(n_out, n_dif)
@@ -426,7 +426,7 @@ end
 Getting the coefficients for constructing differentiated versions of the kernel
 using the powers that each coefficient is taken to for each part of the matrix construction
 """
-function dif_coefficients(n_out::Int, n_dif::Int, dKdθ_total::Int; coeff_orders::Array{T1,6}=zeros(1,1,1,1,1,1), a::Union{Array{Any,2},Array{T2,2}}=ones(1,1)) where {T1<:Real, T2<:Real}
+function dif_coefficients(n_out::Integer, n_dif::Integer, dKdθ_total::Integer; coeff_orders::Array{T1,6}=zeros(1,1,1,1,1,1), a::Union{Array{Any,2},Array{T2,2}}=ones(1,1)) where {T1<:Real, T2<:Real}
 
     @assert dKdθ_total>0 "Can't get differential coefficients when you aren't differentiating "
     @assert dKdθ_total<=(n_out*n_dif) "Can't get differential coefficients fpr non-coefficient hyperparameters"
@@ -442,8 +442,8 @@ function dif_coefficients(n_out::Int, n_dif::Int, dKdθ_total::Int; coeff_orders
     coeff = zeros(n_out, n_out, n_dif, n_dif, n_out, n_dif)
 
     # "a small function to get indices that make sense from Julia's reshaping routine"
-    # proper_index(i::Int) = [convert(Int64, rem(i - 1, n_out)) + 1, convert(Int64, floor((i -1) / n_out)) + 1]
-    # proper_index(i::Int) = [((dKdθ_total - 1) % n_out) + 1, div(dKdθ_total - 1, n_out) + 1]
+    # proper_index(i::Integer) = [convert(Int64, rem(i - 1, n_out)) + 1, convert(Int64, floor((i -1) / n_out)) + 1]
+    # proper_index(i::Integer) = [((dKdθ_total - 1) % n_out) + 1, div(dKdθ_total - 1, n_out) + 1]
 
     proper_indices = [((dKdθ_total - 1) % n_out) + 1, div(dKdθ_total - 1, n_out) + 1]
     for i in 1:n_out

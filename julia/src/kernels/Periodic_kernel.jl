@@ -4,7 +4,7 @@
 Periodic_kernel function created by kernel_coder(). Requires 2 hyperparameters. Likely created using Periodic_kernel_base() as an input.
 Use with include("kernels/Periodic_kernel.jl").
 """
-function Periodic_kernel(hyperparameters::Union{Array{Float64,1},Array{Any,1}}, dif::Float64; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(1))
+function Periodic_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
 
     @assert length(hyperparameters)==2 "hyperparameters is the wrong length"
     if dorder==zeros(1)

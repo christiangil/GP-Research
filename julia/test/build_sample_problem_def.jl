@@ -56,4 +56,3 @@ sample_problem_def = build_problem_definition(Quasi_periodic_kernel, num_kernel_
 @save "../jld2_files/sample_problem_def.jld2" sample_problem_def normals
 
 cd(old_dir)
-clear_variables()

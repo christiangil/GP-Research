@@ -4,7 +4,7 @@ using SymEngine
 
 
 "checks the length of hyperparameters against the passed proper_length and adds a unity kernel_amplitude if necessary."
-function check_hyperparameters(hyper::Union{Array{T,1},Array{Basic,1}}, proper_length::Int) where {T<:Real}
+function check_hyperparameters(hyper::Union{Array{T,1},Array{Basic,1}}, proper_length::Integer) where {T<:Real}
     if length(hyper) < proper_length
         @assert (length(hyper) + 1) == proper_length "incompatible amount of hyperparameters passed (too few)"
         hyper = prepend!(copy(hyper), [1.])

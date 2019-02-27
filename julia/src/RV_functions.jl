@@ -72,10 +72,7 @@ function ϕ_approx(t::Real, P::Real; e::Real=0.)
     if e == 0.
         return M
     else
-        e_list = zeros(7)
-        e_list[1] = e
-        e_list = [e_list[i] * e for i in 2:7]
-        # e_list = [e ^ i for i in 1:7]
+        e_list = [e ^ i for i in 1:7]
         term_list = [2 * e_list[1] - 1/4 * e_list[3] + 5/96 * e_list[5] + 107/4608 * e_list[7],
         5/4 * e_list[2] - 11/24 * e_list[4] + 17/192 * e_list[6],
         13/12 * e_list[3] - 43/64 * e_list[5] + 95/512 * e_list[7],

@@ -125,14 +125,14 @@ x is the place you want the derivative at
 n is the order of derivative
 h is the step size
 """
-function finite_differences(f, x::Real, n::Int, h::Real)
+function finite_differences(f, x::Real, n::Integer, h::Real)
     return sum([(-1) ^ i * binomial(n, i) * f(x + (n / 2 - i) * h) for i in 0:n] / h ^ n)
 end
 
 
 "Return evenly spaced numbers over a specified interval. Equivalent to range but without the keywords"
-linspace(start::Real, stop::Real, length::Int) = collect(range(start, stop=stop, length=length))
-log_linspace(start::Real, stop::Real, length::Int) = exp.(linspace(log(start), log(stop), length))
+linspace(start::Real, stop::Real, length::Integer) = collect(range(start, stop=stop, length=length))
+log_linspace(start::Real, stop::Real, length::Integer) = exp.(linspace(log(start), log(stop), length))
 
 
 "set all variables equal to nothing to save some memory"
@@ -191,7 +191,7 @@ end
 
 
 "Return an amount of indices of local maxima of a data array"
-function find_modes(data::Array{T,1}; amount::Int=3) where {T<:Real}
+function find_modes(data::Array{T,1}; amount::Integer=3) where {T<:Real}
 
     # creating index list for inds at modes
     mode_inds = [i for i in 2:(length(data)-1) if (data[i]>=data[i-1]) & (data[i]>=data[i+1])]
