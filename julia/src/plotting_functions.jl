@@ -5,7 +5,7 @@ using PyPlot
 
 
 "set axes and tick label font sizes for PyPlot plots"
-function set_font_sizes(ax; axes::Real=20., ticks::Real=15., title::Real=30.)
+function set_font_sizes(ax; axes::Real=30., ticks::Real=24., title::Real=45.)
 
     # this doesn't work. set title size at plot creating
     # setp(ax[:title], fontsize=title)
@@ -27,8 +27,8 @@ end
 
 
 "create a nice, large PyPlot with large text sizes (excluding title)"
-function init_plot()
-    figure(figsize=(10,6))
+function init_plot(;figsize=(16,9))
+    figure(figsize=figsize)
     ax = subplot(111)
     set_font_sizes(ax)
     return ax
@@ -36,7 +36,7 @@ end
 
 
 function plot_im(A; file::String="")
-    init_plot()
+    init_plot(figsize=(9,9))
     fig = imshow(A[:,:])
     colorbar()
     # title("Heatmap")
@@ -44,98 +44,4 @@ function plot_im(A; file::String="")
         savefig(file)
     end
     PyPlot.close_figs()
-end
-
-
-# quick and dirty function for creating plots that show what I want
-function custom_line_plot(x_samp::Array{T1,1}, L::LowerTriangular{T2,Array{T3,2}}, prob_def::Jones_problem_definition; output::Integer=1, draws::Integer=5000, σ::Array{T4,1}=zeros(1), mean::Array{T5,1}=zeros(1), show::Integer=5, file::String="", LogL::Real=0., waves::Array{T6,1}=zeros(1)) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
-
-    amount_of_samp_points = length(x_samp)
-    amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out
-    amount_of_measurements = length(prob_def.x_obs)
-
-    if mean==zeros(1)
-        mean = zeros(amount_of_total_samp_points)
-    end
-
-    # same curves are drawn every time?
-    # srand(100)
-
-    # initialize figure size
-    init_plot()
-
-    # the indices corresponding to the proper output
-    output_indices = (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)
-
-    # geting the y values for the proper output
-    y = prob_def.y_obs[(amount_of_measurements * (output - 1) + 1):(amount_of_measurements * output)]
-
-    # initializing storage for example GPs to be plotted
-    show_curves = zeros(show, amount_of_samp_points)
-
-    # if no analytical variance is passed, estimate it with sampling
-    if σ == zeros(1)
-
-        # calculate a bunch of GP draws
-        storage = zeros((draws, amount_of_total_samp_points))
-        for i in 1:draws
-            storage[i, :] = (L * randn(amount_of_total_samp_points)) + mean
-        end
-
-        # ignore the outputs that aren't meant to be plotted
-        storage = storage[:, output_indices]
-
-        #
-        show_curves[:, :] = storage[1:show, :]
-        storage = sort(storage, dims=1)
-
-        # filling the 5-95th percentile with a transparent orange
-        fill_between(x_samp, storage[convert(Int64, 0.95 * draws), :], storage[convert(Int64, 0.05 * draws), :], alpha=0.3, color="orange")
-
-        # needs to be in both leaves of the if statement
-        mean = mean[output_indices]
-
-    else
-
-        storage = zeros((show, amount_of_total_samp_points))
-        for i in 1:show
-            storage[i,:] = L * randn(amount_of_total_samp_points) + mean
-        end
-        show_curves[:, :] = storage[:, output_indices]
-
-        σ = σ[output_indices]
-
-        mean = mean[output_indices]
-
-
-        # filling the 5-95th percentile with a transparent orange
-        fill_between(x_samp, mean + 1.96 * σ, mean - 1.96 * σ, alpha=0.3, color="orange")
-
-    end
-
-
-    plot(x_samp, mean, color="black", zorder=2)
-    for i in 1:show
-        plot(x_samp, show_curves[i, :], alpha=0.5, zorder=1)
-    end
-    scatter(prob_def.x_obs, y, color="black", zorder=2)
-
-    xlabel("phases (days?)")
-    ylabel("pca scores")
-    title("PCA " * string(output-1), fontsize=30)
-
-    if LogL != 0.
-        text(minimum(prob_def.x_obs), 0.9 * maximum([maximum(y), maximum(show_curves)]), "nLogL: " * string(round(LogL)), fontsize=20)
-    end
-
-    if waves != zeros(1)
-        text(minimum(prob_def.x_obs), 1. * minimum([minimum(y), minimum(show_curves)]), "Wavelengths: " * string(waves), fontsize=20)
-    end
-
-    if file!=""
-        savefig(file)
-    end
-
-    PyPlot.close_figs()
-
 end

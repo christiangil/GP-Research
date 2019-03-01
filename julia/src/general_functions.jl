@@ -14,27 +14,34 @@ function multiple_append!(a::Array{T,1}, b...) where {T<:Real}
 end
 
 
-"if array is symmetric, return the symmetric version"
-function symmetric_A(A::Union{Array{T1,2},Symmetric{T2,Array{T2,2}}}; ignore_asymmetry::Bool=false) where {T1<:Any, T2<:Real}
+"if array is symmetric, return the symmetric (and opionally cholesky factorized) version"
+function symmetric_A(A::Union{Array{T1,2},Symmetric{T2,Array{T2,2}}}; ignore_asymmetry::Bool=false, chol::Bool=false) where {T1<:Any, T2<:Real}
 
     if size(A, 1) == size(A, 2)
         max_dif = maximum(abs.(A - transpose(A)))
 
         if max_dif == zero(max_dif)
-            return Symmetric(A)
+            A = Symmetric(A)
         # an arbitrary threshold that is meant to catch numerical errors
         elseif (max_dif < maximum([1e-6 * maximum(abs.(A)), 1e-8])) | ignore_asymmetry
             # return the symmetrized version of the matrix
-            return Symmetric((A + transpose(A)) / 2)
+            A = Symmetric((A + transpose(A)) / 2)
         else
             println("Array dimensions match, but it is not symmetric")
             println(max_dif)
-            return A
+            chol = false
         end
     else
         println("Array dimensions do not match. The matrix can't be symmetric")
+        chol = false
+    end
+
+    if chol
+        return ridge_chol(A)
+    else
         return A
     end
+
 end
 
 
@@ -54,6 +61,9 @@ function ridge_chol(A::Union{Array{T1,2},Symmetric{T2,Array{T2,2}}}) where {T1<:
     end
 
 end
+
+"dont do anything if an array that is already factorized is passed"
+ridge_chol(A::Cholesky{T,Array{T,2}}) where {T<:Any} = A
 
 
 """
@@ -132,7 +142,7 @@ end
 
 "Return evenly spaced numbers over a specified interval. Equivalent to range but without the keywords"
 linspace(start::Real, stop::Real, length::Integer) = collect(range(start, stop=stop, length=length))
-log_linspace(start::Real, stop::Real, length::Integer) = exp.(linspace(log(start), log(stop), length))
+log_linspace(start::Real, stop::Real, length) = exp.(linspace(log(start), log(stop), length))
 
 
 "set all variables equal to nothing to save some memory"
@@ -170,7 +180,7 @@ dlog_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = (β - x * (1 + α)) / (x
 Solve a linear system of equations (optionally with variance values at each point or covariance array)
 see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
 """
-function general_lst_sq(design_matrix::Array{T1,2}, data::Array{T2,1}; Σ::Union{Symmetric{T3,Array{T4,2}},Array{T4}}=ones(1)) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+function general_lst_sq(design_matrix::Array{T1,2}, data::Array{T2,1}; Σ::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},Array{T5}}=ones(1)) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
     @assert ndims(Σ) < 3 "the Σ variable needs to be a 1D or 2D array"
 
     if Σ == ones(1)
@@ -238,3 +248,6 @@ function nyquist_frequency(times::Array{T,1}; uneven::Bool=false) where {T<:Real
     end
     return nyquist_freq
 end
+
+import Base.ndims
+ndims(A::Cholesky{T,Array{T,2}}) where {T<:Any} = 2

@@ -139,7 +139,7 @@ end
 
 
 "Remove the best-fit circular Keplerian signal from the data"
-function remove_kepler!(data::Array{T1,1}, times::Array{T2,1}, P::Real, covariance::Union{Symmetric{T3,Array{T3,2}}, Array{T4}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+function remove_kepler!(data::Array{T1,1}, times::Array{T2,1}, P::Real, covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},Array{T5}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
     assert_positive(P)
     for i in 1:ndims(covariance)
         @assert size(covariance,i)==length(data) "covariance incompatible with data"
@@ -156,7 +156,7 @@ function remove_kepler!(data::Array{T1,1}, times::Array{T2,1}, P::Real, covarian
     data[1:amount_of_samp_points] -= kepler_rv_linear(times, P, x)
 end
 
-function remove_kepler(y_obs_w_planet::Array{T1,1}, times::Array{T2,1}, P::Real, covariance::Union{Symmetric{T3,Array{T3,2}},Array{T4}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+function remove_kepler(y_obs_w_planet::Array{T1,1}, times::Array{T2,1}, P::Real, covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},Array{T5}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
     y_obs_wo_planet = copy(y_obs_w_planet)
     remove_kepler!(y_obs_wo_planet, times, P, covariance)
     return y_obs_wo_planet

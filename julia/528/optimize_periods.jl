@@ -4,7 +4,7 @@ include("../src/all_functions.jl")
 # loading in data
 using JLD2, FileIO
 
-include_kernel("Quasi_periodic_kernel")
+include_kernel("quasi_periodic_kernel")
 @load "jld2_files/problem_def_528.jld2" problem_def_528 normals
 
 # original kernel hyper parameters

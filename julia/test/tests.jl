@@ -3,9 +3,9 @@ using Test
 
 @testset "cholesky factorizations" begin
     A = [4. 12 -16; 12 37 -43; -16 -43 98]
-    A = ridge_chol(A)
-    @test typeof(A)==Cholesky{Float64,Array{Float64,2}}
-    @test A.L==LowerTriangular([2. 0 0;6 1 0;-8 5 3])
+    chol_A = ridge_chol(A)
+    @test chol_A==cholesky(A)==symmetric_A(A, chol=true)
+    @test chol_A.L==LowerTriangular([2. 0 0;6 1 0;-8 5 3])
     A = [4. 12 -16; 12 37 -43; -16 -43 88]
     @test_logs (:warn, "added a ridge")  ridge_chol(A)
     println()

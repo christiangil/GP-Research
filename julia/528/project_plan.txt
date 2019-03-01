@@ -11,7 +11,7 @@ Comprehensive set of unit tests, at least one integration or regression test (1 
 Code passes tests (1 point)
 Student code uses a version control system (1 point)
 Repository includes many regular, small commits (1 point)
-Documentation for functions’ purpose and design (1 point)
+Documentation for functionsï¿½ purpose and design (1 point)
 Comprehensive set of assertions (1 point)
 Variable/function names consistent, distinctive & meaningful (1 point)
 Useful & consistent code formatting & style (1 point)
