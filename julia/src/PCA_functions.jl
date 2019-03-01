@@ -1,9 +1,10 @@
+# functions related to calculating the PCA scores of time series spectra
 using JLD2, FileIO
 using HDF5
 using Distributions
 
 "bootstrapping for errors in PCA scores. Takes about 28s per bootstrap on my computer"
-function bootstrap_errors(; boot_amount::Int=10, time_series_spectra::Array{Float64,2}=zeros(2,2), hdf5_loc::String="", save_filename::String="jld2_files/bootstrap.jld2")
+function bootstrap_errors(; boot_amount::Integer=10, time_series_spectra::Array{T,2}=zeros(2,2), hdf5_loc::String="", save_filename::String="jld2_files/bootstrap.jld2") where {T<:Real}
 
     @assert ((time_series_spectra != zeros(2,2)) | (hdf5_loc != "")) "either time_series_spectra or hdf5_loc have to be defined"
     if time_series_spectra==zeros(2,2)
@@ -26,7 +27,7 @@ function bootstrap_errors(; boot_amount::Int=10, time_series_spectra::Array{Floa
     scores_tot_new = zeros(boot_amount, num_spectra, num_components)
     for k in 1:boot_amount
         scores = zeros(num_spectra, num_components)
-        time_series_spectra_tmp = time_series_spectra .* (1 .+ (errors .* randn(num_lambda)))
+        time_series_spectra_tmp = time_series_spectra .* (1 .+ (errors .* randn(size(time_series_spectra))))
         mu = vec(mean(time_series_spectra_tmp, dims=2))
         time_series_spectra_tmp .-= mu  # ~60s
         fixed_comp_norm = 1/sum(abs2, view(M, :, 1))
@@ -51,7 +52,7 @@ function bootstrap_errors(; boot_amount::Int=10, time_series_spectra::Array{Floa
     end
 
     error_ests = zeros(num_components, num_spectra)
-    fit_normal(a::Array{Float64,1}) = fit_mle(Normal, a).σ
+    fit_normal(a::Array{T,1}) where {T<:Real} = fit_mle(Normal, a).σ
 
     for i in 1:num_components
         error_ests[i,:] = mapslices(fit_normal, scores_tot[:, :, i]; dims=1)
