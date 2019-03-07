@@ -6,6 +6,6 @@ hdf5_loc = "D:/Christian/Downloads/lambda-3923-6664-1years_1582spots_diffrot_id1
 fid = h5open(hdf5_loc, "r")
 act = fid["active"]
 @elapsed time_series_spectra = act[:, :]
-for i in 1:12
-    bootstrap_errors(; boot_amount=5, time_series_spectra=time_series_spectra)
+for i in 1:4
+    bootstrap_errors(; boot_amount=10, time_series_spectra=time_series_spectra)
 end

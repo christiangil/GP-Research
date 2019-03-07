@@ -5,7 +5,7 @@ Creates the necessary differentiated versions of base kernels required by the Jo
 You must pass it a SymEngine Basic object with the variables already declared with the @vars command. t1 and t2 must be the first declared variables.
 The created functions will looks like this
 
-    \$kernel_name(hyperparameters::Union{Array{Float64,1},Array{Any,1}}, dif::Float64; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(1))
+    \$kernel_name(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
 
 For example, you could define a kernel like so:
 
@@ -27,12 +27,12 @@ And then calculate the necessary derivative versions like so:
     kernel_name = "RBF_kernel"
     kernel_coder(symbolic_kernel, kernel_name)
 
-The function is saved in kernels/\$kernel_name.jl, so you can use it with a command akin to this:
+The function is saved in src/kernels/\$kernel_name.jl, so you can use it with a command akin to this:
 
-    include("kernels/" * kernel_name * ".jl")
+    include("src/kernels/" * kernel_name * ".jl")
 
 """
-function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String)
+function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manual_simplifications::Bool=true)
 
     # get the symbols of the passed function and check that t1 and t2 are first
     symbols = free_symbols(symbolic_kernel_original)
@@ -42,13 +42,13 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String)
     @assert symbols_str[2]=="t2" "The second symbol needs to be t2"
 
     # open the file we will write to
-    file_loc = "kernels/" * kernel_name * ".jl"
+    file_loc = "src/kernels/" * kernel_name * ".jl"
     io = open(file_loc, "w")
 
     num_kernel_hyperparameters = sym_amount-2
     # begin to write the function including assertions that the amount of hyperparameters are correct
     write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"kernels/$kernel_name.jl\").\n\"\"\"\n")
-    write(io, "function " * kernel_name * "(hyperparameters::Array{Any,1}, dif::Float64; dorder::Union{Array{Int,1},Array{Float64,1}}=zeros(1))\n\n")
+    write(io, "function " * kernel_name * "(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}\n\n")
     write(io, "    @assert length(hyperparameters)==$num_kernel_hyperparameters \"hyperparameters is the wrong length\"\n")
     write(io, "    if dorder==zeros(1)\n")
     write(io, "        dorder = zeros(length(hyperparameters) + 2)\n")
@@ -101,13 +101,22 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String)
                 symbolic_kernel = diff(symbolic_kernel, symbols[j], dorder[j])
             end
 
-            # make some simplifications
+            # make a simplification based on t1-t2=dif
             @vars dif
             symbolic_kernel = subs(symbolic_kernel, t1=>dif, t2=>0)
-            symbolic_kernel_str = SymEngine.toString(symbolic_kernel)
-            symbolic_kernel_str = replace(symbolic_kernel_str, "sqrt(dif^2)"=>"abs(dif)")
 
-            write(io, string("        func = " * symbolic_kernel_str * "\n    end\n\n"))
+            symbolic_kernel_str = SymEngine.toString(symbolic_kernel)
+            symbolic_kernel_str = string("        func = " * symbolic_kernel_str * "\n    end\n\n")
+
+            if manual_simplifications
+                # replacing equivalent expressions to increase readability and decrease useless computations
+                symbolic_kernel_str = replace(symbolic_kernel_str, "sqrt(dif^2)"=>"abs(dif)")
+                symbolic_kernel_str = replace(symbolic_kernel_str, " 0.0 - "=>" -")
+                symbolic_kernel_str = replace(symbolic_kernel_str, " 0.0 + "=>" ")
+                symbolic_kernel_str = replace(symbolic_kernel_str, " 1.0*"=>" ")
+            end
+
+            write(io, symbolic_kernel_str)
         end
 
     end
