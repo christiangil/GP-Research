@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.stats as stats
-from scipy.special import erfinv, erf
+# from scipy.special import erfinv, erf
 
 def time_to_phase(PROT, time, time_unit='day'):
     """Converts units of time to units of phase based off the 
@@ -59,7 +59,7 @@ def phase_to_time(PROT, phase, time_unit='day'):
     else:
         print("**INCORRECT TIME_UNIT SPECIFIED**")
 
-def spot_latitudes(N_spots, sigma=7.):
+def spot_latitudes(N_spots, sigma=7.3):
     """Randomly generates spot latitudes from a truncated 
         normal distribusion (prevent > 90 degree latitudes).
         
@@ -75,7 +75,7 @@ def spot_latitudes(N_spots, sigma=7.):
         latitudes : array (floats)
             Latitudes for the spots
         """
-    mu, lower, upper = 16., -90., 90.  # prevent latitudes > 90
+    mu, lower, upper = 15.1, -90., 90.  # prevent latitudes > 90
     lats = stats.truncnorm((lower-mu)/sigma, (upper-mu)/sigma, loc=mu, scale=sigma).rvs(N_spots)
     sgn = np.sign(0.5 - np.random.random(N_spots))
     latitudes = lats*sgn
@@ -83,40 +83,61 @@ def spot_latitudes(N_spots, sigma=7.):
 
 def baumann_draw(types, mu=np.array([46.51, 90.24]), sigma_a=np.array([2.14, 2.49])):
     # drawing a random starspot area (MSH) from weird Baumann 2005 pseudo "log-normal" pdf (https://arxiv.org/pdf/astro-ph/0510516.pdf) eq. 2
-    # following this methodology (https://www.comsol.com/blogs/sampling-random-numbers-from-probability-distribution-functions/)
+    # defaults from Table 1: total area from single spots and total area rows
+    # mu == <A> and is multiplied by a factor 1.54 (as in Borgniet et al. (2015))
+
+    # draws are performed originally following this methodology (https://www.comsol.com/blogs/sampling-random-numbers-from-probability-distribution-functions/)
+    # replaced with recognizing the normally distributed vartiable for this distribution
     sigma = np.sqrt(np.log(sigma_a))
-    draws = np.exp(np.sqrt(2) * erfinv(2 * np.random.uniform(size=len(types)) - 1))
+    draws = np.zeros(len(types))
     for i in range(len(types)):
         ind = types[i]
         # a simple way to prevent spots less than 10 MSH
-        while draws[i] < 10:    
-            draws[i] = mu[ind] * ((np.exp(sigma[ind]) * draws[i]) ** sigma[ind])
+        draw = 0
+        while draw < 10:
+            z = np.random.normal()
+            draw = mu[ind] * np.exp((z + sigma[ind]) * sigma[ind])
+            # hold = np.exp(np.sqrt(2) * erfinv(2 * np.random.uniform() - 1))
+            # draw = mu[ind] * ((np.exp(sigma[ind]) * hold) ** sigma[ind])
+        draws[i] = draw
     return draws
 
 
-def pillet_draw(types, log_mu=np.array([2.619, 3.373]), sigma=np.array([0.806, 0.869])):
+def pillet_draw(types, mu=np.array([14.8, 30.9]), sigma=np.array([0.806, 0.869])):
     # drawing a random starspot decay rate (MSH/day) from Pillet 1993 log-normal pdf (http://adsabs.harvard.edu/abs/1993A%26A...274..521M) eq. 5
-    # following this methodology (https://www.comsol.com/blogs/sampling-random-numbers-from-probability-distribution-functions/)
-    mu = np.exp(log_mu)
-    draws = np.exp(np.sqrt(2) * erfinv(2 * np.random.uniform(size=len(types)) - 1))
+    # default mu are the standard medians from Tables 3 and 1
+    # default sigma are sqrt(2 log(mean/median)) from Tables 3 and 1 (convsersion from algebra and equation of mean of log-normal distribution from Wikipedia https://en.wikipedia.org/wiki/Log-normal_distribution)
+
+    # draws are performed originally following this methodology (https://www.comsol.com/blogs/sampling-random-numbers-from-probability-distribution-functions/)
+    # replaced with recognizing the normally distributed vartiable for this distribution
+    draws = np.zeros(len(types))
     for i in range(len(types)):
         ind = types[i]
         # a simple way to prevent spots decays less than 3 MSH/day or greater than 200 MSH/day
-        while ((draws[i] < 3) or (draws[i] > 200)): 
-            draws[i] = mu[ind] * (draws[i] ** sigma[ind])
+        draw = 0
+        while ((draw < 3) or (draw > 200)):
+            z = np.random.normal()
+            draw = mu[ind] * np.exp(z * sigma[ind])
+            # hold = np.exp(np.sqrt(2) * erfinv(2 * np.random.uniform() - 1))
+            # draw = mu[ind] * (draws[i] ** sigma[ind])
+        draws[i] = draw
     return draws
 
+
+# MSH(in units of Rstar^2) = 1e-6 1/2 4 pi Rstar^2 = 2e-6 pi Rstar^2  # 1/million of half of star's surface area
+# pi * R_spot(in units of Rstar)^2 = Area(MSH(Rstar^2)) * 2e-6 pi
+# R_spot = sqrt(Area(MSH(Rsun)) * 2e-6)
 
 # from SOAP config file...
 # active region's size [Rstar]. If you want a size S1 in area of the visible hemisphere, you have to put here sqrt(2*S1), because
 # S1 = Area_spot/Area_visible_hemisphere = pi*(size1*Rstar)**2/(2*pi*Rstar**2) = size1**2/2 -> size1 = sqrt(2*S1).
-# For 0.1% of the visible hemisphere, put 0.045
-def msh2r_star(msh):
-    return 1e-3 * np.sqrt(2 * msh)
-
-
+# For 0.1% of the visible hemisphere (1e3 MSH), put 0.045
 def r_star2msh(r_star):
     return r_star * r_star * 5e5
+
+
+def msh2r_star(msh):
+    return 1e-3 * np.sqrt(2 * msh)
 
 
 # def spot_amplitudes(N_spots, mu=11.8, sigma=2.55):
@@ -141,20 +162,17 @@ def spot_amplitudes(N_spots, mu=np.array([46.51, 90.24]), sigma_a=np.array([2.14
 
     # generate a list deciding whether each spot will be an individual spot or a "complex spot group", 0 for individual spot, 1 for group
     if types == -1:
-        types = np.round(np.random.uniform(size=N_spots))
-        types = types.astype(int)
-
+        frac_iso_spots = 0.4  # from Martinez Pillet et al. (1993)
+        types = (np.random.uniform(size=N_spots) > frac_iso_spots).astype(int)
 
     # micro_solar_hemispheres = np.exp(np.random.normal(np.log(mu), np.log(sigma), N_spots))  # wrong!
-    micro_solar_hemispheres = baumann_draw(types)
+    micro_solar_hemispheres = baumann_draw(types, mu=mu, sigma_a=sigma_a)
     
     # MSH (area) to R_star (length) converter. Conversion from
     # 'On Sunspot and Starspot Lifetimes' - https://arxiv.org/pdf/1409.4337.pdf
     # Bradshaw and Hartigan 2014
-    # sizes = np.sqrt(micro_solar_hemispheres*17682025)/695500.0  # old and wrong, 6.04e-3 sqrt(MSH) per Rsun: off by factor of 2.41
+    # sizes = np.sqrt(micro_solar_hemispheres*17682025)/695500.0  # old and wrong, 6.04e-3 sqrt(MSH) per Rsun
 
-    # MSH = 1e-6 1/2 4 pi Rsun^2 = 2e-6 pi Rsun^2  # 1/million of half of star's surface area
-    # sizes = np.sqrt(micro_solar_hemispheres * 2e-6 * np.pi)  # 2.51e-3 sqrt(MSH) per Rsun
     sizes = msh2r_star(micro_solar_hemispheres)
     return sizes, types
 
@@ -181,7 +199,7 @@ def start_times(spot_density, obs_n_years):
     starts = np.sort(np.random.random(N_spots) * obs_n_years)
     return starts, N_spots
 
-def spot_lifetime(sizes, types, Gf):
+def spot_lifetime(sizes, types, Gf, mu=np.array([14.8, 30.9]), sigma=np.array([0.806, 0.869])):
     """Generates random lifetimes for each spot (in years)
         
         Parameters
@@ -208,7 +226,7 @@ def spot_lifetime(sizes, types, Gf):
     # add growth time
     time_mod = np.divide(Gf, np.ones(len(Gf)) - Gf)  # 1/(1/Gf - 1)
 
-    lifetimes = np.multiply(time_mod, np.divide((sizes ** 2)/(2e-6 * np.pi), pillet_draw(types)) / 365.25)  # convert sizes to MSH, divide by decay rate, convert to years
+    lifetimes = np.multiply(time_mod, np.divide((sizes ** 2)/(2e-6 * np.pi), pillet_draw(types, mu=mu, sigma=sigma)) / 365.25)  # convert sizes to MSH, divide by decay rate, convert to years
 
     return lifetimes
 
