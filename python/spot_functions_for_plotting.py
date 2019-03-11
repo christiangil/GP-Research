@@ -81,22 +81,21 @@ def spot_latitudes(N_spots, sigma=7.3):
     latitudes = lats*sgn
     return latitudes
 
-def baumann_draw(types, exp_mu=np.array([46.51, 90.24]), sigma_a=np.array([2.14, 2.49])):
-    # drawing a random starspot area (MSH) from weird Baumann 2005 pseudo "log-normal" pdf (https://arxiv.org/pdf/astro-ph/0510516.pdf) eq. 2
-    # defaults from Table 1: total area from single spots and total area rows
-    # exp_mu == <A> and is multiplied by a factor 1.54 (as in Borgniet et al. (2015))
 
-    # draws are performed originally following this methodology (https://www.comsol.com/blogs/sampling-random-numbers-from-probability-distribution-functions/)
-    # replaced with recognizing the normally distributed vartiable for this distribution
-    sigma = np.sqrt(np.log(sigma_a))
+def baumann_draw(types, mu=np.log([46.51, 90.24])+np.log([2.14, 2.49]), sigma=np.sqrt(np.log([2.14, 2.49]))):
+    # drawing a random starspot area (MSH) from convoluted Baumann 2005 log-normal pdf (https://arxiv.org/pdf/astro-ph/0510516.pdf) eq. 2
+    # defaults from Table 1: total area from single spots and total area rows
+    # <A> values are multiplied by a factor 1.54 (as in Borgniet et al. (2015))
+    # mu = log(<A>) + log(sigma_a); sigma = sqrt(log(sigma_a))
+    # exp(mu) ~ [100, 225] MSH; sigma ~ [0.87, 0.96]    
+
     draws = np.zeros(len(types))
     for i in range(len(types)):
         ind = types[i]
         # a simple way to prevent spots less than 10 MSH
         draw = 0
         while draw < 10:
-            z = np.random.normal()
-            draw = exp_mu[ind] * np.exp((z + sigma[ind]) * sigma[ind])
+            draw = np.random.lognormal(mean=mu[ind], sigma=sigma[ind])
         draws[i] = draw
     return draws
 
@@ -105,6 +104,7 @@ def pillet_draw(types, mu=np.array([2.619, 3.373]), sigma=np.array([0.806, 0.869
     # drawing a random starspot decay rate (MSH/day) from Pillet 1993 log-normal pdf (http://adsabs.harvard.edu/abs/1993A%26A...274..521M) eq. 5
     # default mu are the mu_logD from Table 5 from Standard Set: total decay La Laguna types 3 and 2
     # default sigma are the sigma_logD from Table 5 from Standard Set: total decay La Laguna types 3 and 2
+    # exp(mu) ~ [13.7, 29.2] MSH/day
 
     # draws are performed originally following this methodology (https://www.comsol.com/blogs/sampling-random-numbers-from-probability-distribution-functions/)
     # replaced with recognizing the normally distributed vartiable for this distribution
@@ -114,11 +114,9 @@ def pillet_draw(types, mu=np.array([2.619, 3.373]), sigma=np.array([0.806, 0.869
         # a simple way to prevent spots decays less than 3 MSH/day or greater than 200 MSH/day
         draw = 0
         while ((draw < 3) or (draw > 200)):
-            z = np.random.normal()
-            draw = np.exp(mu[ind] + z * sigma[ind])
+            draw = np.random.lognormal(mean=mu[ind], sigma=sigma[ind])
         draws[i] = draw
     return draws
-
 
 
 # MSH(in units of Rstar^2) = 1e-6 1/2 4 pi Rstar^2 = 2e-6 pi Rstar^2  # 1/million of half of star's surface area
