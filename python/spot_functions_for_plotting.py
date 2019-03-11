@@ -81,10 +81,10 @@ def spot_latitudes(N_spots, sigma=7.3):
     latitudes = lats*sgn
     return latitudes
 
-def baumann_draw(types, mu=np.array([46.51, 90.24]), sigma_a=np.array([2.14, 2.49])):
+def baumann_draw(types, exp_mu=np.array([46.51, 90.24]), sigma_a=np.array([2.14, 2.49])):
     # drawing a random starspot area (MSH) from weird Baumann 2005 pseudo "log-normal" pdf (https://arxiv.org/pdf/astro-ph/0510516.pdf) eq. 2
     # defaults from Table 1: total area from single spots and total area rows
-    # mu == <A> and is multiplied by a factor 1.54 (as in Borgniet et al. (2015))
+    # exp_mu == <A> and is multiplied by a factor 1.54 (as in Borgniet et al. (2015))
 
     # draws are performed originally following this methodology (https://www.comsol.com/blogs/sampling-random-numbers-from-probability-distribution-functions/)
     # replaced with recognizing the normally distributed vartiable for this distribution
@@ -96,17 +96,15 @@ def baumann_draw(types, mu=np.array([46.51, 90.24]), sigma_a=np.array([2.14, 2.4
         draw = 0
         while draw < 10:
             z = np.random.normal()
-            draw = mu[ind] * np.exp((z + sigma[ind]) * sigma[ind])
-            # hold = np.exp(np.sqrt(2) * erfinv(2 * np.random.uniform() - 1))
-            # draw = mu[ind] * ((np.exp(sigma[ind]) * hold) ** sigma[ind])
+            draw = exp_mu[ind] * np.exp((z + sigma[ind]) * sigma[ind])
         draws[i] = draw
     return draws
 
 
-def pillet_draw(types, mu=np.array([14.8, 30.9]), sigma=np.array([0.806, 0.869])):
+def pillet_draw(types, mu=np.array([2.619, 3.373]), sigma=np.array([0.806, 0.869])):
     # drawing a random starspot decay rate (MSH/day) from Pillet 1993 log-normal pdf (http://adsabs.harvard.edu/abs/1993A%26A...274..521M) eq. 5
-    # default mu are the standard medians from Tables 3 and 1
-    # default sigma are sqrt(2 log(mean/median)) from Tables 3 and 1 (convsersion from algebra and equation of mean of log-normal distribution from Wikipedia https://en.wikipedia.org/wiki/Log-normal_distribution)
+    # default mu are the mu_logD from Table 5 from Standard Set: total decay La Laguna types 3 and 2
+    # default sigma are the sigma_logD from Table 5 from Standard Set: total decay La Laguna types 3 and 2
 
     # draws are performed originally following this methodology (https://www.comsol.com/blogs/sampling-random-numbers-from-probability-distribution-functions/)
     # replaced with recognizing the normally distributed vartiable for this distribution
@@ -117,11 +115,10 @@ def pillet_draw(types, mu=np.array([14.8, 30.9]), sigma=np.array([0.806, 0.869])
         draw = 0
         while ((draw < 3) or (draw > 200)):
             z = np.random.normal()
-            draw = mu[ind] * np.exp(z * sigma[ind])
-            # hold = np.exp(np.sqrt(2) * erfinv(2 * np.random.uniform() - 1))
-            # draw = mu[ind] * (draws[i] ** sigma[ind])
+            draw = np.exp(mu[ind] + z * sigma[ind])
         draws[i] = draw
     return draws
+
 
 
 # MSH(in units of Rstar^2) = 1e-6 1/2 4 pi Rstar^2 = 2e-6 pi Rstar^2  # 1/million of half of star's surface area
