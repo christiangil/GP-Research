@@ -145,8 +145,7 @@ def msh2r_star(msh):
     return 1e-3 * np.sqrt(2 * msh)
 
 
-# def spot_amplitudes(N_spots, mu=11.8, sigma=2.55):
-def spot_amplitudes(N_spots, mu=np.array([46.51, 90.24]), sigma_a=np.array([2.14, 2.49]), types=-1):
+def spot_amplitudes(N_spots, mu=np.log([46.51, 90.24])+np.log([2.14, 2.49]), sigma=np.sqrt(np.log([2.14, 2.49])), types=-1):
     """Randomly generates spot amplitudes from a log-normal
         distribusion. Model from maximum development method of
         "On the size distribution of sunspot groups in the Greenwich
@@ -171,7 +170,7 @@ def spot_amplitudes(N_spots, mu=np.array([46.51, 90.24]), sigma_a=np.array([2.14
         types = (np.random.uniform(size=N_spots) > frac_iso_spots).astype(int)
 
     # micro_solar_hemispheres = np.exp(np.random.normal(np.log(mu), np.log(sigma), N_spots))  # wrong!
-    micro_solar_hemispheres = baumann_draw(types, mu=mu, sigma_a=sigma_a)
+    micro_solar_hemispheres = baumann_draw(types, mu=mu, sigma=sigma)
     
     # MSH (area) to R_star (length) converter. Conversion from
     # 'On Sunspot and Starspot Lifetimes' - https://arxiv.org/pdf/1409.4337.pdf
@@ -204,7 +203,7 @@ def start_times(spot_density, obs_n_years):
     starts = np.sort(np.random.random(N_spots) * obs_n_years)
     return starts, N_spots
 
-def spot_lifetime(sizes, types, Gf, mu=np.array([14.8, 30.9]), sigma=np.array([0.806, 0.869])):
+def spot_lifetime(sizes, types, Gf, mu=np.array([2.619, 3.373]), sigma=np.array([0.806, 0.869])):
     """Generates random lifetimes for each spot (in years)
         
         Parameters
