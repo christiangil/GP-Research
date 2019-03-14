@@ -1,5 +1,12 @@
 #adding in custom functions
 include("../src/all_functions.jl")
+run_tests()
+
+if length(ARGS)>0
+    amount_of_periods = float(ARGS[1])
+else
+    amount_of_periods=300
+end
 
 # loading in data
 using JLD2, FileIO
@@ -22,20 +29,20 @@ end
 amount_of_samp_points = length(problem_def_528.x_obs)
 amount_of_total_samp_points = amount_of_samp_points * problem_def_528.n_out
 
-P = 6u"d"
+P = 30u"d"
 m_star = 1u"Msun"
-m_planet = 1u"Mjup"
-times_obs = convert_phases_to_years.(problem_def_528.x_obs)
+m_planet = 50u"Mearth"
+times_obs = convert_and_strip_units.(u"yr", (problem_def_528.x_obs)u"d")
 planet_rvs = kepler_rv.(times_obs, P, m_star, m_planet)
 fake_data = copy(problem_def_528.y_obs)
-fake_data[1:amount_of_samp_points] += planet_rvs
+fake_data[1:amount_of_samp_points] += planet_rvs/normals[1]
 
 # sample linearly in frequency space so that we get periods from the 1 / uneven Nyquist
 # frequency to 4 times the total timespan of the data
-freq_grid = linspace(1 / (times_obs[end] - times_obs[1]) / 4, nyquist_frequency(times_obs; uneven=true), 300)
+freq_grid = linspace(1 / (times_obs[end] - times_obs[1]) / 4, nyquist_frequency(times_obs; uneven=true), amount_of_periods)
 period_grid = 1 ./ reverse(freq_grid)
 
-likelihoods = kep_signal_likelihood(period_grid, fake_data, problem_def_528, total_hyperparameters)
+likelihoods = kep_signal_likelihood(period_grid, times_obs, fake_data, problem_def_528, total_hyperparameters)
 
 begin
     ax = init_plot()
@@ -46,11 +53,19 @@ begin
     axvline(x=convert_and_strip_units(u"d", P))
     title_string = @sprintf "%.0f day, %.2f Earth masses" convert_and_strip_units(u"d",P) convert_and_strip_units(u"Mearth",m_planet)
     title(title_string, fontsize=30)
-    savefig("test.pdf")
+    savefig("test$amount_of_periods.png")
 end
 
 # three best periods
 best_period_grid = period_grid[find_modes(-likelihoods)]
+K_obs = K_observations(problem_def_528, total_hyperparameters)
+remove_kepler(fake_data, times_obs, best_period_grid[1], K_obs)
+
+kepler_rv.(times_obs, best_period_grid[1], m_star, m_planet)
+Jones_line_plots(amount_of_samp_points, problem_definition, final_total_hyperparameters; file="figs/gp/fit_gp", plot_K=true)
+
+
+
 best_period_grid * convert_and_strip_units(u"d", 1u"yr")  # in days instead of years
 K_obs = K_observations(problem_def_528, total_hyperparameters)
 

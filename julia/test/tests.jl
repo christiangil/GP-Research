@@ -18,8 +18,8 @@ end
     @load "../jld2_files/sample_problem_def.jld2" sample_problem_def
     cd(old_dir)
 
-    @test est_dKdθ(sample_problem_def, 1 .+ rand(3); return_bool=true)
-    @test test_grad(sample_problem_def, 1 .+ rand(3))
+    @test est_dKdθ(sample_problem_def, 1 .+ rand(3); return_bool=true, print_stuff=false)
+    @test test_grad(sample_problem_def, 1 .+ rand(3), print_stuff=false)
     println()
 end
 

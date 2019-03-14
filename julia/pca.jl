@@ -1,4 +1,4 @@
-include("all_functions.jl")
+include("src/all_functions.jl")
 
 using JLD2, FileIO
 # using RvSpectraKitLearn
@@ -6,9 +6,12 @@ using MultivariateStats
 using HDF5
 
 hdf5_loc = "D:/Christian/Downloads/lambda-3923-6664-1years_1582spots_diffrot_id1.h5"
+# hdf5_loc = "C:/Users/chris/Downloads/lambda-3923-6664-1years_1582spots_diffrot_id1.h5"
 fid = h5open(hdf5_loc, "r")
-# objects = names(fid)
-# println(objects)
+objects = names(fid)
+println(objects)
+# thing = fid["phases"][:]
+
 thing1 = fid["n_spots"][:]
 thing2 = fid["msh_covered"][:]
 

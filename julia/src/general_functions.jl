@@ -55,8 +55,8 @@ function ridge_chol(A::Union{Array{T1,2},Symmetric{T2,Array{T2,2}}}) where {T1<:
         smallest_eigen = IterativeSolvers.lobpcg(A, false, 1).λ[1]
         ridge = 1.10 * abs(smallest_eigen)
         @warn "added a ridge"
-        # println("ridge size:          10^$(log10(ridge))")
-        # println("max value of array:  10^$(log10(maximum(abs.(A))))")
+        println("ridge size:          10^$(log10(ridge))")
+        println("max value of array:  10^$(log10(maximum(abs.(A))))")
         return cholesky(A + UniformScaling(ridge))
     end
 
@@ -249,5 +249,10 @@ function nyquist_frequency(times::Array{T,1}; uneven::Bool=false) where {T<:Real
     return nyquist_freq
 end
 
+
 import Base.ndims
 ndims(A::Cholesky{T,Array{T,2}}) where {T<:Any} = 2
+
+
+"an empty function, so that a function that requires another function to be passed can use this as a default"
+do_nothing() = nothing

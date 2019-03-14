@@ -5,9 +5,10 @@ using PyPlot
 
 
 # quick and dirty function for creating plots that show what I want
-function custom_GP_plot(x_samp::Array{T1,1}, show_curves::Array{T2,2}, x_obs::Array{T3,1}, y_obs::Array{T4,1}, σ::Array{T5,1}, mean::Array{T6,1}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real, T7<:Real}
+function custom_GP_plot(x_samp::Array{T1,1}, show_curves::Array{T2,2}, x_obs::Array{T3,1}, y_obs::Array{T4,1}, σ::Array{T5,1}, mean::Array{T6,1}; errors::Array{T7,1}=zeros(length(x_obs))) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real, T7<:Real}
 
-    @assert size(show_curves, 2)==length(x_samp)
+    @assert size(show_curves, 2)==length(x_samp)==length(mean)==length(σ)
+    @assert length(x_obs)==length(y_obs)==length(errors)
 
     # initialize figure size
     init_plot()
@@ -22,6 +23,7 @@ function custom_GP_plot(x_samp::Array{T1,1}, show_curves::Array{T2,2}, x_obs::Ar
     end
 
     scatter(x_obs, y_obs, color="black", zorder=2)
+    errorbar(x_obs, y_obs, yerr=[errors';errors'], fmt="o", color="black", zorder=2)
 
 end
 
@@ -67,19 +69,21 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
     for output in 1:prob_def.n_out
 
         # the indices corresponding to the proper output
-        output_indices = (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)
+        sample_output_indices = (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)
+        obs_output_indices = (amount_of_measurements * (output - 1) + 1):(amount_of_measurements * output)
 
         # geting the y values for the proper output
-        y_o = prob_def.y_obs[(amount_of_measurements * (output - 1) + 1):(amount_of_measurements * output)]
-        show_curves_o = show_curves[:, output_indices]
-        σ_o = σ[output_indices]
-        mean_o = mean[output_indices]
+        y_o = prob_def.y_obs[obs_output_indices]
+        show_curves_o = show_curves[:, sample_output_indices]
+        σ_o = σ[sample_output_indices]
+        mean_o = mean[sample_output_indices]
+        measurement_noise_o = prob_def.noise[obs_output_indices]
 
-        custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o)
+        custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=measurement_noise_o)
 
         xlabel(prob_def.x_obs_units)
         ylabel(prob_def.y_obs_units)
-        title("Output " * string(output-1), fontsize=30)
+        title("Output " * string(output-1), fontsize=45)
 
         if find_post
             # put log likelihood on plot
@@ -89,7 +93,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
 
         # put kernel lengths on plot
         kernel_lengths = total_hyperparameters[end-prob_def.n_kern_hyper+1:end]
-        text(minimum(prob_def.x_obs), 1 * minimum([minimum(y_o), minimum(show_curves_o)]), "Wavelengths: " * string(kernel_lengths), fontsize=30)
+        text(minimum(prob_def.x_obs), 1 * minimum([minimum(y_o), minimum(show_curves_o)]), "Lengthscales: " * string(kernel_lengths), fontsize=30)
         # text(minimum(prob_def.x_obs), 1 *minimum(y_o), "Wavelengths: " * string(kernel_lengths), fontsize=30)
 
         if file!=""

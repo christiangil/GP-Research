@@ -2,7 +2,7 @@
 
 
 # # All of the packages I am using
-# using Pkg
+using Pkg
 # Pkg.add("SpecialFunctions")
 # Pkg.add("JLD2")
 # Pkg.add("FileIO")
@@ -17,7 +17,10 @@
 # Pkg.add("IterativeSolvers")
 # Pkg.add("UnitfulAstro")
 # Pkg.add("Unitful")
-# Pkg.update()
+Pkg.activate(".")
+Pkg.instantiate()
+Pkg.update()
+
 
 # importing functions
 include("general_functions.jl")
@@ -32,7 +35,10 @@ include("plotting_functions.jl")
 include("GP_plotting_functions.jl")
 include("diagnostic_functions.jl")
 
-# running tests
-include("../test/runtests.jl")
-
-# clear_variables()
+# run tests
+function run_tests()
+    old_dir = pwd()
+    cd(@__DIR__)
+    include("../test/runtests.jl")
+    cd(old_dir)
+end

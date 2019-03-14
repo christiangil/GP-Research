@@ -115,6 +115,8 @@ A linear formulation of a Keplerian RV signal where:
 coefficients[1] = K * cos(ω)
 coefficients[2] = -K * sin(ω)
 coefficients[3] = K * e * cos(ω) + γ
+
+for the e=0 case, ϕ(t,P) is actually taking the place of ϕ(t+offset,P) 
 """
 function kepler_rv_linear(t, P::Union{Real, Quantity}, coefficients::Array{T,1}) where {T<:Real}
     @assert length(coefficients) == 3 "wrong number of coefficients"
@@ -164,9 +166,9 @@ end
 
 
 "Find GP likelihoods for best fit Keplerian orbit of a specified period"
-function kep_signal_likelihood(period_grid::Array{T1,1}, fake_data::Array{T2,1}, problem_definition::Jones_problem_definition, total_hyperparameters::Array{T3,1}) where {T1<:Real, T2<:Real, T3<:Real}
+function kep_signal_likelihood(period_grid::Array{T1,1}, times_obs::Array{T2,1}, fake_data::Array{T3,1}, problem_definition::Jones_problem_definition, total_hyperparameters::Array{T4,1}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+    @warn "make sure that period_grid and time_obs are in the same units!"
     K_obs = K_observations(problem_definition, total_hyperparameters)
-    times_obs = convert_phases_to_years.(problem_definition.x_obs)
     likelihoods = zeros(length(period_grid))
     new_data = zeros(length(fake_data))
     for i in 1:length(period_grid)

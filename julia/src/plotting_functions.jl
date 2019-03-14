@@ -10,11 +10,11 @@ function set_font_sizes(ax; axes::Real=30., ticks::Real=24., title::Real=45.)
     # this doesn't work. set title size at plot creating
     # setp(ax[:title], fontsize=title)
 
-    setp(ax[:xaxis][:label], fontsize=axes)
-    setp(ax[:yaxis][:label], fontsize=axes)
+    setp(ax.xaxis.label, fontsize=axes)
+    setp(ax.yaxis.label, fontsize=axes)
 
-    setp(ax[:get_xticklabels](), fontsize=ticks)
-    setp(ax[:get_yticklabels](), fontsize=ticks)
+    setp(ax.get_xticklabels(), fontsize=ticks)
+    setp(ax.get_yticklabels(), fontsize=ticks)
 
     # old reference stuff
     # font = Dict("fontsize"=>20)
@@ -45,3 +45,7 @@ function plot_im(A; file::String="")
     end
     PyPlot.close_figs()
 end
+
+
+"make the figure show up in Atom plot pane"
+draw_fig_atom() = fig[:canvas][:draw]()

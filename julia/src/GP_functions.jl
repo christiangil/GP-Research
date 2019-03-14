@@ -283,7 +283,7 @@ end
 "calculating the standard deviation at each GP posterior point. Algorithm from RW alg. 2.1"
 function get_σ(L_obs::LowerTriangular{T1,Array{T1,2}}, K_obs_samp::Union{Transpose{T2,Array{T2,2}},Symmetric{T3,Array{T3,2}},Array{T4,2}}, diag_K_samp::Array{T5,1}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
     v = L_obs \ K_obs_samp
-    return sqrt.(diag_K_samp - [dot(v[:, i], v[:, i]) for i in 1:size(K_samp, 1)])  # σ
+    return sqrt.(diag_K_samp - [dot(v[:, i], v[:, i]) for i in 1:length(diag_K_samp)])  # σ
 end
 
 function get_σ(prob_def::Jones_problem_definition, x_samp::Array{T1,1}, total_hyperparameters::Array{T2,1}) where {T1<:Real, T2<:Real}

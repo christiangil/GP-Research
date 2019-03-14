@@ -17,8 +17,8 @@ n_dif = 3
 
 # Setting up all of the data things
 # how much of the data you want to use (on time domain)
-start_ind = 100
-end_ind = 170  # 730
+start_ind = 1
+end_ind = 730
 amount_of_measurements = end_ind - start_ind + 1
 total_amount_of_measurements = amount_of_measurements * n_out
 
@@ -47,7 +47,7 @@ a0 = zeros(n_out, n_dif)
 a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0  #  /= 20
 
 num_kernel_hyperparameters = include_kernel("quasi_periodic_kernel")  # sets correct num_kernel_hyperparameters
-sample_problem_def = build_problem_definition(quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, measurement_noise, a0)
-@save "../jld2_files/sample_problem_def.jld2" sample_problem_def normals
+sample_problem_def_full = build_problem_definition(quasi_periodic_kernel, num_kernel_hyperparameters, n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, measurement_noise, a0)
+@save "../jld2_files/sample_problem_def_full.jld2" sample_problem_def_full normals
 
 cd(old_dir)
