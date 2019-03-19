@@ -40,52 +40,46 @@ mean_anomaly(t::Real, P::Real) = 2 * pi * ((t / P) % 1)
 Iterative solution for true anomaly from mean anomaly
 from (http://www.csun.edu/~hcmth017/master/node16.html)
 """
-function ϕ(t::Real, P::Real; e::Real=0.)
+function ϕ(t::Real, P::Real, e::Real)
     @assert (0 <= e <= 1) "eccentricity has to be between 0 and 1"
     M = mean_anomaly(t, P)
-    if e == 0.
-        return M
-    else
-        dif_thres = 1e-8
-        dif = 1
-        true_anom = copy(M)
-        while dif > dif_thres
-            true_anom_old = copy(true_anom)
-            true_anom -= (true_anom - e * sin(true_anom) - M) / (1 - e * cos(true_anom))
-            dif = abs((true_anom - true_anom_old) / true_anom)
-        end
-        return true_anom
+    dif_thres = 1e-8
+    dif = 1
+    true_anom = copy(M)
+    while dif > dif_thres
+        true_anom_old = copy(true_anom)
+        true_anom -= (true_anom - e * sin(true_anom) - M) / (1 - e * cos(true_anom))
+        dif = abs((true_anom - true_anom_old) / true_anom)
     end
+    return true_anom
 end
 
-function ϕ(t::Real, P::Quantity; e::Real=0.)
-    return ϕ(t, convert_and_strip_units(u"yr", P); e=e, iter=iter)
-end
+ϕ(t::Real, P::Quantity, e::Real) = ϕ(t, convert_and_strip_units(u"yr", P), e)
 
 """
 Calculate true anomaly for small e using equation of center approximating true
 anomaly from (https://en.wikipedia.org/wiki/Equation_of_the_center) O(e^8)
 """
-function ϕ_approx(t::Real, P::Real; e::Real=0.)
+function ϕ_approx(t::Real, P::Real, e::Real)
     @assert (0 <= e <= 1) "eccentricity has to be between 0 and 1"
     M = mean_anomaly(t, P)
-    if e == 0.
-        return M
-    else
-        term_list = [eval_polynomial(e, [0, 2, 0, - 1/4, 0, 5/96, 0, 107/4608]),
-        eval_polynomial(e, [0, 0, 5/4, 0, -11/24, 0, 17/192, 0]),
-        eval_polynomial(e, [0, 0, 0, 13/12, 0, -43/64, 0, 95/512]),
-        eval_polynomial(e, [0, 0, 0, 0, 103/96, 0, -451/480, 0]),
-        eval_polynomial(e, [0, 0, 0, 0, 0, 1097/960, 0, -5957/4608]),
-        eval_polynomial(e, [0, 0, 0, 0, 0, 0, 1223/960, 0]),
-        eval_polynomial(e, [0, 0, 0, 0, 0, 0, 0, 47273/32256])]
-        sin_list = [sin(i * M) for i in 1:7]
-        return M + dot(term_list, sin_list)
-    end
+
+    term_list = [eval_polynomial(e, [0, 2, 0, - 1/4, 0, 5/96, 0, 107/4608]),
+    eval_polynomial(e, [0, 0, 5/4, 0, -11/24, 0, 17/192, 0]),
+    eval_polynomial(e, [0, 0, 0, 13/12, 0, -43/64, 0, 95/512]),
+    eval_polynomial(e, [0, 0, 0, 0, 103/96, 0, -451/480, 0]),
+    eval_polynomial(e, [0, 0, 0, 0, 0, 1097/960, 0, -5957/4608]),
+    eval_polynomial(e, [0, 0, 0, 0, 0, 0, 1223/960, 0]),
+    eval_polynomial(e, [0, 0, 0, 0, 0, 0, 0, 47273/32256])]
+
+    sin_list = [sin(i * M) for i in 1:7]
+
+    return M + dot(term_list, sin_list)
+
 end
 
-function ϕ_approx(t::Real, P::Quantity; e::Real=0.)
-    return ϕ_approx(t, convert_and_strip_units(u"yr", P); e=e, iter=iter)
+function ϕ_approx(t::Real, P::Quantity, e::Real)
+    return ϕ_approx(t, convert_and_strip_units(u"yr", P), e)
 end
 
 
@@ -95,7 +89,7 @@ adapted from eq. 11 of (http://exoplanets.astro.yale.edu/workshop/EPRV/Bibliogra
 """
 function kepler_rv(K::Real, t::Real, P::Real; e::Real=0., i::Real=pi/2, ω::Real=0., γ::Real=0.)
     assert_positive(P)
-    return K * (e * cos(ω) + cos(ω + ϕ(t, P, e=e))) + γ
+    return K * (e * cos(ω) + cos(ω + ϕ(t, P, e))) + γ
 end
 
 function kepler_rv(t::Union{Real, Quantity}, P::Union{Real, Quantity}, m_star::Union{Real, Quantity}, m_planet::Union{Real, Quantity}; e::Real=0., i::Real=pi/2, ω::Real=0., γ::Real=0.)
@@ -147,7 +141,7 @@ function remove_kepler!(data::Array{T1,1}, times::Array{T2,1}, P::Real, covarian
     end
     amount_of_total_samp_points = length(data)
     amount_of_samp_points = length(times)
-    kepler_rv_linear_terms = hcat(cos.(ϕ.(times, P)), sin.(ϕ.(times, P)), ones(length(times)))
+    kepler_rv_linear_terms = hcat(cos.(mean_anomaly.(times, P)), sin.(mean_anomaly.(times, P)), ones(length(times)))
     if amount_of_total_samp_points > amount_of_samp_points
         kepler_linear_terms = vcat(kepler_rv_linear_terms, zeros(amount_of_total_samp_points - amount_of_samp_points, 3))
     else
