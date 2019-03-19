@@ -72,14 +72,13 @@ function ϕ_approx(t::Real, P::Real; e::Real=0.)
     if e == 0.
         return M
     else
-        e_list = [e ^ i for i in 1:7]
-        term_list = [2 * e_list[1] - 1/4 * e_list[3] + 5/96 * e_list[5] + 107/4608 * e_list[7],
-        5/4 * e_list[2] - 11/24 * e_list[4] + 17/192 * e_list[6],
-        13/12 * e_list[3] - 43/64 * e_list[5] + 95/512 * e_list[7],
-        103/96 * e_list[4] - 451/480 * e_list[6],
-        1097/960 * e_list[5] - 5957/4608 * e_list[7],
-        1223/960 * e_list[6],
-        47273/32256 * e_list[7]]
+        term_list = [eval_polynomial(e, [0, 2, 0, - 1/4, 0, 5/96, 0, 107/4608]),
+        eval_polynomial(e, [0, 0, 5/4, 0, -11/24, 0, 17/192, 0]),
+        eval_polynomial(e, [0, 0, 0, 13/12, 0, -43/64, 0, 95/512]),
+        eval_polynomial(e, [0, 0, 0, 0, 103/96, 0, -451/480, 0]),
+        eval_polynomial(e, [0, 0, 0, 0, 0, 1097/960, 0, -5957/4608]),
+        eval_polynomial(e, [0, 0, 0, 0, 0, 0, 1223/960, 0]),
+        eval_polynomial(e, [0, 0, 0, 0, 0, 0, 0, 47273/32256])]
         sin_list = [sin(i * M) for i in 1:7]
         return M + dot(term_list, sin_list)
     end
@@ -116,14 +115,14 @@ coefficients[1] = K * cos(ω)
 coefficients[2] = -K * sin(ω)
 coefficients[3] = K * e * cos(ω) + γ
 
-for the e=0 case, ϕ(t,P) is actually taking the place of ϕ(t+offset,P) 
+for the e=0 case, mean_anomaly(t,P) is actually taking the place of mean_anomaly(t+offset,P)
 """
 function kepler_rv_linear(t, P::Union{Real, Quantity}, coefficients::Array{T,1}) where {T<:Real}
     @assert length(coefficients) == 3 "wrong number of coefficients"
     P = convert_and_strip_units(u"yr", P)
     assert_positive(P)
     t = convert_and_strip_units.(u"yr", t)
-    return (coefficients[1] .* cos.(ϕ.(t, P))) + (coefficients[2] .* sin.(ϕ.(t, P))) + (coefficients[3] .* ones(length(t)))
+    return (coefficients[1] .* cos.(mean_anomaly.(t, P))) + (coefficients[2] .* sin.(mean_anomaly.(t, P))) + (coefficients[3] .* ones(length(t)))
 end
 
 

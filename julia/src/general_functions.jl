@@ -136,12 +136,12 @@ n is the order of derivative
 h is the step size
 """
 function finite_differences(f, x::Real, n::Integer, h::Real)
-    return sum([(-1) ^ i * binomial(n, i) * f(x + (n / 2 - i) * h) for i in 0:n] / h ^ n)
+    return sum([(2 * iseven(i) - 1) * binomial(n, i) * f(x + (n / 2 - i) * h) for i in 0:n] / h ^ n)
 end
 
 
 "Return evenly spaced numbers over a specified interval. Equivalent to range but without the keywords"
-linspace(start::Real, stop::Real, length::Integer) = collect(range(start, stop=stop, length=length))
+linspace(start::Real, stop::Real, length::Integer) = range(start, stop=stop, length=length)
 log_linspace(start::Real, stop::Real, length) = exp.(linspace(log(start), log(stop), length))
 
 
@@ -204,7 +204,7 @@ end
 function find_modes(data::Array{T,1}; amount::Integer=3) where {T<:Real}
 
     # creating index list for inds at modes
-    mode_inds = [i for i in 2:(length(data)-1) if (data[i]>=data[i-1]) & (data[i]>=data[i+1])]
+    mode_inds = [i for i in 2:(length(data)-1) if (data[i]>=data[i-1]) && (data[i]>=data[i+1])]
     if data[1] > data[2]
         prepend!(mode_inds, 1)
     end
@@ -212,18 +212,9 @@ function find_modes(data::Array{T,1}; amount::Integer=3) where {T<:Real}
         append!(mode_inds, length(data))
     end
 
-    # get data values at each mode
-    data_modes = data[mode_inds]
+    # return highest mode indices
+    return mode_inds[partialsortperm(-data[mode_inds], 1:amount)]
 
-    # collect highest mode indices
-    best_mode_inds = Array{Int64}(undef, amount)
-    data_min = minimum(data)
-    for i in 1:amount
-        hold = argmax(data_modes)
-        best_mode_inds[i] = mode_inds[hold]
-        data_modes[hold] = data_min
-    end
-    return best_mode_inds
 end
 
 
@@ -240,14 +231,12 @@ Nyquist frequency is half of the sampling rate of a discrete signal processing s
 (https://en.wikipedia.org/wiki/Nyquist_frequency)
 divide by another factor of 4 for uneven spacing
 """
-function nyquist_frequency(times::Array{T,1}; uneven::Bool=false) where {T<:Real}
+function nyquist_frequency(times::Array{T,1}; scale::Real=1) where {T<:Real}
     time_span = times[end] - times[1]
-    nyquist_freq = amount_of_samp_points / time_span / 2
-    if uneven==true
-        nyquist_freq /= 4
-    end
-    return nyquist_freq
+    return amount_of_samp_points / time_span / 2 / scale
 end
+
+uneven_nyquist_frequency(times; scale=4) = nyquist_frequency(times; scale=scale)
 
 
 import Base.ndims
@@ -256,3 +245,13 @@ ndims(A::Cholesky{T,Array{T,2}}) where {T<:Any} = 2
 
 "an empty function, so that a function that requires another function to be passed can use this as a default"
 do_nothing() = nothing
+
+
+"evaluate a polynomial. Originally provided by Eric Ford"
+function eval_polynomial(x::Number,a::Array{T,1}) where T<:Number
+    sum = a[end]
+    for i in (length(a)-1):-1:1
+        sum = a[i]+x*sum
+    end
+    return sum
+end

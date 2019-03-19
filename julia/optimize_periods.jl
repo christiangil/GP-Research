@@ -39,7 +39,7 @@ fake_data[1:amount_of_samp_points] += planet_rvs/normals[1]
 
 # sample linearly in frequency space so that we get periods from the 1 / uneven Nyquist
 # frequency to 4 times the total timespan of the data
-freq_grid = linspace(1 / (times_obs[end] - times_obs[1]) / 4, nyquist_frequency(times_obs; uneven=true), amount_of_periods)
+freq_grid = linspace(1 / (times_obs[end] - times_obs[1]) / 4, uneven_nyquist_frequency(times_obs), amount_of_periods)
 period_grid = 1 ./ reverse(freq_grid)
 
 likelihoods = kep_signal_likelihood(period_grid, times_obs, fake_data, problem_def_528, total_hyperparameters)
