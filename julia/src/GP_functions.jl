@@ -575,7 +575,10 @@ function reconstruct_total_hyperparameters(prob_def::Jones_problem_definition, n
 end
 
 
-"imports the specified kernel and returns the number of hyperparameters it uses"
+"""
+Tries to include the specified kernel from common directories
+Returns the number of hyperparameters it uses
+"""
 function include_kernel(kernel_name::String)
     try
         return include("src/kernels/$kernel_name.jl")

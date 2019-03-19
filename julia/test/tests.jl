@@ -14,7 +14,7 @@ end
 @testset "hyperparameter gradients" begin
     old_dir = pwd()
     cd(@__DIR__)
-    include_kernel("Quasi_periodic_kernel")
+    include_kernel("quasi_periodic_kernel")
     @load "../jld2_files/sample_problem_def.jld2" sample_problem_def
     cd(old_dir)
 

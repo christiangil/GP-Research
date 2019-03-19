@@ -4,6 +4,10 @@
 using PyPlot
 
 
+# make it so that plot windowsa don't appear
+matplotlib.use("Agg")
+
+
 "set axes and tick label font sizes for PyPlot plots"
 function set_font_sizes(ax; axes::Real=30., ticks::Real=24., title::Real=45.)
 
