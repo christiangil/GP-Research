@@ -128,7 +128,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
 
     write(io, string("    return float(func)\n\n"))
     write(io, "end\n\n\n")
-    write(io, "return $num_kernel_hyperparameters  # the number of kernel hyperparameters\n")
+    write(io, "return $kernel_name, $num_kernel_hyperparameters  # the function handle and the number of kernel hyperparameters\n")
     close(io)
 
     @warn "The order of hyperparameters in the function may be different from the order given when you made them in @vars. Check the created function file (or the print statement below) to see what order you need to actually use."

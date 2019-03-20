@@ -167,4 +167,4 @@ function exp_periodic_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, d
 end
 
 
-return 3  # the number of kernel hyperparameters
+return exp_periodic_kernel, 3  # the function handle and the number of kernel hyperparameters

@@ -167,4 +167,4 @@ function quasi_periodic_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}},
 end
 
 
-return 3  # the number of kernel hyperparameters
+return quasi_periodic_kernel, 3  # the function handle and the number of kernel hyperparameters

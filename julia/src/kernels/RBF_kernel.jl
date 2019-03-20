@@ -93,4 +93,4 @@ function rbf_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real;
 end
 
 
-return 1  # the number of kernel hyperparameters
+return rbf_kernel, 1  # the function handle and the number of kernel hyperparameters

@@ -49,7 +49,3 @@ function plot_im(A; file::String="")
     end
     PyPlot.close_figs()
 end
-
-
-"make the figure show up in Atom plot pane"
-draw_fig_atom() = fig[:canvas][:draw]()

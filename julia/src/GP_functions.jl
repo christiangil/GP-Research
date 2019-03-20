@@ -25,26 +25,52 @@ struct Jones_problem_definition{T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real
     coeff_orders::Array{T5,6}
 end
 
-"Ensure that Jones_problem_definition is constructed correctly"
-function build_problem_definition(kernel_func::Function, num_kernel_hyperparameters::Integer, n_dif::Integer, n_out::Integer, x_obs::Array{T1,1}, x_obs_units::String, y_obs::Array{T2,1}, y_obs_units::String, noise::Array{T3,1}, a0::Array{T4,2}, coeff_orders::Array{T5,6}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
-    @assert isfinite(kernel_func(ones(num_kernel_hyperparameters), randn(); dorder=zeros(2 + num_kernel_hyperparameters)))  # make sure the kernel is valid by testing a sample input
+
+"Jones_problem_definition without kernel information"
+struct Jones_problem_definition_base{T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+    n_dif::Integer  # amount of times you are differenting the base kernel
+    n_out::Integer  # amount of scores you are jointly modelling
+    x_obs::Array{T1,1} # the observation times/phases
+    x_obs_units::String  # the units of x_bs
+    y_obs::Array{T2,1}  # the flattened, observed data
+    y_obs_units::String  # the units of y_obs
+    noise::Array{T3,1}  # the measurement noise at all observations
+    a0::Array{T4,2}  # the meta kernel coefficients
+    # The powers that each a0 coefficient
+    # is taken to for each part of the matrix construction
+    # used for constructing differentiated versions of the kernel
+    coeff_orders::Array{T5,6}
+end
+
+
+"Ensure that the passed problem definition parameters are what we expect them to be"
+function check_problem_definition(n_dif::Integer, n_out::Integer, x_obs::Array{T1,1}, x_obs_units::String, y_obs::Array{T2,1}, y_obs_units::String, noise::Array{T3,1}, a0::Array{T4,2}, coeff_orders::Array{T5,6}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
     @assert n_dif>0
     @assert n_out>0
     @assert (length(x_obs) * n_out) == length(y_obs)
     @assert length(y_obs) == length(noise)
     @assert size(a0) == (n_out, n_dif)
-    @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)
-    return Jones_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, a0, coeff_orders)
+    @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)  # maybe unnecessary due to the fact that we construct it
 end
 
-"construct the coefficient_orders for Jones_problem_definition if they weren't passed"
-function build_problem_definition(kernel_func::Function, num_kernel_hyperparameters::Integer, n_dif::Integer, n_out::Integer, x_obs::Array{T1,1}, x_obs_units::String, y_obs::Array{T2,1}, y_obs_units::String, noise::Array{T3,1}, a0::Array{T4,2}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
-    build_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, a0, coefficient_orders(n_out, n_dif, a=a0))
+
+"Ensure that Jones_problem_definition_base is constructed correctly"
+function build_problem_definition(n_dif::Integer, n_out::Integer, x_obs::Array{T1,1}, x_obs_units::String, y_obs::Array{T2,1}, y_obs_units::String, noise::Array{T3,1}, a0::Array{T4,2}, coeff_orders::Array{T5,6}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+    check_problem_definition(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, a0, coeff_orders)
+    return Jones_problem_definition_base(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, a0, coeff_orders)
 end
+
+"Calculate the coeffficient orders for Jones_problem_definition_base construction if they weren't passed"
+build_problem_definition(n_dif::Integer, n_out::Integer, x_obs::Array{T1,1}, x_obs_units::String, y_obs::Array{T2,1}, y_obs_units::String, noise::Array{T3,1}, a0::Array{T4,2}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real} = build_problem_definition(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, a0, coefficient_orders(n_out, n_dif, a=a0))
 
 "build_problem_definition setting empty values for y_obs and measurement noise"
-function build_problem_definition(kernel_func::Function, num_kernel_hyperparameters::Integer, n_dif::Integer, n_out::Integer, x_obs::Array{T1,1}, x_obs_units::String, a0::Array{T2,2}) where {T1<:Real, T2<:Real}
-    build_problem_definition(kernel_func, num_kernel_hyperparameters, n_dif, n_out, x_obs, x_obs_units, zeros(length(x_obs) * n_out), "", zeros(length(x_obs) * n_out), a0)
+build_problem_definition(n_dif::Integer, n_out::Integer, x_obs::Array{T1,1}, x_obs_units::String, a0::Array{T2,2}) where {T1<:Real, T2<:Real} = build_problem_definition(n_dif, n_out, x_obs, x_obs_units, zeros(length(x_obs) * n_out), "", zeros(length(x_obs) * n_out), a0)
+
+"Construct Jones_problem_definition by adding kernel information to Jones_problem_definition_base"
+function build_problem_definition(kernel_func::Function, num_kernel_hyperparameters::Integer, prob_def_base::Jones_problem_definition_base)
+    @assert isfinite(kernel_func(ones(num_kernel_hyperparameters), randn(); dorder=zeros(2 + num_kernel_hyperparameters)))  # make sure the kernel is valid by testing a sample input
+    check_problem_definition(prob_def_base.n_dif, prob_def_base.n_out, prob_def_base.x_obs, prob_def_base.x_obs_units, prob_def_base.y_obs, prob_def_base.y_obs_units, prob_def_base.noise, prob_def_base.a0, prob_def_base.coeff_orders)  # might be unnecessary
+    return Jones_problem_definition(kernel_func, num_kernel_hyperparameters, prob_def_base.n_dif, prob_def_base.n_out, prob_def_base.x_obs, prob_def_base.x_obs_units, prob_def_base.y_obs, prob_def_base.y_obs_units, prob_def_base.noise, prob_def_base.a0, prob_def_base.coeff_orders)
 end
 
 

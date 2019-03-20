@@ -130,4 +130,4 @@ function periodic_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::
 end
 
 
-return 2  # the number of kernel hyperparameters
+return periodic_kernel, 2  # the function handle and the number of kernel hyperparameters

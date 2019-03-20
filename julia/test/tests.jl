@@ -41,9 +41,9 @@ end
     test_time = rand()
     P=2.
     ecc=0.01
-    @test isapprox(ϕ(test_time, P; e=ecc), ϕ_approx(test_time, P; e=ecc); rtol=1e-2)
-    @test ϕ(test_time, P; e=ecc)!=mean_anomaly(test_time, P)
-    @test ϕ_approx(test_time, P; e=ecc)!=mean_anomaly(test_time, P)
+    @test isapprox(ϕ(test_time, P, ecc), ϕ_approx(test_time, P, ecc); rtol=1e-2)
+    @test ϕ(test_time, P, ecc)!=mean_anomaly(test_time, P)
+    @test ϕ_approx(test_time, P, ecc)!=mean_anomaly(test_time, P)
     println()
 end
 
