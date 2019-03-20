@@ -1,6 +1,6 @@
 #adding in custom functions
 include("src/all_functions.jl")
-run_tests()
+# run_tests()
 
 # can use this if you want to replicate results
 # srand(1234)
@@ -8,13 +8,14 @@ run_tests()
 # loading in data
 using JLD2, FileIO
 
-@load "jld2_files/problem_def_base.jld2" problem_def_base normals
+@load "jld2_files/problem_def_base_full.jld2" problem_def_base_full normals
 
-kernel_names = ["quasi_periodic_kernel", "periodic_kernel", "rbf_kernel", "exp_periodic_kernel"]
+# kernel_names = ["quasi_periodic_kernel", "periodic_kernel", "rbf_kernel", "exponential_kernel", "exp_periodic_kernel", "matern32_kernel", "matern52_kernel", "rq_kernel"]
+kernel_names = ["quasi_periodic_kernel", "rbf_kernel", "rq_kernel"]
 if length(ARGS)>0
     kernel_name = kernel_names[parse(Int, ARGS[1])]
 else
-    kernel_name = kernel_names[1]
+    kernel_name = kernel_names[3]
 end
 
 mkpath("figs/gp/$kernel_name/training")
