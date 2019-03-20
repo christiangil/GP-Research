@@ -30,7 +30,7 @@ end
 
 function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::Array{T,1}; show::Integer=5, file::String="", find_post::Bool=true, plot_K::Bool=false, filetype::String="png") where {T<:Real}
 
-    x_samp = linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points)
+    x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points))
     amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out
     amount_of_measurements = length(prob_def.x_obs)
 

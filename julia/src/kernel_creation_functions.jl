@@ -114,6 +114,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
                 symbolic_kernel_str = replace(symbolic_kernel_str, " 0.0 - "=>" -")
                 symbolic_kernel_str = replace(symbolic_kernel_str, " 0.0 + "=>" ")
                 symbolic_kernel_str = replace(symbolic_kernel_str, " 1.0*"=>" ")
+                symbolic_kernel_str = replace(symbolic_kernel_str, "-1.0*"=>"-")
             end
 
             write(io, symbolic_kernel_str)

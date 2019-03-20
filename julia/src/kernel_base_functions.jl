@@ -71,7 +71,7 @@ function quasi_periodic_kernel_base(hyperparameters::Union{Array{T,1},Array{Basi
     hyperparameters = check_hyperparameters(hyperparameters, 3+1)
     kernel_amplitude, RBF_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
 
-    return RBF_kernel_base([RBF_kernel_length], dif) * Periodic_kernel_base([P_kernel_period, P_kernel_length], dif)
+    return rbf_kernel_base([RBF_kernel_length], dif) * periodic_kernel_base([P_kernel_period, P_kernel_length], dif)
 end
 
 
@@ -80,8 +80,8 @@ function ou_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::
 
     hyperparameters = check_hyperparameters(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
-
-    return kernel_amplitude * kernel_amplitude * exp(-dif / kernel_length)
+    # sqrt(dif * dif) is used instead of abs(dif) so that symbolic differentiator can handle it
+    return kernel_amplitude * kernel_amplitude * exp(-sqrt(dif * dif) / kernel_length)
 end
 
 
@@ -91,7 +91,7 @@ function exp_periodic_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,
     hyperparameters = check_hyperparameters(hyperparameters, 3+1)
     kernel_amplitude, OU_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
 
-    return OU_kernel_base([OU_kernel_length], dif) * Periodic_kernel_base([P_kernel_period, P_kernel_length], dif)
+    return ou_kernel_base([OU_kernel_length], dif) * periodic_kernel_base([P_kernel_period, P_kernel_length], dif)
 end
 
 
@@ -133,6 +133,28 @@ function matern52_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}},
 end
 
 
+"Matern 7/2 kernel"
+function matern72_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
+
+    hyperparameters = check_hyperparameters(hyperparameters, 1+1)
+    kernel_amplitude, kernel_length = hyperparameters
+
+    x = sqrt(7) * dif / kernel_length
+    return kernel_amplitude * kernel_amplitude * (1 + x + (x * x) / 5 + (x * x * x) / 15) * exp(-x)
+end
+
+
+"Matern 9/2 kernel"
+function matern92_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
+
+    hyperparameters = check_hyperparameters(hyperparameters, 1+1)
+    kernel_amplitude, kernel_length = hyperparameters
+
+    x = sqrt(9) * dif / kernel_length
+    return kernel_amplitude * kernel_amplitude * (1 + x + 3 * (x * x) / 7 + 2 * (x * x * x) / 21 + (x * x * x * x) / 105) * exp(-x)
+end
+
+
 """
 Rational Quadratic kernel (equivalent to adding together many SE kernels
 with different lengthscales. When α→∞, the RQ is identical to the SE.)
@@ -144,7 +166,6 @@ function rq_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::
     hyperparameters = check_hyperparameters(hyperparameters, 2+1)
     kernel_amplitude, kernel_length, alpha = hyperparameters
 
-    alpha = max(alpha, 0)
     return kernel_amplitude * kernel_amplitude * (1 + dif_sq / (2 * alpha * kernel_length * kernel_length)) ^ -alpha
 end
 
