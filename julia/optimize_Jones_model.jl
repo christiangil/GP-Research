@@ -1,6 +1,6 @@
 #adding in custom functions
 include("src/all_functions.jl")
-# run_tests()
+run_tests()
 
 # can use this if you want to replicate results
 # srand(1234)
@@ -8,20 +8,23 @@ include("src/all_functions.jl")
 # loading in data
 using JLD2, FileIO
 
-@load "jld2_files/problem_def_base_full.jld2" problem_def_base_full normals
-
 # kernel_names = ["quasi_periodic_kernel", "periodic_kernel", "rbf_kernel", "exponential_kernel", "exp_periodic_kernel", "matern32_kernel", "matern52_kernel", "rq_kernel"]
 kernel_names = ["quasi_periodic_kernel", "rbf_kernel", "rq_kernel"]
+
+# if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
 if length(ARGS)>0
     kernel_name = kernel_names[parse(Int, ARGS[1])]
+    @load "jld2_files/problem_def_base_full.jld2" problem_def_base_full normals
+    kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
+    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base_full)
 else
     kernel_name = kernel_names[3]
+    @load "jld2_files/problem_def_base.jld2" problem_def_base normals
+    kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
+    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
 end
 
 mkpath("figs/gp/$kernel_name/training")
-
-kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
 
 ##############################################################################
 # kernel hyper parameters
@@ -30,7 +33,7 @@ kernel_lengths = time_span/10 * ones(problem_definition.n_kern_hyper)
 total_hyperparameters = append!(collect(Iterators.flatten(problem_definition.a0)), kernel_lengths)
 
 # how finely to sample the domain (for plotting)
-amount_of_samp_points = 500
+amount_of_samp_points = convert(Int, max(500, round(2 * sqrt(2) * length(problem_definition.x_obs))))
 
 # total amount of output points
 amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
@@ -41,22 +44,41 @@ Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameter
 using Flux; using Flux.Tracker: track, @grad, data
 
 # Allowing Flux to use the analytical gradients we have calculated
-nLogL_custom(non_zero_hyper) = nlogL_Jones(problem_definition, non_zero_hyper)
-nLogL_custom(non_zero_hyper::TrackedArray) = track(nLogL_custom, non_zero_hyper)
-@grad nLogL_custom(non_zero_hyper) = nLogL_custom(data(non_zero_hyper)), Δ -> tuple(Δ .* ∇nlogL_Jones(problem_definition, data(non_zero_hyper)))
+f_custom(non_zero_hyper) = nlogL_Jones(problem_definition, non_zero_hyper)
+f_custom(non_zero_hyper::TrackedArray) = track(f_custom, non_zero_hyper)
+g_custom() = ∇nlogL_Jones(problem_definition, data(non_zero_hyper_param))
+@grad f_custom(non_zero_hyper) = f_custom(data(non_zero_hyper)), Δ -> tuple(Δ .* g_custom())
 
 # Setting model parameters for Flux
 non_zero_hyper_param = param(total_hyperparameters[findall(!iszero, total_hyperparameters)])
 ps = Flux.params(non_zero_hyper_param)
 
 # Final function wrapper for Flux
-nLogL_custom() = nLogL_custom(non_zero_hyper_param)
+f_custom() = f_custom(non_zero_hyper_param)
 
-# final functions for observing training
-custom_g() = ∇nlogL_Jones(problem_definition, data(non_zero_hyper_param))
-training_plots() = Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)); file="figs/gp/$kernel_name/training/iteration_$(iter_num)_gp")
+# setting things for Flux to use
+flux_data = Iterators.repeated((), 500)  # use at most 500 iterations
+opt = ADAM(0.2)
 
-flux_train_to_target!(nLogL_custom, custom_g, ps; outer_cb=training_plots)
+# save plots as we are training every flux_cb_delay seconds
+# stop training if our gradient norm gets small enough
+flux_cb_delay = 3600 / 2
+@warn "global training_time variable created/reassigned"
+global training_time = 0
+grad_norm_thres = 1e1
+flux_cb = function ()
+    global training_time += flux_cb_delay
+    training_time_str = @sprintf "%.2fh" training_time/3600
+    Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)); file="figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp")
+    grad_norm = norm(g_custom())
+    println("Training time: " * training_time_str * " score: ", data(f_custom()), " with gradient norm ", grad_norm)
+    if grad_norm < grad_norm_thres
+        Flux.stop()
+    end
+end
+
+Flux.train!(f_custom, ps, flux_data, opt, cb=Flux.throttle(flux_cb, flux_cb_delay))
+
 # flux_train_to_target!(nLogL_custom, custom_g, ps)
 final_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))
 

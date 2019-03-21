@@ -1,8 +1,9 @@
 
 
 """
-RBF_kernel function created by kernel_coder(). Requires 1 hyperparameters. Likely created using RBF_kernel_base() as an input.
-Use with include("kernels/RBF_kernel.jl").
+rbf_kernel function created by kernel_coder(). Requires 1 hyperparameters. Likely created using rbf_kernel_base() as an input. 
+Use with include("kernels/rbf_kernel.jl").
+hyperparameters == ["kernel_length"]
 """
 function rbf_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
 
@@ -61,7 +62,7 @@ function rbf_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real;
     end
 
     if dorder==[0, 2, 0]
-        func = -1.0*exp((-1/2)*dif^2/kernel_length^2)/kernel_length^2 + exp((-1/2)*dif^2/kernel_length^2)*dif^2/kernel_length^4
+        func = -exp((-1/2)*dif^2/kernel_length^2)/kernel_length^2 + exp((-1/2)*dif^2/kernel_length^2)*dif^2/kernel_length^4
     end
 
     if dorder==[2, 1, 0]
@@ -77,11 +78,11 @@ function rbf_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real;
     end
 
     if dorder==[2, 0, 0]
-        func = -1.0*exp((-1/2)*dif^2/kernel_length^2)/kernel_length^2 + exp((-1/2)*dif^2/kernel_length^2)*dif^2/kernel_length^4
+        func = -exp((-1/2)*dif^2/kernel_length^2)/kernel_length^2 + exp((-1/2)*dif^2/kernel_length^2)*dif^2/kernel_length^4
     end
 
     if dorder==[1, 0, 0]
-        func = -1.0*exp((-1/2)*dif^2/kernel_length^2)*dif/kernel_length^2
+        func = -exp((-1/2)*dif^2/kernel_length^2)*dif/kernel_length^2
     end
 
     if dorder==[0, 0, 0]

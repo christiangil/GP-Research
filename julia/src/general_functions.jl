@@ -3,7 +3,7 @@
 using LinearAlgebra
 using Distributed
 using IterativeSolvers
-using Printf
+using Printf  # for formatting print statements
 
 
 "a generalized version of the built in append!() function"

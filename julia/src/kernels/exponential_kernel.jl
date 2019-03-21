@@ -3,6 +3,7 @@
 """
 exponential_kernel function created by kernel_coder(). Requires 1 hyperparameters. Likely created using exponential_kernel_base() as an input. 
 Use with include("kernels/exponential_kernel.jl").
+hyperparameters == ["OU_kernel_length"]
 """
 function exponential_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
 

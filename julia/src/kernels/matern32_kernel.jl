@@ -3,6 +3,7 @@
 """
 matern32_kernel function created by kernel_coder(). Requires 1 hyperparameters. Likely created using matern32_kernel_base() as an input. 
 Use with include("kernels/matern32_kernel.jl").
+hyperparameters == ["kernel_length"]
 """
 function matern32_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
 

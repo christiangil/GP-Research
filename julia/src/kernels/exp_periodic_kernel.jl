@@ -3,6 +3,7 @@
 """
 exp_periodic_kernel function created by kernel_coder(). Requires 3 hyperparameters. Likely created using exp_periodic_kernel_base() as an input. 
 Use with include("kernels/exp_periodic_kernel.jl").
+hyperparameters == ["P_kernel_length", "P_kernel_period", "OU_kernel_length"]
 """
 function exp_periodic_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
 
@@ -39,7 +40,7 @@ function exp_periodic_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, d
     end
 
     if dorder==[0, 1, 0, 0, 1]
-        func = -1.0*exp(-2*sin(pi*dif/P_kernel_period)^2/P_kernel_length^2 - abs(dif)/OU_kernel_length)*dif/(abs(dif)*OU_kernel_length^2) + exp(-2*sin(pi*dif/P_kernel_period)^2/P_kernel_length^2 - abs(dif)/OU_kernel_length)*abs(dif)*(dif/(abs(dif)*OU_kernel_length) + 4*pi*sin(pi*dif/P_kernel_period)*cos(pi*dif/P_kernel_period)/(P_kernel_length^2*P_kernel_period))/OU_kernel_length^2
+        func = -exp(-2*sin(pi*dif/P_kernel_period)^2/P_kernel_length^2 - abs(dif)/OU_kernel_length)*dif/(abs(dif)*OU_kernel_length^2) + exp(-2*sin(pi*dif/P_kernel_period)^2/P_kernel_length^2 - abs(dif)/OU_kernel_length)*abs(dif)*(dif/(abs(dif)*OU_kernel_length) + 4*pi*sin(pi*dif/P_kernel_period)*cos(pi*dif/P_kernel_period)/(P_kernel_length^2*P_kernel_period))/OU_kernel_length^2
     end
 
     if dorder==[2, 0, 0, 0, 1]

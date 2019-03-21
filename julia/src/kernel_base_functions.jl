@@ -14,16 +14,6 @@ function check_hyperparameters(hyper::Union{Array{T,1},Array{Basic,1}}, proper_l
 end
 
 
-"Noise GP kernel"
-function noise_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, x1, x2) where {T<:Real}
-
-    hyperparameters = check_hyperparameters(hyperparameters, 0+1)
-    sigma = hyperparameters[1]
-
-    return sigma * sigma
-end
-
-
 "Linear GP kernel"
 function linear_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, x1, x2) where {T<:Real}
 

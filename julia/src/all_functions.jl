@@ -3,7 +3,6 @@
 # importing functions
 include("general_functions.jl")
 include("GP_functions.jl")
-include("Flux_functions.jl")
 include("RV_functions.jl")
 include("PCA_functions.jl")
 include("kernel_base_functions.jl")

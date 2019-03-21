@@ -47,7 +47,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
 
     num_kernel_hyperparameters = sym_amount-2
     # begin to write the function including assertions that the amount of hyperparameters are correct
-    write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"kernels/$kernel_name.jl\").\n\"\"\"\n")
+    write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"kernels/$kernel_name.jl\").\nhyperparameters == $(symbols_str[3:end])\n\"\"\"\n")
     write(io, "function " * kernel_name * "(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}\n\n")
     write(io, "    @assert length(hyperparameters)==$num_kernel_hyperparameters \"hyperparameters is the wrong length\"\n")
     write(io, "    if dorder==zeros(1)\n")

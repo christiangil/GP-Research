@@ -1,8 +1,9 @@
 
 
 """
-Periodic_kernel function created by kernel_coder(). Requires 2 hyperparameters. Likely created using Periodic_kernel_base() as an input.
-Use with include("kernels/Periodic_kernel.jl").
+periodic_kernel function created by kernel_coder(). Requires 2 hyperparameters. Likely created using periodic_kernel_base() as an input. 
+Use with include("kernels/periodic_kernel.jl").
+hyperparameters == ["kernel_period", "kernel_length"]
 """
 function periodic_kernel(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
 
