@@ -1,7 +1,8 @@
 using Distributed
+
 # nworkers()
 # addprocs(length(Sys.cpu_info()) - 1)
-addprocs(7)
+addprocs(11)
 
 #adding custom functions to all processes
 @everywhere include("src/all_functions.jl")
@@ -9,7 +10,7 @@ addprocs(7)
 if length(ARGS)>0
     amount_of_periods = parse(Int, ARGS[1])
 else
-    amount_of_periods = 1024
+    amount_of_periods = 512
 end
 
 # loading in data
@@ -23,12 +24,7 @@ kernel_lengths = [0.6, 2, 2.5]
 total_hyperparameters_og = append!(collect(Iterators.flatten(problem_def_528.a0)), kernel_lengths)
 
 # adding some noise so we aren't using original values
-total_hyperparameters = zeros(length(total_hyperparameters_og))
-for i in 1:length(total_hyperparameters)
-    if total_hyperparameters_og[i]!=0
-        total_hyperparameters[i] = total_hyperparameters_og[i] * (1 + 0.2 * randn())
-    end
-end
+total_hyperparameters = total_hyperparameters_og .* (1 .+ 0.2 * randn(length(total_hyperparameters)))
 
 amount_of_samp_points = length(problem_def_528.x_obs)
 amount_of_total_samp_points = amount_of_samp_points * problem_def_528.n_out
@@ -52,6 +48,8 @@ K_obs = K_observations(problem_def_528, total_hyperparameters)
 
 
 @sync @everywhere include_kernel("quasi_periodic_kernel")
+
+# making necessary variables local to all workers
 for i in 2:(nworkers() + 1)
     remotecall_fetch(()->times_obs, i)
     remotecall_fetch(()->fake_data, i)
@@ -63,16 +61,15 @@ end
 # InteractiveUtils.varinfo()
 # @fetchfrom 2 InteractiveUtils.varinfo()
 
-
 @sync @everywhere kep_signal_likelihood_distributed(period::Real) = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=remove_kepler(fake_data, times_obs, period, K_obs))
-@time pmap(x->kep_signal_likelihood_distributed(x), period_grid, batch_size=floor(amount_of_periods / nworkers()) + 1)
+@time likelihoods = pmap(x->kep_signal_likelihood_distributed(x), period_grid, batch_size=floor(amount_of_periods / nworkers()) + 1)
 
-@everywhere using SharedArrays
-@sync likelihoods = SharedArray{Float64}(length(period_grid))
+@sync @everywhere using SharedArrays
+likelihoods_shared = SharedArray{Float64}(length(period_grid))
 @time @sync @distributed for i in 1:length(period_grid)
-    likelihoods[i] = kep_signal_likelihood_distributed(period_grid[i])
+    likelihoods_shared[i] = kep_signal_likelihood_distributed(period_grid[i])
 end
-likelihoods
+likelihoods_shared
 
 
 # @everywhere using DistributedArrays
