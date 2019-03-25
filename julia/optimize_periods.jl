@@ -5,7 +5,7 @@ run_tests()
 if length(ARGS)>0
     amount_of_periods = parse(Int, ARGS[1])
 else
-    amount_of_periods = 300
+    amount_of_periods = 30
 end
 
 # loading in data
@@ -42,7 +42,7 @@ fake_data[1:amount_of_samp_points] += planet_rvs/normals[1]
 freq_grid = linspace(1 / (times_obs[end] - times_obs[1]) / 4, uneven_nyquist_frequency(times_obs), amount_of_periods)
 period_grid = 1 ./ reverse(freq_grid)
 
-likelihoods = kep_signal_likelihood(period_grid, times_obs, fake_data, problem_def_528, total_hyperparameters)
+likelihoods = kep_signal_likelihoods(period_grid, times_obs, fake_data, problem_def_528, total_hyperparameters)
 
 begin
     ax = init_plot()

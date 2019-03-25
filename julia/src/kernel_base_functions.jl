@@ -4,20 +4,19 @@ using SymEngine
 
 
 "checks the length of hyperparameters against the passed proper_length and adds a unity kernel_amplitude if necessary."
-function check_hyperparameters(hyper::Union{Array{T,1},Array{Basic,1}}, proper_length::Integer) where {T<:Real}
+function check_hyperparameters!(hyper::Union{Array{T,1},Array{Basic,1}}, proper_length::Integer) where {T<:Real}
     if length(hyper) < proper_length
         @assert (length(hyper) + 1) == proper_length "incompatible amount of hyperparameters passed (too few)"
         hyper = prepend!(copy(hyper), [1.])
     end
     @assert length(hyper) == proper_length "incompatible amount of hyperparameters passed (too many)"
-    return hyper
 end
 
 
 "Linear GP kernel"
 function linear_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, x1, x2) where {T<:Real}
 
-    hyperparameters = check_hyperparameters(hyperparameters, 1+1)
+    check_hyperparameters!(hyperparameters, 1+1)
     sigma_b, sigma_a = hyperparameters
 
     return sigma_b * sigma_b * vecdot(x1, x2) + sigma_a * sigma_a
@@ -29,7 +28,7 @@ function rbf_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif:
 
     dif_sq = dif * dif
 
-    hyperparameters = check_hyperparameters(hyperparameters, 1+1)
+    check_hyperparameters!(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
 
     return kernel_amplitude * kernel_amplitude * exp(-dif_sq / (2 * (kernel_length * kernel_length)))
@@ -42,7 +41,7 @@ function periodic_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}},
     # abs_dif = sqrt(dif^2)
     # abs_dif = abs(dif)
 
-    hyperparameters = check_hyperparameters(hyperparameters, 2+1)
+    check_hyperparameters!(hyperparameters, 2+1)
     kernel_amplitude, kernel_period, kernel_length = hyperparameters
 
     # reframed to make it easier for symbolic derivatives to not return NaNs
@@ -58,7 +57,7 @@ end
 "Quasi-periodic kernel"
 function quasi_periodic_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
-    hyperparameters = check_hyperparameters(hyperparameters, 3+1)
+    check_hyperparameters!(hyperparameters, 3+1)
     kernel_amplitude, RBF_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
 
     return rbf_kernel_base([RBF_kernel_length], dif) * periodic_kernel_base([P_kernel_period, P_kernel_length], dif)
@@ -68,7 +67,7 @@ end
 "Ornstein–Uhlenbeck (Exponential) kernel"
 function ou_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
-    hyperparameters = check_hyperparameters(hyperparameters, 1+1)
+    check_hyperparameters!(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
     # sqrt(dif * dif) is used instead of abs(dif) so that symbolic differentiator can handle it
     return kernel_amplitude * kernel_amplitude * exp(-sqrt(dif * dif) / kernel_length)
@@ -78,7 +77,7 @@ end
 "Exponential-periodic kernel"
 function exp_periodic_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
-    hyperparameters = check_hyperparameters(hyperparameters, 3+1)
+    check_hyperparameters!(hyperparameters, 3+1)
     kernel_amplitude, OU_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
 
     return ou_kernel_base([OU_kernel_length], dif) * periodic_kernel_base([P_kernel_period, P_kernel_length], dif)
@@ -88,7 +87,7 @@ end
 "general Matern kernel"
 function matern_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}, nu::Real) where {T<:Real}
 
-    hyperparameters = check_hyperparameters(hyperparameters, 1+1)
+    check_hyperparameters!(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
 
     #limit of the function as it apporaches 0 (see https://en.wikipedia.org/wiki/Mat%C3%A9rn_covariance_function)
@@ -104,7 +103,7 @@ end
 "Matern 3/2 kernel"
 function matern32_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
-    hyperparameters = check_hyperparameters(hyperparameters, 1+1)
+    check_hyperparameters!(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
 
     x = sqrt(3) * dif / kernel_length
@@ -115,7 +114,7 @@ end
 "Matern 5/2 kernel"
 function matern52_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
-    hyperparameters = check_hyperparameters(hyperparameters, 1+1)
+    check_hyperparameters!(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
 
     x = sqrt(5) * dif / kernel_length
@@ -126,7 +125,7 @@ end
 "Matern 7/2 kernel"
 function matern72_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
-    hyperparameters = check_hyperparameters(hyperparameters, 1+1)
+    check_hyperparameters!(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
 
     x = sqrt(7) * dif / kernel_length
@@ -137,7 +136,7 @@ end
 "Matern 9/2 kernel"
 function matern92_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
-    hyperparameters = check_hyperparameters(hyperparameters, 1+1)
+    check_hyperparameters!(hyperparameters, 1+1)
     kernel_amplitude, kernel_length = hyperparameters
 
     x = sqrt(9) * dif / kernel_length
@@ -153,7 +152,7 @@ function rq_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::
 
     dif_sq = dif * dif
 
-    hyperparameters = check_hyperparameters(hyperparameters, 2+1)
+    check_hyperparameters!(hyperparameters, 2+1)
     kernel_amplitude, kernel_length, alpha = hyperparameters
 
     return kernel_amplitude * kernel_amplitude * (1 + dif_sq / (2 * alpha * kernel_length * kernel_length)) ^ -alpha
@@ -168,10 +167,10 @@ http://crsouza.com/2010/03/17/kernel-functions-for-machine-learning-applications
 """
 function bessel_kernel_base(hyperparameters::Union{Array{T,1},Array{Basic,1}}, dif::Union{Basic,Real}; nu=0) where {T<:Real}
 
-    hyperparameters = check_hyperparameters(hyperparameters, 2+1)
+    check_hyperparameters!(hyperparameters, 2+1)
     kernel_amplitude, kernel_length, n = hyperparameters
 
     @assert nu >= 0 "nu must be >= 0"
 
-    return besselj(nu, kernel_length * dif) / (dif ^ (-n * nu))
+    return kernel_amplitude * kernel_amplitude * besselj(nu + 1, kernel_length * dif) / (dif ^ (-n * (nu + 1)))
 end
