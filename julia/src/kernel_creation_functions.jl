@@ -5,7 +5,7 @@ Creates the necessary differentiated versions of base kernels required by the Jo
 You must pass it a SymEngine Basic object with the variables already declared with the @vars command. t1 and t2 must be the first declared variables.
 The created functions will looks like this
 
-    \$kernel_name(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
+    \$kernel_name(hyperparameters::AbstractArray{T1,1}, dif::Real; dorder::AbstractArray{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
 
 For example, you could define a kernel like so:
 
@@ -48,14 +48,14 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     num_kernel_hyperparameters = sym_amount-2
     # begin to write the function including assertions that the amount of hyperparameters are correct
     write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"kernels/$kernel_name.jl\").\nhyperparameters == $(symbols_str[3:end])\n\"\"\"\n")
-    write(io, "function " * kernel_name * "(hyperparameters::Union{Array{T1,1},Array{Any,1}}, dif::Real; dorder::Array{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}\n\n")
+    write(io, "function " * kernel_name * "(hyperparameters::AbstractArray{T1,1}, dif::Real; dorder::AbstractArray{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}\n\n")
     write(io, "    @assert length(hyperparameters)==$num_kernel_hyperparameters \"hyperparameters is the wrong length\"\n")
     write(io, "    if dorder==zeros(1)\n")
     write(io, "        dorder = zeros(length(hyperparameters) + 2)\n")
     write(io, "    else\n")
     write(io, "        @assert length(dorder)==(length(hyperparameters) + 2) \"dorder is the wrong length\"\n")
     write(io, "    end\n")
-    write(io, "    dorder = convert(Array{Int64,1}, dorder)\n\n")
+    write(io, "    dorder = convert(AbstractArray{Int64,1}, dorder)\n\n")
 
 
     # map the hyperparameters that will be passed to this function to the symbol names
@@ -87,7 +87,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     # for each differentiated version of the kernel
     for i in 1:amount_of_dorders
 
-        dorder = convert(Array{Int64,1}, dorders[i, :])
+        dorder = convert(AbstractArray{Int64,1}, dorders[i, :])
 
         # only record another differentiated version of the function if we will actually use it
         # i.e. no instances where differentiations of multiple, non-time symbols are asked for

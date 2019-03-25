@@ -1,6 +1,6 @@
 #adding in custom functions
 include("src/all_functions.jl")
-run_tests()
+# run_tests()
 
 # can use this if you want to replicate results
 # srand(1234)

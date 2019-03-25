@@ -5,7 +5,7 @@ using PyPlot
 
 
 # quick and dirty function for creating plots that show what I want
-function custom_GP_plot(x_samp::Array{T1,1}, show_curves::Array{T2,2}, x_obs::Array{T3,1}, y_obs::Array{T4,1}, σ::Array{T5,1}, mean::Array{T6,1}; errors::Array{T7,1}=zeros(length(x_obs))) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real, T7<:Real}
+function custom_GP_plot(x_samp::AbstractArray{T1,1}, show_curves::AbstractArray{T2,2}, x_obs::AbstractArray{T3,1}, y_obs::AbstractArray{T4,1}, σ::AbstractArray{T5,1}, mean::AbstractArray{T6,1}; errors::AbstractArray{T7,1}=zeros(length(x_obs))) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real, T7<:Real}
 
     @assert size(show_curves, 2)==length(x_samp)==length(mean)==length(σ)
     @assert length(x_obs)==length(y_obs)==length(errors)
@@ -28,7 +28,7 @@ function custom_GP_plot(x_samp::Array{T1,1}, show_curves::Array{T2,2}, x_obs::Ar
 end
 
 
-function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::Array{T,1}; show::Integer=5, file::String="", find_post::Bool=true, plot_K::Bool=false, filetype::String="png") where {T<:Real}
+function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T,1}; show::Integer=5, file::String="", find_post::Bool=true, plot_K::Bool=false, filetype::String="png") where {T<:Real}
 
     x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points))
     amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out

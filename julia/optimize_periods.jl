@@ -1,6 +1,6 @@
 #adding in custom functions
 include("src/all_functions.jl")
-run_tests()
+# run_tests()
 
 if length(ARGS)>0
     amount_of_periods = parse(Int, ARGS[1])
@@ -19,7 +19,7 @@ kernel_lengths = [0.6, 2, 2.5]
 total_hyperparameters_og = append!(collect(Iterators.flatten(problem_def_528.a0)), kernel_lengths)
 
 # adding some noise so we aren't using original values
-total_hyperparameters = total_hyperparameters_og .* (1 .+ 0.2 * randn(length(total_hyperparameters)))
+total_hyperparameters = total_hyperparameters_og .* (1 .+ 0.2 * randn(length(total_hyperparameters_og)))
 
 amount_of_samp_points = length(problem_def_528.x_obs)
 amount_of_total_samp_points = amount_of_samp_points * problem_def_528.n_out

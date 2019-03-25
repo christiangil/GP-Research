@@ -111,7 +111,7 @@ coefficients[3] = K * e * cos(ω) + γ
 
 for the e=0 case, mean_anomaly(t,P) is actually taking the place of mean_anomaly(t+offset,P)
 """
-function kepler_rv_linear(t, P::Union{Real, Quantity}, coefficients::Array{T,1}) where {T<:Real}
+function kepler_rv_linear(t, P::Union{Real, Quantity}, coefficients::AbstractArray{T,1}) where {T<:Real}
     @assert length(coefficients) == 3 "wrong number of coefficients"
     P = convert_and_strip_units(u"yr", P)
     assert_positive(P)
@@ -134,7 +134,7 @@ end
 
 
 "Remove the best-fit circular Keplerian signal from the data"
-function remove_kepler!(data::Array{T1,1}, times::Array{T2,1}, P::Real, covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},Array{T5}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+function remove_kepler!(data::AbstractArray{T1,1}, times::AbstractArray{T2,1}, P::Real, covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},AbstractArray{T5}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
     assert_positive(P)
     for i in 1:ndims(covariance)
         @assert size(covariance,i)==length(data) "covariance incompatible with data"
@@ -151,7 +151,7 @@ function remove_kepler!(data::Array{T1,1}, times::Array{T2,1}, P::Real, covarian
     data[1:amount_of_samp_points] -= kepler_rv_linear(times, P, x)
 end
 
-function remove_kepler(y_obs_w_planet::Array{T1,1}, times::Array{T2,1}, P::Real, covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},Array{T5}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+function remove_kepler(y_obs_w_planet::AbstractArray{T1,1}, times::AbstractArray{T2,1}, P::Real, covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},AbstractArray{T5}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
     y_obs_wo_planet = copy(y_obs_w_planet)
     remove_kepler!(y_obs_wo_planet, times, P, covariance)
     return y_obs_wo_planet
@@ -159,7 +159,7 @@ end
 
 
 "Find GP likelihoods for best fit Keplerian orbit of a specified period"
-function kep_signal_likelihoods(period_grid::Array{T1,1}, times_obs::Array{T2,1}, signal_data::Array{T3,1}, problem_definition::Jones_problem_definition, total_hyperparameters::Array{T4,1}, K_obs::Cholesky{T5,Array{T5,2}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+function kep_signal_likelihoods(period_grid::AbstractArray{T1,1}, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, problem_definition::Jones_problem_definition, total_hyperparameters::AbstractArray{T4,1}, K_obs::Cholesky{T5,Array{T5,2}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
     # @warn "make sure that period_grid and time_obs are in the same units!"
     likelihoods = zeros(length(period_grid))
     new_data = zeros(length(signal_data))
@@ -173,7 +173,7 @@ end
 
 
 "Find GP likelihoods for best fit Keplerian orbit of a specified period"
-function kep_signal_likelihoods(period_grid::Array{T1,1}, times_obs::Array{T2,1}, signal_data::Array{T3,1}, problem_definition::Jones_problem_definition, total_hyperparameters::Array{T4,1}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+function kep_signal_likelihoods(period_grid::AbstractArray{T1,1}, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, problem_definition::Jones_problem_definition, total_hyperparameters::AbstractArray{T4,1}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
     # @warn "make sure that period_grid and time_obs are in the same units!"
     K_obs = K_observations(problem_definition, total_hyperparameters)
     return kep_signal_likelihood(period_grid, times_obs, signal_data, problem_definition, total_hyperparameters, K_obs)

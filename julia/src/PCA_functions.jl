@@ -4,7 +4,7 @@ using HDF5
 using Distributions
 
 "bootstrapping for errors in PCA scores. Takes about 28s per bootstrap on my computer"
-function bootstrap_errors(; boot_amount::Integer=10, time_series_spectra::Array{T,2}=zeros(2,2), hdf5_loc::String="", save_filename::String="jld2_files/bootstrap.jld2") where {T<:Real}
+function bootstrap_errors(; boot_amount::Integer=10, time_series_spectra::AbstractArray{T,2}=zeros(2,2), hdf5_loc::String="", save_filename::String="jld2_files/bootstrap.jld2") where {T<:Real}
 
     @assert ((time_series_spectra != zeros(2,2)) | (hdf5_loc != "")) "either time_series_spectra or hdf5_loc have to be defined"
     if time_series_spectra==zeros(2,2)
@@ -52,7 +52,7 @@ function bootstrap_errors(; boot_amount::Integer=10, time_series_spectra::Array{
     end
 
     error_ests = zeros(num_components, num_spectra)
-    fit_normal(a::Array{T,1}) where {T<:Real} = fit_mle(Normal, a).σ
+    fit_normal(a::AbstractArray{T,1}) where {T<:Real} = fit_mle(Normal, a).σ
 
     for i in 1:num_components
         error_ests[i,:] = mapslices(fit_normal, scores_tot[:, :, i]; dims=1)

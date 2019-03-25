@@ -1,8 +1,10 @@
-using Distributed
+# getting packages ready and making sure they are up to date
+include("src/setup.jl")
+include("src/all_functions.jl")
 
+using Distributed
 # nworkers()
-# addprocs(length(Sys.cpu_info()) - 1)
-addprocs(11)
+addprocs(7)
 
 #adding custom functions to all processes
 @everywhere include("src/all_functions.jl")
@@ -10,7 +12,7 @@ addprocs(11)
 if length(ARGS)>0
     amount_of_periods = parse(Int, ARGS[1])
 else
-    amount_of_periods = 512
+    amount_of_periods = 128
 end
 
 # loading in data
@@ -24,7 +26,7 @@ kernel_lengths = [0.6, 2, 2.5]
 total_hyperparameters_og = append!(collect(Iterators.flatten(problem_def_528.a0)), kernel_lengths)
 
 # adding some noise so we aren't using original values
-total_hyperparameters = total_hyperparameters_og .* (1 .+ 0.2 * randn(length(total_hyperparameters)))
+total_hyperparameters = total_hyperparameters_og .* (1 .+ 0.2 * randn(length(total_hyperparameters_og)))
 
 amount_of_samp_points = length(problem_def_528.x_obs)
 amount_of_total_samp_points = amount_of_samp_points * problem_def_528.n_out
@@ -46,11 +48,9 @@ K_obs = K_observations(problem_def_528, total_hyperparameters)
 
 # @time likelihoods = kep_signal_likelihoods(period_grid, times_obs, fake_data, problem_def_528, K_obs)
 
-
-@sync @everywhere include_kernel("quasi_periodic_kernel")
-
 # making necessary variables local to all workers
-for i in 2:(nworkers() + 1)
+@sync @everywhere include_kernel("quasi_periodic_kernel")
+for i in workers()
     remotecall_fetch(()->times_obs, i)
     remotecall_fetch(()->fake_data, i)
     remotecall_fetch(()->problem_def_528, i)
@@ -62,17 +62,15 @@ end
 # @fetchfrom 2 InteractiveUtils.varinfo()
 
 @sync @everywhere kep_signal_likelihood_distributed(period::Real) = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=remove_kepler(fake_data, times_obs, period, K_obs))
-@time likelihoods = pmap(x->kep_signal_likelihood_distributed(x), period_grid, batch_size=floor(amount_of_periods / nworkers()) + 1)
+@sync @everywhere kep_signal_likelihood_distributed(4)
 
-@sync @everywhere using SharedArrays
+pmap_time = @elapsed likelihoods_pmap = pmap(x->kep_signal_likelihood_distributed(x), period_grid, batch_size=floor(amount_of_periods / nworkers()) + 1)
+
+@everywhere using SharedArrays
 likelihoods_shared = SharedArray{Float64}(length(period_grid))
-@time @sync @distributed for i in 1:length(period_grid)
+@elapsed @sync @distributed for i in 1:length(period_grid)
     likelihoods_shared[i] = kep_signal_likelihood_distributed(period_grid[i])
 end
-likelihoods_shared
 
-
-# @everywhere using DistributedArrays
-# period_grid_dist = distribute(period_grid)
-# @everywhere kep_signal_likelihood_distributed(period_grid::Array{T,1}) where {T<:Real} = kep_signal_likelihood(period_grid, times_obs, fake_data, problem_def_528, K_obs)
-# @time likelihoods = collect(map(kep_signal_likelihood_distributed, period_grid_dist))
+@everywhere using DistributedArrays
+@time likelihoods_dist = collect(map(kep_signal_likelihood_distributed, distribute(period_grid)))
