@@ -176,5 +176,5 @@ end
 function kep_signal_likelihoods(period_grid::AbstractArray{T1,1}, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, problem_definition::Jones_problem_definition, total_hyperparameters::AbstractArray{T4,1}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
     # @warn "make sure that period_grid and time_obs are in the same units!"
     K_obs = K_observations(problem_definition, total_hyperparameters)
-    return kep_signal_likelihood(period_grid, times_obs, signal_data, problem_definition, total_hyperparameters, K_obs)
+    return kep_signal_likelihoods(period_grid, times_obs, signal_data, problem_definition, total_hyperparameters, K_obs)
 end

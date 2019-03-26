@@ -17,14 +17,3 @@ include("kernel_creation_functions.jl")
 include("plotting_functions.jl")
 include("GP_plotting_functions.jl")
 include("diagnostic_functions.jl")
-
-# # running tests
-# include("../test/runtests.jl")
-"tries to include runtests.jl from common directories"
-function run_tests()
-    try
-        return include("test/runtests.jl")
-    catch
-        return include("../test/runtests.jl")
-    end
-end

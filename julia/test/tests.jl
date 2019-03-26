@@ -15,11 +15,11 @@ end
     old_dir = pwd()
     cd(@__DIR__)
     include_kernel("quasi_periodic_kernel")
-    @load "../jld2_files/sample_problem_def.jld2" sample_problem_def
+    @load "../jld2_files/problem_def_sample.jld2" problem_def_sample
     cd(old_dir)
 
-    @test est_dKdθ(sample_problem_def, 1 .+ rand(3); return_bool=true, print_stuff=false)
-    @test test_grad(sample_problem_def, 1 .+ rand(3), print_stuff=false)
+    @test est_dKdθ(problem_def_sample, 1 .+ rand(3); return_bool=true, print_stuff=false)
+    @test test_grad(problem_def_sample, 1 .+ rand(3), print_stuff=false)
     println()
 end
 

@@ -1,11 +1,19 @@
-#adding in custom functions
+# getting packages ready and making sure they are up to date
+include("src/setup.jl")
 include("src/all_functions.jl")
-# run_tests()
+# include("test/runtests.jl")
+
+using Distributed
+# nworkers()
+# addprocs(7)
+
+#adding custom functions to all processes
+@everywhere include("src/all_functions.jl")
 
 if length(ARGS)>0
     amount_of_periods = parse(Int, ARGS[1])
 else
-    amount_of_periods = 30
+    amount_of_periods = 128
 end
 
 # loading in data
@@ -37,20 +45,82 @@ fake_data[1:amount_of_samp_points] += planet_rvs/normals[1]
 freq_grid = linspace(1 / (times_obs[end] - times_obs[1]) / 4, uneven_nyquist_frequency(times_obs), amount_of_periods)
 period_grid = 1 ./ reverse(freq_grid)
 
-likelihoods = kep_signal_likelihoods(period_grid, times_obs, fake_data, problem_def_528, total_hyperparameters)
+K_obs = K_observations(problem_def_528, total_hyperparameters)
 
-begin
-    ax = init_plot()
-    ticklabel_format(style="sci", axis="y", scilimits=(0,0))
-    fig = semilogx(period_grid .* convert_and_strip_units(u"d", 1u"yr"), -likelihoods, color="black")
-    xlabel("Periods (days)")
-    ylabel("GP likelihoods")
-    axvline(x=convert_and_strip_units(u"d", P))
-    title_string = @sprintf "%.0f day, %.2f Earth masses" convert_and_strip_units(u"d",P) convert_and_strip_units(u"Mearth",m_planet)
-    title(title_string, fontsize=30)
-    savefig("figs/rv/test$amount_of_periods.png")
-    PyPlot.close_figs()
+if length(ARGS)>1
+    parallelize = parse(Int, ARGS[2])
+    @assert parallelize >= 0
+else
+    parallelize = 0
 end
+
+if parallelize == 0
+
+    kep_signal_likelihoods(period_grid[1:2], times_obs, fake_data, problem_def_528, total_hyperparameters, K_obs)
+    serial_time = @elapsed likelihoods = kep_signal_likelihoods(period_grid, times_obs, fake_data, problem_def_528, total_hyperparameters, K_obs)
+    println("Serial likelihood calculation took $(serial_time)s")
+
+else
+
+    # making necessary variables local to all workers
+    @sync @everywhere include_kernel("quasi_periodic_kernel")
+    for i in workers()
+        remotecall_fetch(()->times_obs, i)
+        remotecall_fetch(()->fake_data, i)
+        remotecall_fetch(()->problem_def_528, i)
+        remotecall_fetch(()->K_obs, i)
+        remotecall_fetch(()->total_hyperparameters, i)
+    end
+
+    @sync @everywhere kep_signal_likelihood_distributed(period::Real) = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=remove_kepler(fake_data, times_obs, period, K_obs))
+    @sync @everywhere kep_signal_likelihood_distributed(4)  # make sure everything is compiled
+
+
+    if parallelize == 2
+
+        # parallelize with pmap
+        pmap(x->kep_signal_likelihood_distributed(x), [1, 2], batch_size=2)  # make sure everything is compiled
+        parallel_time = @elapsed likelihoods = pmap(x->kep_signal_likelihood_distributed(x), period_grid, batch_size=floor(amount_of_periods / nworkers()) + 1)
+
+    # elseif parallelize == 3
+
+        # # parallelize with SharedArrays
+        # @everywhere using SharedArrays
+        # likelihoods = SharedArray{Float64}(length(period_grid))
+        # @sync @distributed for i in 1:2  # make sure everything is compiled
+        #     likelihoods[i] = kep_signal_likelihood_distributed(period_grid[i])
+        # end
+        # parallel_time = @elapsed @sync @distributed for i in 1:length(period_grid)
+        #     likelihoods[i] = kep_signal_likelihood_distributed(period_grid[i])
+        # end
+
+    else
+
+        # parallelize with DistributedArrays
+        @everywhere using DistributedArrays
+        collect(map(kep_signal_likelihood_distributed, distribute([1, 2])))  # make sure everything is compiled
+        period_grid_dist = distribute(period_grid)
+        parallel_time = @elapsed likelihoods = collect(map(kep_signal_likelihood_distributed, period_grid_dist))
+
+    end
+
+    println("Parallel likelihood calculation took $(parallel_time)s")
+
+end
+
+# begin
+#     ax = init_plot()
+#     ticklabel_format(style="sci", axis="y", scilimits=(0,0))
+#     fig = semilogx(period_grid .* convert_and_strip_units(u"d", 1u"yr"), -likelihoods, color="black")
+#     xlabel("Periods (days)")
+#     ylabel("GP likelihoods")
+#     axvline(x=convert_and_strip_units(u"d", P))
+#     title_string = @sprintf "%.0f day, %.2f Earth masses" convert_and_strip_units(u"d",P) convert_and_strip_units(u"Mearth",m_planet)
+#     title(title_string, fontsize=30)
+#     savefig("figs/rv/test$amount_of_periods.png")
+#     PyPlot.close_figs()
+# end
+
 
 # # three best periods
 # best_period_grid = period_grid[find_modes(-likelihoods)]
