@@ -48,6 +48,13 @@ symbolic_kernel = quasi_periodic_kernel_base([RBF_kernel_length, P_kernel_period
 kernel_name = "quasi_periodic_kernel"
 kernel_coder(symbolic_kernel, kernel_name)
 
+#process for matern52_kernel_base
+
+@vars t1 t2 kernel_length
+symbolic_kernel = matern52_kernel_base(kernel_length, t1 - t2)
+kernel_name = "matern52_kernel"
+kernel_coder(symbolic_kernel, kernel_name)
+
 #process for matern92_kernel_base
 
 @vars t1 t2 kernel_length

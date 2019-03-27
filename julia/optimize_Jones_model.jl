@@ -8,7 +8,7 @@ include("src/all_functions.jl")
 # loading in data
 using JLD2, FileIO
 
-kernel_names = ["quasi_periodic_kernel", "rbf_kernel", "rq_kernel", "matern92_kernel"]
+kernel_names = ["quasi_periodic_kernel", "rbf_kernel", "rq_kernel", "matern52_kernel"]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
 if length(ARGS)>0
@@ -37,10 +37,19 @@ amount_of_samp_points = convert(Int, max(500, round(2 * sqrt(2) * length(problem
 # total amount of output points
 amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
 
+x_samp = collect(linspace(minimum(problem_definition.x_obs), maximum(problem_definition.x_obs), amount_of_samp_points))
+K_samp = covariance(matern52_kernel, x_samp, x_samp, kernel_lengths; dorder=[0, 0], symmetric=false, dKdθ_kernel=0)
+kernel(matern52_kernel, kernel_lengths, x_samp[1], x_samp[end], dorder=[0, 0], dKdθ_kernel=0)
+matern52_kernel(kernel_lengths, x_samp[end]-x_samp[1], dorder=[0,0,0])
+x_samp[1]-x_samp[end]
 
-# x_samp = collect(linspace(minimum(problem_definition.x_obs), maximum(problem_definition.x_obs), amount_of_samp_points))
-# K_samp = covariance(problem_definition, x_samp, x_samp, total_hyperparameters)
-# plot_im(K_samp, file="figs/gp/$kernel_name/initial_gp_K_prior.png")
+
+
+
+
+
+
+plot_im(K_samp, file="test.png")
 
 
 Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/initial_gp", find_post=false, plot_K=true)

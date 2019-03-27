@@ -78,3 +78,8 @@ end
     @test isapprox(std(noise_vect), std(remove_kepler(fake_data, x_samp, 2*pi, measurement_noise)); rtol=5e-1)
     println()
 end
+
+old_dir = pwd()
+cd(@__DIR__)
+include("parallel_rv_test.jl")
+cd(old_dir)

@@ -105,7 +105,9 @@ symmetric = a parameter stating whether the covariance is guarunteed to be symme
 """
 function covariance(kernel_func::Function, x1list::AbstractArray{T1,1}, x2list::AbstractArray{T2,1}, kernel_hyperparameters::AbstractArray{T3,1}; dorder::AbstractArray{T4,1}=[0, 0], symmetric::Bool=false, dKdθ_kernel::Integer=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
 
-    # @assert dKdθ <= length()
+    # no more than 2 time derivatives
+    @assert max(dorder) < 3
+
     # are the list of x's passed identical
     same_x = (x1list == x2list)
 
@@ -209,19 +211,7 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
 
     # return the properly negative differentiated A matrix from the list
     # make it negative or not based on how many times it has been differentiated in the x1 direction
-    A_mat(k, l, A_list) = ((-1) ^ (k - 1)) * A_list[k + l - 1]
-
-
-    # reshaping the list into a format consistent with the explicit calculation
-    # A = Array{Any}(n_dif, n_dif)
-    # for k in 1:n_dif
-    #     for l in 1:n_dif
-    #         A[k, l] =  A_mat(k, l, A_list)
-    #     end
-    # end
-    #
-    # save_A(A)
-    # save_A(A_list)
+    A_mat(k::Integer, l::Integer, A_list) = (2 * isodd(k) - 1) * A_list[k + l - 1]
 
     # assembling the total covariance matrix
     a = reshape(total_hyperparameters[1:num_coefficients], (n_out, n_dif))
