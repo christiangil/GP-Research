@@ -8,20 +8,19 @@ include("src/all_functions.jl")
 # loading in data
 using JLD2, FileIO
 
-# kernel_names = ["quasi_periodic_kernel", "periodic_kernel", "rbf_kernel", "exponential_kernel", "exp_periodic_kernel", "matern32_kernel", "matern52_kernel", "rq_kernel"]
-kernel_names = ["quasi_periodic_kernel", "rbf_kernel", "rq_kernel"]
+kernel_names = ["quasi_periodic_kernel", "rbf_kernel", "rq_kernel", "matern92_kernel"]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
 if length(ARGS)>0
     kernel_name = kernel_names[parse(Int, ARGS[1])]
-    @load "jld2_files/problem_def_base_full.jld2" problem_def_base_full normals
+    @load "jld2_files/problem_def_full_base.jld2" problem_def_full_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base_full)
+    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_full_base)
 else
-    kernel_name = kernel_names[3]
-    @load "jld2_files/problem_def_base.jld2" problem_def_base normals
+    kernel_name = kernel_names[4]
+    @load "jld2_files/problem_def_sample_base.jld2" problem_def_sample_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
+    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_sample_base)
 end
 
 mkpath("figs/gp/$kernel_name/training")
@@ -37,6 +36,12 @@ amount_of_samp_points = convert(Int, max(500, round(2 * sqrt(2) * length(problem
 
 # total amount of output points
 amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
+
+
+# x_samp = collect(linspace(minimum(problem_definition.x_obs), maximum(problem_definition.x_obs), amount_of_samp_points))
+# K_samp = covariance(problem_definition, x_samp, x_samp, total_hyperparameters)
+# plot_im(K_samp, file="figs/gp/$kernel_name/initial_gp_K_prior.png")
+
 
 Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/initial_gp", find_post=false, plot_K=true)
 Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/post_gp", plot_K=true)

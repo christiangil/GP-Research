@@ -8,9 +8,9 @@ include("../all_functions.jl")
 #     dif_sq = dif ^ 2
 #
 #     hyperparameters = check_hyperparameters(hyperparameters, 1+1)
-#     kernel_amplitude, kernel_length = hyperparameters
+#     kernel_length = hyperparameters[1]
 #
-#     return kernel_amplitude ^ 2 * exp(-dif_sq / (2 * (kernel_length ^ 2)))
+#     return exp(-dif_sq / (2 * (kernel_length ^ 2)))
 # end
 #
 # # calculate the necessary derivative versions like so:
@@ -30,7 +30,7 @@ include("../all_functions.jl")
 # process for rbf_kernel_base
 
 @vars t1 t2 kernel_length
-symbolic_kernel = rbf_kernel_base([kernel_length], t1 - t2)
+symbolic_kernel = rbf_kernel_base(kernel_length, t1 - t2)
 kernel_name = "rbf_kernel"
 kernel_coder(symbolic_kernel, kernel_name)
 
@@ -48,33 +48,11 @@ symbolic_kernel = quasi_periodic_kernel_base([RBF_kernel_length, P_kernel_period
 kernel_name = "quasi_periodic_kernel"
 kernel_coder(symbolic_kernel, kernel_name)
 
-#process for exponential_kernel_base
-
-@vars t1 t2 OU_kernel_length
-symbolic_kernel = ou_kernel_base([OU_kernel_length], t1 - t2)
-kernel_name = "exponential_kernel"
-kernel_coder(symbolic_kernel, kernel_name)
-
-#process for exp_periodic_kernel_base
-
-@vars t1 t2 OU_kernel_length P_kernel_period P_kernel_length
-symbolic_kernel = exp_periodic_kernel_base([OU_kernel_length, P_kernel_period, P_kernel_length], t1 - t2)
-kernel_name = "exp_periodic_kernel"
-kernel_coder(symbolic_kernel, kernel_name)
-
-#process for matern32_kernel_base
+#process for matern92_kernel_base
 
 @vars t1 t2 kernel_length
-symbolic_kernel = matern32_kernel_base([kernel_length], t1 - t2)
-kernel_name = "matern32_kernel"
-kernel_coder(symbolic_kernel, kernel_name)
-
-
-#process for matern52_kernel_base
-
-@vars t1 t2 kernel_length
-symbolic_kernel = matern52_kernel_base([kernel_length], t1 - t2)
-kernel_name = "matern52_kernel"
+symbolic_kernel = matern92_kernel_base(kernel_length, t1 - t2)
+kernel_name = "matern92_kernel"
 kernel_coder(symbolic_kernel, kernel_name)
 
 #process for rq_kernel_base

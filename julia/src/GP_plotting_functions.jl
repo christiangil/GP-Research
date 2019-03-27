@@ -39,17 +39,20 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
     # calculate mean, σ, and show_curves
     if find_post
         mean, σ, K_post = GP_posteriors(prob_def, x_samp, total_hyperparameters)
+        if plot_K
+            plot_im(K_post, file = file * "_K_post." * filetype)
+        end
         L = ridge_chol(K_post).L
         for i in 1:show
             show_curves[i,:] = L * randn(amount_of_total_samp_points) + mean
-        end
-        if plot_K
-            plot_im(K_post, file = file * "_K_post." * filetype)
         end
     # if no posterior is being calculated, estimate σ with sampling
     else
         mean = zeros(amount_of_total_samp_points)
         K_samp = covariance(prob_def, x_samp, x_samp, total_hyperparameters)
+        if plot_K
+            plot_im(K_samp, file = file * "_K_prior." * filetype)
+        end
         L = ridge_chol(K_samp).L
 
         # calculate a bunch of GP draws for a σ estimation
@@ -61,9 +64,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
         show_curves[:, :] = storage[1:show, :]
         storage = sort(storage, dims=1)
         σ = storage[Int(round(0.84135 * draws)), :] - storage[Int(round(0.15865 * draws)), :] ./ 2
-        if plot_K
-            plot_im(K_samp, file = file * "_K_prior." * filetype)
-        end
+
     end
 
     for output in 1:prob_def.n_out
