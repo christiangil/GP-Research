@@ -47,9 +47,9 @@ end
 
 
 "Ornstein–Uhlenbeck (Exponential) kernel"
-function ou_kernel_base(kernel_length::Union{Real, Basic}, dif::Union{Basic,Real}) where {T<:Real}
-    # sqrt(dif * dif) used instead of abs(dif) so that symbolic differentiator can deal with it)
-    return exp(-sqrt(dif * dif) / kernel_length)
+function ou_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}) where {T<:Real}
+    # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
+    return exp(-abs_dif / kernel_length)
 end
 
 
@@ -64,47 +64,47 @@ end
 
 
 "general Matern kernel"
-function matern_kernel_base(kernel_length::Union{Real, Basic}, dif::Union{Basic,Real}, nu::Real) where {T<:Real}
+function matern_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}, nu::Real) where {T<:Real}
 
     #limit of the function as it apporaches 0 (see https://en.wikipedia.org/wiki/Mat%C3%A9rn_covariance_function)
     if dif == 0
         return kernel_amplitude * kernel_amplitude
     else
-        # sqrt(dif * dif) used instead of abs(dif) so that symbolic differentiator can deal with it)
-        x = (sqrt(2 * nu) * sqrt(dif * dif)) / kernel_length
+        # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
+        x = (sqrt(2 * nu) * abs_dif) / kernel_length
         return ((2 ^ (1 - nu)) / (gamma(nu))) * x ^ nu * besselk(nu, x)
     end
 end
 
 
 "Matern 3/2 kernel"
-function matern32_kernel_base(kernel_length::Union{Real, Basic}, dif::Union{Basic,Real}) where {T<:Real}
-    # sqrt(dif * dif) used instead of abs(dif) so that symbolic differentiator can deal with it)
-    x = sqrt(3) * sqrt(dif * dif) / kernel_length
+function matern32_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}) where {T<:Real}
+    # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
+    x = sqrt(3) * abs_dif / kernel_length
     return (1 + x) * exp(-x)
 end
 
 
 "Matern 5/2 kernel"
-function matern52_kernel_base(kernel_length::Union{Real, Basic}, dif::Union{Basic,Real}) where {T<:Real}
-    # sqrt(dif * dif) used instead of abs(dif) so that symbolic differentiator can deal with it)
-    x = sqrt(5) * sqrt(dif * dif) / kernel_length
+function matern52_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}) where {T<:Real}
+    # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
+    x = sqrt(5) * abs_dif / kernel_length
     return (1 + x * (1 + x / 3)) * exp(-x)
 end
 
 
 "Matern 7/2 kernel"
-function matern72_kernel_base(kernel_length::Union{Real, Basic}, dif::Union{Basic,Real}) where {T<:Real}
-    # sqrt(dif * dif) used instead of abs(dif) so that symbolic differentiator can deal with it)
-    x = sqrt(7) * sqrt(dif * dif) / kernel_length
+function matern72_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}) where {T<:Real}
+    # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
+    x = sqrt(7) * abs_dif / kernel_length
     return (1 + x * (1 + x * (2 / 5 + x / 15))) * exp(-x)
 end
 
 
 "Matern 9/2 kernel"
-function matern92_kernel_base(kernel_length::Union{Real, Basic}, dif::Union{Basic,Real}) where {T<:Real}
-    # sqrt(dif * dif) used instead of abs(dif) so that symbolic differentiator can deal with it)
-    x = 3 * sqrt(dif * dif) / kernel_length
+function matern92_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}) where {T<:Real}
+    # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
+    x = 3 * abs_dif / kernel_length
     return (1 + x * (1 + x * (3 / 7 + x * (2 / 21 + x / 105)))) * exp(-x)
 end
 

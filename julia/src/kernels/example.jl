@@ -29,42 +29,25 @@ include("../all_functions.jl")
 
 # process for rbf_kernel_base
 
-@vars t1 t2 kernel_length
-symbolic_kernel = rbf_kernel_base(kernel_length, t1 - t2)
-kernel_name = "rbf_kernel"
-kernel_coder(symbolic_kernel, kernel_name)
+@vars dif kernel_length
+kernel_coder(rbf_kernel_base(kernel_length, dif), "rbf_kernel")
 
 # process for periodic_kernel_base
 
-@vars t1 t2 kernel_period kernel_length
-symbolic_kernel = periodic_kernel_base([kernel_period, kernel_length], t1 - t2)
-kernel_name = "periodic_kernel"
-kernel_coder(symbolic_kernel, kernel_name)
+@vars dif kernel_period kernel_length
+kernel_coder(periodic_kernel_base([kernel_period, kernel_length], dif), "periodic_kernel")
 
 # process for quasi_periodic_kernel_base
 
-@vars t1 t2 RBF_kernel_length P_kernel_period P_kernel_length
-symbolic_kernel = quasi_periodic_kernel_base([RBF_kernel_length, P_kernel_period, P_kernel_length], t1 - t2)
-kernel_name = "quasi_periodic_kernel"
-kernel_coder(symbolic_kernel, kernel_name)
+@vars dif RBF_kernel_length P_kernel_period P_kernel_length
+kernel_coder(quasi_periodic_kernel_base([RBF_kernel_length, P_kernel_period, P_kernel_length], dif), "quasi_periodic_kernel")
 
 #process for matern52_kernel_base
 
-@vars t1 t2 kernel_length
-symbolic_kernel = matern52_kernel_base(kernel_length, t1 - t2)
-kernel_name = "matern52_kernel"
-kernel_coder(symbolic_kernel, kernel_name)
-
-#process for matern92_kernel_base
-
-@vars t1 t2 kernel_length
-symbolic_kernel = matern92_kernel_base(kernel_length, t1 - t2)
-kernel_name = "matern92_kernel"
-kernel_coder(symbolic_kernel, kernel_name)
+@vars abs_dif kernel_length
+kernel_coder(matern52_kernel_base(kernel_length, abs_dif), "matern52_kernel")
 
 #process for rq_kernel_base
 
-@vars t1 t2 kernel_length alpha
-symbolic_kernel = rq_kernel_base([kernel_length, alpha], t1 - t2)
-kernel_name = "rq_kernel"
-kernel_coder(symbolic_kernel, kernel_name)
+@vars dif kernel_length alpha
+kernel_coder(rq_kernel_base([kernel_length, alpha], dif), "rq_kernel")

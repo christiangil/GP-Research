@@ -16,11 +16,13 @@ if length(ARGS)>0
     @load "jld2_files/problem_def_full_base.jld2" problem_def_full_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_full_base)
+    flux_cb_delay = 3600 / 2
 else
     kernel_name = kernel_names[4]
     @load "jld2_files/problem_def_sample_base.jld2" problem_def_sample_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_sample_base)
+    flux_cb_delay = 3600 / 100
 end
 
 mkpath("figs/gp/$kernel_name/training")
@@ -36,21 +38,6 @@ amount_of_samp_points = convert(Int, max(500, round(2 * sqrt(2) * length(problem
 
 # total amount of output points
 amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
-
-x_samp = collect(linspace(minimum(problem_definition.x_obs), maximum(problem_definition.x_obs), amount_of_samp_points))
-K_samp = covariance(matern52_kernel, x_samp, x_samp, kernel_lengths; dorder=[0, 0], symmetric=false, dKdθ_kernel=0)
-kernel(matern52_kernel, kernel_lengths, x_samp[1], x_samp[end], dorder=[0, 0], dKdθ_kernel=0)
-matern52_kernel(kernel_lengths, x_samp[end]-x_samp[1], dorder=[0,0,0])
-x_samp[1]-x_samp[end]
-
-
-
-
-
-
-
-plot_im(K_samp, file="test.png")
-
 
 Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/initial_gp", find_post=false, plot_K=true)
 Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/post_gp", plot_K=true)
@@ -76,16 +63,15 @@ opt = ADAM(0.2)
 
 # save plots as we are training every flux_cb_delay seconds
 # stop training if our gradient norm gets small enough
-flux_cb_delay = 3600 / 2
 @warn "global training_time variable created/reassigned"
 global training_time = 0
 grad_norm_thres = 1e1
 flux_cb = function ()
-    global training_time += flux_cb_delay
     training_time_str = @sprintf "%.2fh" training_time/3600
     Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)); file="figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp")
     grad_norm = norm(g_custom())
     println("Training time: " * training_time_str * " score: ", data(f_custom()), " with gradient norm ", grad_norm)
+    global training_time += flux_cb_delay
     if grad_norm < grad_norm_thres
         Flux.stop()
     end
