@@ -12,6 +12,12 @@ git-tree-sha1 = "53d8fec4f662088c1202530e338a11a919407f3b"
 uuid = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 version = "0.4.2"
 
+[[AlgebraicMultigrid]]
+deps = ["Compat", "IterativeSolvers", "Random"]
+git-tree-sha1 = "23f59a45d2c8f792356c98839cda84fcc388c8b0"
+uuid = "2169fc97-5a83-5252-b627-83903c6c433c"
+version = "0.2.1"
+
 [[Arpack]]
 deps = ["BinaryProvider", "Libdl", "LinearAlgebra", "Random", "SparseArrays", "Test"]
 git-tree-sha1 = "1ce1ce9984683f0b6a587d5bdbc688ecb480096f"
@@ -66,6 +72,12 @@ version = "0.2.2"
 [[CRC32c]]
 uuid = "8bf52ea8-c179-5cab-976a-9e18b702a9bc"
 
+[[Cassette]]
+deps = ["InteractiveUtils", "LinearAlgebra", "Test"]
+git-tree-sha1 = "1d00c35118babf85c4a9a72c3d3550d498b64a03"
+uuid = "7057c7e9-c182-5462-911a-8362d720325c"
+version = "0.2.2"
+
 [[CodecZlib]]
 deps = ["BinaryProvider", "Libdl", "Test", "TranscodingStreams"]
 git-tree-sha1 = "36bbf5374c661054d41410dc53ff752972583b9b"
@@ -92,9 +104,9 @@ version = "0.2.0"
 
 [[Compat]]
 deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
-git-tree-sha1 = "195a3ffcb8b0762684b6821de18f83a16455c6ea"
+git-tree-sha1 = "84aa74986c5b9b898b0d1acaf3258741ee64754f"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "2.0.0"
+version = "2.1.0"
 
 [[Conda]]
 deps = ["Compat", "JSON", "VersionParsing"]
@@ -186,6 +198,12 @@ git-tree-sha1 = "f01fb2f34675f9839d55ba7238bab63ebd2e531e"
 uuid = "d9be37ee-ecc9-5288-90f1-b9ca67657a75"
 version = "0.7.1"
 
+[[IncompleteLU]]
+deps = ["LinearAlgebra", "Profile", "Random", "SparseArrays", "Test"]
+git-tree-sha1 = "9d269f1afce521912701bde539209b0d73bb9b94"
+uuid = "40713840-3770-5561-ab4c-a76e7d0d7895"
+version = "0.1.1"
+
 [[InteractiveUtils]]
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
@@ -243,6 +261,12 @@ deps = ["BufferedStreams", "Random", "Test"]
 git-tree-sha1 = "d405194ffc0293c3519d4f7251ce51baac9cc871"
 uuid = "2ec943e9-cfe8-584d-b93d-64dcb6d567b7"
 version = "1.0.0"
+
+[[LimitedLDLFactorizations]]
+deps = ["LinearAlgebra", "SparseArrays", "Test"]
+git-tree-sha1 = "df081c06fdb364ab734f957b9f6cf158110c752e"
+uuid = "f5a24dde-3ab7-510b-b81b-6a72c6098d3b"
+version = "0.2.0"
 
 [[LinearAlgebra]]
 deps = ["Libdl"]
@@ -316,6 +340,12 @@ version = "0.10.3"
 deps = ["Dates", "LibGit2", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
 uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
+[[Preconditioners]]
+deps = ["AlgebraicMultigrid", "Compat", "LimitedLDLFactorizations", "LinearAlgebra", "Random", "SparseArrays", "Test"]
+git-tree-sha1 = "4ef1cead7bf85fefb235710a7538155bd6340498"
+uuid = "af69fa37-3177-5a40-98ee-561f696e4fcd"
+version = "0.2.1"
+
 [[Primes]]
 deps = ["Test"]
 git-tree-sha1 = "ff1a2323cb468ec5f201838fcbe3c232266b1f95"
@@ -332,9 +362,9 @@ uuid = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
 
 [[PyCall]]
 deps = ["Conda", "Dates", "Libdl", "LinearAlgebra", "MacroTools", "Serialization", "Statistics", "Test", "VersionParsing"]
-git-tree-sha1 = "29febb62247356e13ef87bf253d1cda10de74bfc"
+git-tree-sha1 = "5a65d9bfd7099c2baa13d2aecf3cde752092a95b"
 uuid = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
-version = "1.91.0"
+version = "1.91.1"
 
 [[PyPlot]]
 deps = ["Colors", "LaTeXStrings", "PyCall", "Sockets", "Test", "VersionParsing"]
@@ -445,6 +475,12 @@ version = "0.5.0"
 deps = ["Distributed", "InteractiveUtils", "Logging", "Random"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
+[[Traceur]]
+deps = ["Cassette", "InteractiveUtils", "Logging", "MacroTools", "Test"]
+git-tree-sha1 = "c007db8fbec24668a7cdf4a878202abb648d568f"
+uuid = "37b6cedf-1f77-55f8-9503-c64b63398394"
+version = "0.3.0"
+
 [[Tracker]]
 deps = ["Adapt", "DiffRules", "ForwardDiff", "LinearAlgebra", "MacroTools", "NNlib", "NaNMath", "Printf", "Random", "Requires", "SpecialFunctions", "Statistics", "Test"]
 git-tree-sha1 = "4eeea9f0ef9b8c7d1c5c5b1f8f68cb9b7f45d7df"
@@ -502,6 +538,6 @@ version = "0.4.2"
 
 [[ZipFile]]
 deps = ["BinaryProvider", "Libdl", "Printf", "Test"]
-git-tree-sha1 = "4000c633efe994b2e10b31b6d91382c4b7412dac"
+git-tree-sha1 = "5f6f663890dfb9bad6af75a86a43f67904e5050e"
 uuid = "a5390f91-8eb1-5f08-bee0-b1d1ffed6cea"
-version = "0.8.0"
+version = "0.8.1"

@@ -1,7 +1,7 @@
 # getting packages ready and making sure they are up to date
 include("src/setup.jl")
 include("src/all_functions.jl")
-# include("test/runtests.jl")
+include("test/runtests.jl")
 
 using Distributed
 # nworkers()

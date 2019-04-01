@@ -83,3 +83,45 @@ old_dir = pwd()
 cd(@__DIR__)
 include("parallel_rv_test.jl")
 cd(old_dir)
+
+@testset "A \\ b == x working as intended?" begin
+
+    # defining a simple colvariance function
+    rbf(kernel_length, dif) = exp((-1/2)*dif^2/kernel_length^2)
+
+    # getting some basis values
+    x_samp = (0:200)/40
+    x_length = length(x_samp)
+
+    # calculating the covariance matrix
+    K_samp = zeros((x_length, x_length))
+    for i in 1:x_length
+        for j in 1:x_length
+            K_samp[i, j] = rbf(1, x_samp[i] - x_samp[j])
+        end
+    end
+    K_samp += Diagonal(1e-5 * ones(x_length))
+
+    y_samp = randn(length(x_samp))
+
+    # make sure inv is working as intended
+    @test isapprox(K_samp * inv(K_samp), Matrix(I, x_length, x_length); rtol=1e-5)
+    @test isapprox(inv(K_samp) * K_samp, Matrix(I, x_length, x_length))
+
+    sol_inv = inv(K_samp) * y_samp
+    sol_chol = cholesky(K_samp) \ y_samp
+    sol_lmd = K_samp \ y_samp
+    sol_cg = IterativeSolvers.cg(K_samp, y_samp)
+
+    # all methods should give the same results
+    @test isapprox(sol_inv, sol_chol)
+    @test isapprox(sol_inv, sol_lmd)
+    @test isapprox(sol_inv, sol_cg)
+
+    # y_samp should be recoverable
+    @test isapprox(K_samp * sol_inv, y_samp; rtol=1e-5)
+    @test isapprox(K_samp * sol_chol, y_samp)
+    @test isapprox(K_samp * sol_lmd, y_samp)
+    @test isapprox(K_samp * sol_cg, y_samp)
+
+end

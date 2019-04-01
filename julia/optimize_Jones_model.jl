@@ -22,7 +22,7 @@ else
     @load "jld2_files/problem_def_sample_base.jld2" problem_def_sample_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_sample_base)
-    flux_cb_delay = 3600 / 100
+    flux_cb_delay = 3600 / 300
 end
 
 mkpath("figs/gp/$kernel_name/training")
@@ -67,7 +67,7 @@ opt = ADAM(0.2)
 global training_time = 0
 grad_norm_thres = 1e1
 flux_cb = function ()
-    training_time_str = @sprintf "%.2fh" training_time/3600
+    training_time_str = @sprintf "%.3fh" training_time/3600
     Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)); file="figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp")
     grad_norm = norm(g_custom())
     println("Training time: " * training_time_str * " score: ", data(f_custom()), " with gradient norm ", grad_norm)
