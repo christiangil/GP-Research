@@ -64,15 +64,17 @@ else
 
     # making necessary variables local to all workers
     @sync @everywhere include_kernel("quasi_periodic_kernel")
-    for i in workers()
-        remotecall_fetch(()->times_obs, i)
-        remotecall_fetch(()->fake_data, i)
-        remotecall_fetch(()->problem_def_528, i)
-        remotecall_fetch(()->K_obs, i)
-        remotecall_fetch(()->total_hyperparameters, i)
-    end
+    @sync sendto(workers(), times_obs=times_obs, fake_data=fake_data, problem_def_528=problem_def_528, total_hyperparameters=total_hyperparameters)
 
-    @sync @everywhere kep_signal_likelihood_distributed(period::Real) = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=remove_kepler(fake_data, times_obs, period, K_obs))
+    # @sync for i in workers()
+    #     remotecall_fetch(()->times_obs, i)
+    #     remotecall_fetch(()->fake_data, i)
+    #     remotecall_fetch(()->problem_def_528, i)
+    #     remotecall_fetch(()->K_obs, i)
+    #     remotecall_fetch(()->total_hyperparameters, i)
+    # end
+
+    @everywhere kep_signal_likelihood_distributed(period::Real) = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=remove_kepler(fake_data, times_obs, period, K_obs))
     @sync @everywhere kep_signal_likelihood_distributed(4)  # make sure everything is compiled
 
 

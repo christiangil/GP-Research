@@ -5,11 +5,8 @@ using JLD2, FileIO
 old_dir = pwd()
 cd(@__DIR__)
 
-@load "../../jld2_files/sunspot_data.jld2" lambda phases quiet
-@load "../../jld2_files/rv_data.jld2" doppler_comp genpca_out rvs_out
-mu, M, scores = genpca_out
-scores[:, 1] *= 3e8
-scores = scores'
+@load "../../jld2_files/rv_data.jld2" lambda phases quiet doppler_comp mu M scores fracvar rvs
+scores[1, :] *= 299792458  # convert scores from redshifts to radial velocities in m/s
 
 # how many components you will use
 n_out = 3
@@ -27,10 +24,9 @@ total_amount_of_measurements = amount_of_measurements * n_out
 x_obs = convert_phases_to_days.(phases[start_ind:end_ind])
 x_obs_units = "days"
 y_obs_hold = scores[1:n_out, start_ind:end_ind]
-# y_obs_units = "RV + PCA scores"
 @load "../../jld2_files/bootstrap.jld2" error_ests
 measurement_noise_hold = error_ests[1:n_out, start_ind:end_ind]
-measurement_noise_hold[1, :] *= 3e8
+measurement_noise_hold[1, :] *= 299792458  # convert score errors from redshifts to radial velocities in m/s
 
 # rearranging the data into one column (not sure reshape() does what I want)
 # and normalizing the data (for numerical purposes)

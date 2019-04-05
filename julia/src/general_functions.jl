@@ -255,3 +255,17 @@ function eval_polynomial(x::Number, a::AbstractArray{T,1}) where T<:Number
     end
     return sum
 end
+
+
+"""
+For distributed computing. Send a variable to a worker
+stolen shamelessly from ParallelDataTransfer.jl
+e.g.
+sendto([1, 2], x=100, y=rand(2, 3))
+z = randn(10, 10); sendto(workers(), z=z)
+"""
+function sendto(p::Int; args...)
+    for (nm, val) in args
+        @spawnat(p, Core.eval(Main, Expr(:(=), nm, val)))
+    end
+end
