@@ -89,12 +89,12 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
         if find_post
             # put log likelihood on plot
             LogL = nlogL_Jones(prob_def, total_hyperparameters)
-            text(minimum(prob_def.x_obs), 0.9 * maximum([maximum(y_o), maximum(show_curves_o)]), "nLogL: " * string(round(LogL)), fontsize=30)
+            text(minimum(prob_def.x_obs), 0.9 * maximum([maximum(y_o), maximum(show_curves_o)]), "l: " * string(-round(LogL)), fontsize=30)
         end
 
         # put kernel lengths on plot
         kernel_lengths = total_hyperparameters[end-prob_def.n_kern_hyper+1:end]
-        text(minimum(prob_def.x_obs), 1 * minimum([minimum(y_o), minimum(show_curves_o)]), "Lengthscales: " * string(kernel_lengths), fontsize=30)
+        text(minimum(prob_def.x_obs), 1 * minimum([minimum(y_o), minimum(show_curves_o)]), "Hyperparameters: " * string(kernel_lengths), fontsize=30)
         # text(minimum(prob_def.x_obs), 1 *minimum(y_o), "Wavelengths: " * string(kernel_lengths), fontsize=30)
 
         if file!=""

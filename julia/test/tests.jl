@@ -123,5 +123,5 @@ cd(old_dir)
     @test isapprox(K_samp * sol_chol, y_samp)
     @test isapprox(K_samp * sol_lmd, y_samp)
     @test isapprox(K_samp * sol_cg, y_samp)
-
+    println()
 end

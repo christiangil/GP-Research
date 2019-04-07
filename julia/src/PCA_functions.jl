@@ -114,7 +114,7 @@ function bootstrap_errors(time_series_spectra::AbstractArray{T,2}; boot_amount::
     @load "jld2_files/rv_data.jld2" M scores
     scores0 = copy(scores)
 
-    SNR = 1e-2
+    NSR = 1e-2
     num_lambda = size(time_series_spectra, 1)
     num_spectra = size(time_series_spectra, 2)
 
@@ -125,7 +125,7 @@ function bootstrap_errors(time_series_spectra::AbstractArray{T,2}; boot_amount::
     # https://github.com/eford/RvSpectraKitLearn.jl/blob/master/src/generalized_pca.jl
     for k in 1:boot_amount
         scores = zeros(num_components, num_spectra)
-        time_series_spectra_tmp = time_series_spectra .* (1 .+ (SNR .* randn(size(time_series_spectra))))
+        time_series_spectra_tmp = time_series_spectra .* (1 .+ (NSR .* randn(size(time_series_spectra))))
         time_series_spectra_tmp .-= vec(mean(time_series_spectra_tmp, dims=2))
         fixed_comp_norm2 = sum(abs2, view(M, :, 1))
         for i in 1:num_spectra

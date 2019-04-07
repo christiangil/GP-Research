@@ -1,11 +1,10 @@
 # getting packages ready and making sure they are up to date
 include("src/setup.jl")
 include("src/all_functions.jl")
-include("test/runtests.jl")
+# include("test/runtests.jl")
 
 using Distributed
-# nworkers()
-# addprocs(7)
+# addprocs(5)
 
 #adding custom functions to all processes
 @everywhere include("src/all_functions.jl")

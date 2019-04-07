@@ -37,24 +37,36 @@ mean_anomaly(t::Real, P::Real) = 2 * pi * ((t / P) % 1)
 
 
 """
-Iterative solution for true anomaly from mean anomaly
+Iterative solution for eccentric anomaly from mean anomaly
 from (http://www.csun.edu/~hcmth017/master/node16.html)
+could also implement third order method from
+(http://alpheratz.net/dynamics/twobody/KeplerIterations_summary.pdf)
 """
-function ϕ(t::Real, P::Real, e::Real)
+function ecc_anomaly(t::Real, P::Real, e::Real)
     @assert (0 <= e <= 1) "eccentricity has to be between 0 and 1"
     M = mean_anomaly(t, P)
     dif_thres = 1e-8
     dif = 1
-    true_anom = copy(M)
+    ecc_anom = copy(M)
     while dif > dif_thres
-        true_anom_old = copy(true_anom)
-        true_anom -= (true_anom - e * sin(true_anom) - M) / (1 - e * cos(true_anom))
-        dif = abs((true_anom - true_anom_old) / true_anom)
+        ecc_anom_old = copy(ecc_anom)
+        ecc_anom -= (ecc_anom - e * sin(ecc_anom) - M) / (1 - e * cos(ecc_anom))  # first order method
+        dif = abs((ecc_anom - ecc_anom_old) / ecc_anom)
     end
-    return true_anom
+    return ecc_anom
 end
 
+ecc_anomaly(t::Real, P::Quantity, e::Real) = ecc_anomaly(t, convert_and_strip_units(u"yr", P), e)
+
+
+"""
+Solution for true anomaly from eccentric anomaly
+from (https://en.wikipedia.org/wiki/True_anomaly#From_the_eccentric_anomaly)
+"""
+ϕ(t::Real, P::Real, e::Real) = 2 * atan(sqrt((1 + e) / (1 - e)) * tan(ecc_anomaly(t, P, e) / 2))
+
 ϕ(t::Real, P::Quantity, e::Real) = ϕ(t, convert_and_strip_units(u"yr", P), e)
+
 
 """
 Calculate true anomaly for small e using equation of center approximating true
@@ -78,9 +90,7 @@ function ϕ_approx(t::Real, P::Real, e::Real)
 
 end
 
-function ϕ_approx(t::Real, P::Quantity, e::Real)
-    return ϕ_approx(t, convert_and_strip_units(u"yr", P), e)
-end
+ϕ_approx(t::Real, P::Quantity, e::Real) = ϕ_approx(t, convert_and_strip_units(u"yr", P), e)
 
 
 """

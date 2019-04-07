@@ -18,7 +18,7 @@ end
 
 
 "Radial basis function GP kernel (aka squared exonential, ~gaussian)"
-function rbf_kernel_base(kernel_length::Union{Real, Basic}, dif::Union{Basic,Real}) where {T<:Real}
+function se_kernel_base(kernel_length::Union{Real, Basic}, dif::Union{Basic,Real}) where {T<:Real}
     return exp(-dif * dif / (2 * (kernel_length * kernel_length)))
 end
 
@@ -40,9 +40,9 @@ end
 function quasi_periodic_kernel_base(hyperparameters::Union{AbstractArray{T,1}, AbstractArray{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
 
     @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
-    RBF_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
+    SE_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
 
-    return rbf_kernel_base(RBF_kernel_length, dif) * periodic_kernel_base([P_kernel_period, P_kernel_length], dif)
+    return se_kernel_base(SE_kernel_length, dif) * periodic_kernel_base([P_kernel_period, P_kernel_length], dif)
 end
 
 

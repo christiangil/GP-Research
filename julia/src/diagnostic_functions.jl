@@ -125,15 +125,15 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
 end
 
 
-using Juno
-using Profile
-function juno_profile(f::Function)
-    Profile.clear()
-    @profile f()
-    Juno.profiletree()
-    Juno.profiler()
-    @profiler f()
-end
-
-using BenchmarkTools
-using Traceur
+# using Juno
+# using Profile
+# function juno_profile(f::Function)
+#     Profile.clear()
+#     @profile f()
+#     Juno.profiletree()
+#     Juno.profiler()
+#     @profiler f()
+# end
+#
+# using BenchmarkTools
+# using Traceur

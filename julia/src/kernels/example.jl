@@ -27,10 +27,10 @@ include("../all_functions.jl")
 
 #########################################################
 
-# process for rbf_kernel_base
+# process for se_kernel_base
 
 @vars dif kernel_length
-kernel_coder(rbf_kernel_base(kernel_length, dif), "rbf_kernel")
+kernel_coder(se_kernel_base(kernel_length, dif), "se_kernel")
 
 # process for periodic_kernel_base
 
@@ -39,8 +39,8 @@ kernel_coder(periodic_kernel_base([kernel_period, kernel_length], dif), "periodi
 
 # process for quasi_periodic_kernel_base
 
-@vars dif RBF_kernel_length P_kernel_period P_kernel_length
-kernel_coder(quasi_periodic_kernel_base([RBF_kernel_length, P_kernel_period, P_kernel_length], dif), "quasi_periodic_kernel")
+@vars dif SE_kernel_length P_kernel_period P_kernel_length
+kernel_coder(quasi_periodic_kernel_base([SE_kernel_length, P_kernel_period, P_kernel_length], dif), "quasi_periodic_kernel")
 
 #process for matern52_kernel_base
 
