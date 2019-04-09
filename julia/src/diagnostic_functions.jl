@@ -123,17 +123,3 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
     return return_vec
 
 end
-
-
-# using Juno
-# using Profile
-# function juno_profile(f::Function)
-#     Profile.clear()
-#     @profile f()
-#     Juno.profiletree()
-#     Juno.profiler()
-#     @profiler f()
-# end
-#
-# using BenchmarkTools
-# using Traceur

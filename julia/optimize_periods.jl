@@ -20,9 +20,7 @@ end
 # loading in data
 using JLD2, FileIO
 
-kernel_names = ["quasi_periodic_kernel", "se_kernel", "rq_kernel", "matern52_kernel", "periodic_kernel"]
-
-kernel_name = kernel_names[2]
+kernel_name = "se_kernel"
 @load "jld2_files/problem_def_full_base.jld2" problem_def_full_base normals
 kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
 problem_def_528 = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_full_base)
@@ -47,6 +45,8 @@ freq_grid = linspace(1 / (times_obs[end] - times_obs[1]) / 4, uneven_nyquist_fre
 period_grid = 1 ./ reverse(freq_grid)
 
 K_obs = K_observations(problem_def_528, total_hyperparameters)
+likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data)
+
 
 if length(ARGS)>1
     parallelize = parse(Int, ARGS[2])
@@ -57,8 +57,8 @@ end
 
 if parallelize == 0
 
-    kep_signal_likelihoods(period_grid[1:2], times_obs, fake_data, problem_def_528, total_hyperparameters, K_obs)
-    serial_time = @elapsed likelihoods = kep_signal_likelihoods(period_grid, times_obs, fake_data, problem_def_528, total_hyperparameters, K_obs)
+    kep_signal_likelihoods(likelihood_func, period_grid[1:2], times_obs, fake_data, K_obs)
+    serial_time = @elapsed likelihoods = kep_signal_likelihoods(likelihood_func, period_grid, times_obs, fake_data, K_obs)
     println("Serial likelihood calculation took $(serial_time)s")
 
 else
@@ -75,7 +75,7 @@ else
     #     remotecall_fetch(()->total_hyperparameters, i)
     # end
 
-    @everywhere kep_signal_likelihood_distributed(period::Real) = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=remove_kepler(fake_data, times_obs, period, K_obs))
+    @everywhere kep_signal_likelihood_distributed(period::Real) = kep_signal_likelihood(likelihood_func, period, times_obs, fake_data, K_obs)
     @sync @everywhere kep_signal_likelihood_distributed(4)  # make sure everything is compiled
 
 
@@ -85,17 +85,17 @@ else
         pmap(x->kep_signal_likelihood_distributed(x), [1, 2], batch_size=2)  # make sure everything is compiled
         parallel_time = @elapsed likelihoods = pmap(x->kep_signal_likelihood_distributed(x), period_grid, batch_size=floor(amount_of_periods / nworkers()) + 1)
 
-    # elseif parallelize == 3
+    elseif parallelize == 3
 
-        # # parallelize with SharedArrays
-        # @everywhere using SharedArrays
-        # likelihoods = SharedArray{Float64}(length(period_grid))
-        # @sync @distributed for i in 1:2  # make sure everything is compiled
-        #     likelihoods[i] = kep_signal_likelihood_distributed(period_grid[i])
-        # end
-        # parallel_time = @elapsed @sync @distributed for i in 1:length(period_grid)
-        #     likelihoods[i] = kep_signal_likelihood_distributed(period_grid[i])
-        # end
+        # parallelize with SharedArrays
+        @everywhere using SharedArrays
+        likelihoods = SharedArray{Float64}(length(period_grid))
+        @sync @distributed for i in 1:2  # make sure everything is compiled
+            likelihoods[i] = kep_signal_likelihood_distributed(period_grid[i])
+        end
+        parallel_time = @elapsed @sync @distributed for i in 1:length(period_grid)
+            likelihoods[i] = kep_signal_likelihood_distributed(period_grid[i])
+        end
 
     else
 

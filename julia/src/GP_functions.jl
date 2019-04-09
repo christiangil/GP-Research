@@ -222,7 +222,7 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
                             K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
                                 ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=
                                 # a[i, k] * a[j, l] * A[k, l]
-                                a[i, k] * a[j, l] *  A_mat(k, l, A_list)
+                                (a[i, k] * a[j, l]) *  A_mat(k, l, A_list)
                         end
                     end
                 end
@@ -246,7 +246,7 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
                                     K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
                                         ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=
                                         # coeff[i, j, k, l, m, n] * a[m, n] * A[k, l]
-                                        coeff[i, j, k, l, m, n] * a[m, n] * A_mat(k, l, A_list)
+                                        (coeff[i, j, k, l, m, n] * a[m, n]) * A_mat(k, l, A_list)
                                 end
                             end
                         end
@@ -439,15 +439,17 @@ end
 
 
 "Calculates the quantities shared by the LogL and ∇LogL calculations"
-function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_zero_hyperparameters::AbstractArray{T1,1}; y_obs::AbstractArray{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
+function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_zero_hyperparameters::AbstractArray{T1,1}; y_obs::AbstractArray{T2,1}=zeros(1), K_obs::Cholesky{T3,Array{T3,2}}=cholesky(Matrix{Float64}(I, 2, 2))) where {T1<:Real, T2<:Real, T3<:Real}
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
 
-    K_obs = K_observations(prob_def, total_hyperparameters; ignore_asymmetry=true)
-
     if y_obs == zeros(1)
         y_obs = prob_def.y_obs
+    end
+
+    if K_obs == cholesky(Matrix{Float64}(I, 2, 2))
+        K_obs = K_observations(prob_def, total_hyperparameters; ignore_asymmetry=true)
     end
 
     α = K_obs \ y_obs
@@ -499,9 +501,9 @@ function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::
 
 end
 
-function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T1,1}; y_obs::AbstractArray{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
+function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T1,1}; y_obs::AbstractArray{T2,1}=zeros(1), K_obs::Cholesky{T3,Array{T3,2}}=cholesky(Matrix{Float64}(I, 2, 2))) where {T1<:Real, T2<:Real, T3<:Real}
     non_zero_hyperparameters = total_hyperparameters[findall(!iszero, total_hyperparameters)]
-    total_hyperparameters, K_obs, y_obs, α, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters, y_obs=y_obs)
+    total_hyperparameters, K_obs, y_obs, α, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters, y_obs=y_obs, K_obs=K_obs)
     return nlogL_Jones(prob_def, total_hyperparameters, K_obs, y_obs, α, prior_params)
 end
 

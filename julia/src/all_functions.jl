@@ -1,11 +1,6 @@
-# run this to have access to all of the functions Christian has written
-
+#all_functions.jl
 using Pkg
-# add SpecialFunctions JLD2 FileIO MultivariateStats HDF5 PyPlot Distributions SymEngine Flux IterativeSolvers UnitfulAstro Unitful
 Pkg.activate(".")
-# Pkg.instantiate()
-# Pkg.update()
-
 
 # importing functions
 include("base_functions.jl")
@@ -18,3 +13,16 @@ include("base_functions.jl")
 include("plotting_functions.jl")
 include("GP_plotting_functions.jl")
 include("diagnostic_functions.jl")
+
+using Juno
+using Profile
+function juno_profile(f::Function)
+    Profile.clear()
+    @profile f()
+    Juno.profiletree()
+    Juno.profiler()
+    @profiler f()
+end
+
+using BenchmarkTools
+using Traceur
