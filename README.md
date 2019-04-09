@@ -1,25 +1,42 @@
-## 528 Parallel code submission
+## 528 Final Project (Soon to be KepLikelihood.jl?)
 
-- Choice of portion of code to parallelize
+This software allows the user to take a (possibly multivariate) time series of data and evalute a custom log likelihood function after the removal of a "best-fit" generalized sinusoidal signal (interpretted as a circular Keplerian orbit in this case).
 
-I chose to parallelize the loop that calculates the GP likelihood of a signal after removing the best-fit, circular Keplerian orbit. This is because, once you start evaluating the likelihood at more than ~64 periods, it dominates the serial runtime of the code.
+The main functions are kep_signal_likelihood() and its vectorized verion kep_signal_likelihoods().
 
-- Choice of approach for parallelizing code
+```julia
+"""
+Evaluate the likelihood function with data after removing the best-fit circular
+Keplerian orbit for given period.
 
-I chose to parallelize with parallel mapping, shared arrays with distributed for loops, and mapping the function onto distributed arrays. I looked at all of these methods because it was not clear to me which would be the best. I only ended up testing pmapping and distributed arrays because those approaches seemed the most flexible.
+    kep_signal_likelihood(likelihood_func::Function, period::Real, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, covariance::Union{Cholesky{T4,Array{T4,2}},Symmetric{T5,Array{T5,2}},AbstractArray{T6}})
+    
+likelihood_func is a wrapper function handle that returns the likelihood given a single input of the data without the best-fit Kperleian signal
+period is the orbital period that you want to attempt to remove
+times_obs are the times of the measurements
+signal_data is your data including the planetary signal
+covariance is either the covariance matrix relating all of your data points, or a vector of noise measuremnets
+"""
+function kep_signal_likelihood(likelihood_func::Function, period::Real, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, covariance::Union{Cholesky{T4,Array{T4,2}},Symmetric{T5,Array{T5,2}},AbstractArray{T6}})
+    return likelihood_func(remove_kepler(signal_data, times_obs, period, covariance))
+end
+```
 
-- Code performs proposed tasks
+These functions can be called like so
 
-- Unit/regression tests comparing serial & parallel versions
+```julia
+likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = some_likelihood_function(x...)  # at least one of the inputs should depend on new_data 
+likelihoods = kep_signal_likelihoods(likelihood_func, period_grid, times_obs, fake_data, covariance)
+```
 
-See GP-Research/julia/test/parallel_rv_test.jl
+An example script called optimize_periods.jl is given in the julia directory.
 
-- Code passes tests
+While this isn't an official package yet, the directory setup (once inside the julia folder) is the same.
 
-- General code efficiency
+From within the julia folder, you can import all of the functions and run all of the tests using
 
-- Implementation/optimization of multi-core parallelization
-
-- Significant performance improvement
-
-See figures in GP-Research/julia/figs. optimize_period_scaling_calc_time.png shows the times spent in the actual likelihood calculations while optimize_period_scaling_total_time.png shows the total runtimes. It looks like pmapping and distributed arrays have similar scaling, but pmap tends to have less overhead in its setup. This problem also seems to have strong parallel scaling.
+```julia
+include("src/setup.jl")
+include("src/all_functions.jl")
+include("test/runtests.jl")
+```
