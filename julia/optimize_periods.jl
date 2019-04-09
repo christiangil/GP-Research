@@ -4,37 +4,38 @@ include("src/all_functions.jl")
 include("test/runtests.jl")
 
 using Distributed
-# nworkers()
-# addprocs(7)
+if (nworkers()==1) & (length(Sys.cpu_info())<18)  # only add processors if we are on a consumer chip
+    addprocs(length(Sys.cpu_info()) - 2)
+end
 
 #adding custom functions to all processes
-@everywhere include("src/all_functions.jl")
+@everywhere include("src/base_functions.jl")
 
 if length(ARGS)>0
     amount_of_periods = parse(Int, ARGS[1])
 else
-    amount_of_periods = 128
+    amount_of_periods = 512
 end
 
 # loading in data
 using JLD2, FileIO
 
-include_kernel("quasi_periodic_kernel")
-@load "jld2_files/problem_def_528.jld2" problem_def_528 normals
+kernel_names = ["quasi_periodic_kernel", "se_kernel", "rq_kernel", "matern52_kernel", "periodic_kernel"]
 
-# original kernel hyper parameters
-kernel_lengths = [0.6, 2, 2.5]
-total_hyperparameters_og = append!(collect(Iterators.flatten(problem_def_528.a0)), kernel_lengths)
+kernel_name = kernel_names[2]
+@load "jld2_files/problem_def_full_base.jld2" problem_def_full_base normals
+kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
+problem_def_528 = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_full_base)
 
-# adding some noise so we aren't using original values
-total_hyperparameters = total_hyperparameters_og .* (1 .+ 0.2 * randn(length(total_hyperparameters_og)))
+# best-fit se_kernel hyper parameters on original data
+total_hyperparameters = [0.234374, 0.97434, 0.0, 0.501636, 0.0, 0.510968, 0.0, -0.000116937, 0.0, 0.540127]
 
 amount_of_samp_points = length(problem_def_528.x_obs)
 amount_of_total_samp_points = amount_of_samp_points * problem_def_528.n_out
 
 P = 30u"d"
 m_star = 1u"Msun"
-m_planet = 50u"Mearth"
+m_planet = 1u"Mearth"
 times_obs = convert_and_strip_units.(u"yr", (problem_def_528.x_obs)u"d")
 planet_rvs = kepler_rv.(times_obs, P, m_star, m_planet)
 fake_data = copy(problem_def_528.y_obs)
@@ -51,7 +52,7 @@ if length(ARGS)>1
     parallelize = parse(Int, ARGS[2])
     @assert parallelize >= 0
 else
-    parallelize = 0
+    parallelize = 2
 end
 
 if parallelize == 0
@@ -64,15 +65,17 @@ else
 
     # making necessary variables local to all workers
     @sync @everywhere include_kernel("quasi_periodic_kernel")
-    for i in workers()
-        remotecall_fetch(()->times_obs, i)
-        remotecall_fetch(()->fake_data, i)
-        remotecall_fetch(()->problem_def_528, i)
-        remotecall_fetch(()->K_obs, i)
-        remotecall_fetch(()->total_hyperparameters, i)
-    end
+    @sync sendto(workers(), times_obs=times_obs, fake_data=fake_data, problem_def_528=problem_def_528, total_hyperparameters=total_hyperparameters)
 
-    @sync @everywhere kep_signal_likelihood_distributed(period::Real) = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=remove_kepler(fake_data, times_obs, period, K_obs))
+    # @sync for i in workers()
+    #     remotecall_fetch(()->times_obs, i)
+    #     remotecall_fetch(()->fake_data, i)
+    #     remotecall_fetch(()->problem_def_528, i)
+    #     remotecall_fetch(()->K_obs, i)
+    #     remotecall_fetch(()->total_hyperparameters, i)
+    # end
+
+    @everywhere kep_signal_likelihood_distributed(period::Real) = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=remove_kepler(fake_data, times_obs, period, K_obs))
     @sync @everywhere kep_signal_likelihood_distributed(4)  # make sure everything is compiled
 
 

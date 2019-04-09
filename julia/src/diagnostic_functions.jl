@@ -125,8 +125,15 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
 end
 
 
-"Compare the performance of two different kernel functions"
-function func_comp(n::Integer, kernel1, kernel2; hyperparameters::AbstractArray{T,1}=[1.,2], dif::Real=0.1) where {T<:Real}
-    @time [kernel1(hyperparameters, dif) for i in 1:n]
-    @time [kernel2(hyperparameters, dif) for i in 1:n]
-end
+# using Juno
+# using Profile
+# function juno_profile(f::Function)
+#     Profile.clear()
+#     @profile f()
+#     Juno.profiletree()
+#     Juno.profiler()
+#     @profiler f()
+# end
+#
+# using BenchmarkTools
+# using Traceur

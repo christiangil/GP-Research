@@ -105,7 +105,6 @@ symmetric = a parameter stating whether the covariance is guarunteed to be symme
 """
 function covariance(kernel_func::Function, x1list::AbstractArray{T1,1}, x2list::AbstractArray{T2,1}, kernel_hyperparameters::AbstractArray{T3,1}; dorder::AbstractArray{T4,1}=[0, 0], symmetric::Bool=false, dKdθ_kernel::Integer=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
 
-    # @assert dKdθ <= length()
     # are the list of x's passed identical
     same_x = (x1list == x2list)
 
@@ -190,38 +189,23 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
     # only calculating each sub-matrix once and using the fact that they should
     # be basically the same if the kernel has been differentiated the same amount of times
     A_list = Array{Any}(nothing, 2 * n_dif - 1)
-    for k in 1:(2 * n_dif - 1)
+    for i in 0:(2 * n_dif - 2)
 
         # CHANGE THIS TO MAKE MORE SENSE WITH NEW KERNEL SCHEME
         # VERY HACKY
-        total_time_derivatives = k - 1
-        dorder = [2 * div(total_time_derivatives - 1, 2), rem(total_time_derivatives - 1, 2) + 1]
+        dorder = [rem(i - 1, 2) + 1, 2 * div(i - 1, 2)]
 
         # things that have been differentiated an even amount of times are symmetric about t1-t2==0
-        if isodd(k)
-            A_list[k] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dKdθ_kernel=dKdθ_kernel)
-            # A_list[k] = covariance(x1list, x2list, hyperparameters; dorder=dorder, symmetric=true, dKdθ=dKdθ, products=products)
+        if iseven(i)
+            A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dKdθ_kernel=dKdθ_kernel)
         else
-            A_list[k] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, dKdθ_kernel=dKdθ_kernel)
-            # A_list[k] = covariance(x1list, x2list, hyperparameters; dorder=dorder, dKdθ=dKdθ, products=products)
+            A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, dKdθ_kernel=dKdθ_kernel)
         end
     end
 
     # return the properly negative differentiated A matrix from the list
     # make it negative or not based on how many times it has been differentiated in the x1 direction
-    A_mat(k, l, A_list) = ((-1) ^ (k - 1)) * A_list[k + l - 1]
-
-
-    # reshaping the list into a format consistent with the explicit calculation
-    # A = Array{Any}(n_dif, n_dif)
-    # for k in 1:n_dif
-    #     for l in 1:n_dif
-    #         A[k, l] =  A_mat(k, l, A_list)
-    #     end
-    # end
-    #
-    # save_A(A)
-    # save_A(A_list)
+    A_mat(k::Integer, l::Integer, A_list) = (2 * isodd(l) - 1) * A_list[k + l - 1]
 
     # assembling the total covariance matrix
     a = reshape(total_hyperparameters[1:num_coefficients], (n_out, n_dif))
@@ -233,7 +217,7 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
                 for k in 1:n_dif
                     for l in 1:n_dif
                         if false  # (i == j) & isodd(k + l)
-                            # the cross terms (of odd differentiation orders) cancel each other out in diagonal matrices
+                            # the cross terms (of odd differentiation orders) cancel each other out in matrices on diagonal
                         else
                             K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
                                 ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=

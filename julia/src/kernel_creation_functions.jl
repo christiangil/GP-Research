@@ -1,31 +1,23 @@
 using SymEngine
 
 """
-Creates the necessary differentiated versions of base kernels required by the Jones et al. 2017 paper (https://arxiv.org/abs/1711.01318).
-You must pass it a SymEngine Basic object with the variables already declared with the @vars command. t1 and t2 must be the first declared variables.
-The created functions will looks like this
+Creates the necessary differentiated versions of base kernels required by the Jones et al. 2017 paper (https://arxiv.org/abs/1711.01318) method.
+You must pass it a SymEngine Basic object with the variables already declared with the @vars command. dif or abs_dif must be the first declared variables.
+The created function will look like this
 
     \$kernel_name(hyperparameters::AbstractArray{T1,1}, dif::Real; dorder::AbstractArray{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
 
 For example, you could define a kernel like so:
 
     "Radial basis function GP kernel (aka squared exonential, ~gaussian)"
-    function RBF_kernel_base(hyperparameters, dif)
-
-        dif_sq = dif ^ 2
-
-        hyperparameters = check_hyperparameters(hyperparameters, 1+1)
-        kernel_amplitude, kernel_length = hyperparameters
-
-        return kernel_amplitude ^ 2 * exp(-dif_sq / (2 * (kernel_length ^ 2)))
+    function rbf_kernel_base(kernel_length::Union{Real, Basic}, dif::Union{Basic,Real}) where {T<:Real}
+        return exp(-dif * dif / (2 * (kernel_length * kernel_length)))
     end
 
 And then calculate the necessary derivative versions like so:
 
-    @vars t1 t2 kernel_length
-    symbolic_kernel = RBF_kernel_base(kernel_length, t1 - t2)
-    kernel_name = "RBF_kernel"
-    kernel_coder(symbolic_kernel, kernel_name)
+    @vars dif kernel_length
+    kernel_coder(rbf_kernel_base(kernel_length, dif), "rbf_kernel")
 
 The function is saved in src/kernels/\$kernel_name.jl, so you can use it with a command akin to this:
 
@@ -37,49 +29,52 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     # get the symbols of the passed function and check that t1 and t2 are first
     symbols = free_symbols(symbolic_kernel_original)
     sym_amount = length(symbols)
-    symbols_str = [string(symbols[i]) for i in 1:sym_amount]
-    @assert symbols_str[1]=="t1" "The first symbol needs to be t1"
-    @assert symbols_str[2]=="t2" "The second symbol needs to be t2"
+    symbols_str = [string(symbol) for symbol in symbols]
+    @assert symbols_str[1] in ["dif", "abs_dif"] "The first symbol needs to be dif or abs_dif"
 
     # open the file we will write to
     file_loc = "src/kernels/" * kernel_name * ".jl"
     io = open(file_loc, "w")
 
-    num_kernel_hyperparameters = sym_amount-2
+    num_kernel_hyperparameters = sym_amount - 1
     # begin to write the function including assertions that the amount of hyperparameters are correct
-    write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"kernels/$kernel_name.jl\").\nhyperparameters == $(symbols_str[3:end])\n\"\"\"\n")
-    write(io, "function " * kernel_name * "(hyperparameters::AbstractArray{T1,1}, dif::Real; dorder::AbstractArray{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}\n\n")
+    write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"src/kernels/$kernel_name.jl\").\nhyperparameters == $(symbols_str[2:end])\n\"\"\"\n")
+    write(io, "function " * kernel_name * "(hyperparameters::AbstractArray{T1,1}, dif::Real; dorder::AbstractArray{T2,1}=zeros(length(hyperparameters) + 2)) where {T1<:Real, T2<:Real}\n\n")
     write(io, "    @assert length(hyperparameters)==$num_kernel_hyperparameters \"hyperparameters is the wrong length\"\n")
-    write(io, "    if dorder==zeros(1)\n")
-    write(io, "        dorder = zeros(length(hyperparameters) + 2)\n")
-    write(io, "    else\n")
-    write(io, "        @assert length(dorder)==(length(hyperparameters) + 2) \"dorder is the wrong length\"\n")
-    write(io, "    end\n")
-    write(io, "    dorder = convert(AbstractArray{Int64,1}, dorder)\n\n")
-
+    write(io, "    @assert length(dorder)==(length(hyperparameters) + 2) \"dorder is the wrong length\"\n")
+    write(io, "    dorder = convert(Array{Int64,1}, dorder)\n")
+    write(io, "    even_time_derivative = 2 * iseven(dorder[2]) - 1\n")
+    write(io, "    @assert maximum(dorder) < 3 \"No more than two time derivatives for either t1 or t2 can be calculated\"\n\n")
+    write(io, "    dorder = append!([sum(dorder[1:2])], dorder[3:end])\n\n")
 
     # map the hyperparameters that will be passed to this function to the symbol names
-    for i in 3:sym_amount
-        write(io, "    " * symbols_str[i] * " = hyperparameters[$i-2]" * "\n")
+    for i in 1:(sym_amount - 1)
+        write(io, "    " * symbols_str[i + 1] * " = hyperparameters[$i]" * "\n")
     end
-
     write(io, "\n")
+
+    uses_abs_dif = (symbols_str[1] == "abs_dif")
+    if uses_abs_dif
+        write(io, "    dif_positive = (dif >= 0)  # store original sign of dif (for correcting odd kernel derivatives)\n")
+        write(io, "    dif = abs(dif)  # this is corected for later\n\n")
+        @vars dif
+        symbolic_kernel_original = subs(symbolic_kernel_original, abs_dif=>dif)
+        symbols = free_symbols(symbolic_kernel_original)
+    end
 
     # calculate all of the necessary derivations we need for the Jones model
     # for four symbols, dorders is of the form: [2.0 2.0 1.0 1.0; 1.0 2.0 1.0 1.0; 0.0 2.0 1.0 1.0; 2.0 1.0 1.0 1.0; ... ]
     # where the dorders[n, :]==[dorder of t1 (0-2), dorder of t2 (0-2), dorder of symbol 3 (0-1), dorder of symbol 4 (0-1)]
     # can be made for any number of symbols
     # this could be optimized to remove the instances where differentiations of multiple, non-time symbols are asked for
-    dorders = zeros(9 * (2 ^ (sym_amount - 2)), sym_amount)
+    dorders = zeros(5 * (2 ^ (sym_amount - 1)), sym_amount)
     amount_of_dorders = size(dorders,1)
     for i in 1:amount_of_dorders
           quant = amount_of_dorders - i
-          dorders[i, 1] = rem(quant, 3)
-          quant = div(quant, 3)
-          dorders[i, 2] = rem(quant, 3)
-          quant = div(quant, 3)
-          for j in 1:(sym_amount - 2)
-                dorders[i, j+2] = rem(quant, 2)
+          dorders[i, 1] = rem(quant, 5)
+          quant = div(quant, 5)
+          for j in 1:(sym_amount - 1)
+                dorders[i, j+1] = rem(quant, 2)
                 quant = div(quant, 2)
           end
     end
@@ -91,7 +86,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
 
         # only record another differentiated version of the function if we will actually use it
         # i.e. no instances where differentiations of multiple, non-time symbols are asked for
-        if sum(dorder[3:end]) < 2
+        if sum(dorder[2:end]) < 2
             symbolic_kernel = copy(symbolic_kernel_original)
 
             write(io, "    if dorder==" * string(dorder) * "\n")
@@ -100,10 +95,6 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
             for j in 1:sym_amount
                 symbolic_kernel = diff(symbolic_kernel, symbols[j], dorder[j])
             end
-
-            # make a simplification based on t1-t2=dif
-            @vars dif
-            symbolic_kernel = subs(symbolic_kernel, t1=>dif, t2=>0)
 
             symbolic_kernel_str = SymEngine.toString(symbolic_kernel)
             symbolic_kernel_str = string("        func = " * symbolic_kernel_str * "\n    end\n\n")
@@ -126,13 +117,16 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     # write(io, string("    if isnan(func)\n"))
     # write(io, string("        func = 0\n"))
     # write(io, string("    end\n\n"))
-
-    write(io, string("    return float(func)\n\n"))
+    if uses_abs_dif
+        write(io, "    return (2 * (dif_positive | iseven(dorder[1])) - 1) * even_time_derivative * float(func)  # correcting for use of abs_dif and amount of t2 derivatives\n\n")
+    else
+        write(io, "    return even_time_derivative * float(func)  # correcting for amount of t2 derivatives\n\n")
+    end
     write(io, "end\n\n\n")
     write(io, "return $kernel_name, $num_kernel_hyperparameters  # the function handle and the number of kernel hyperparameters\n")
     close(io)
 
     @warn "The order of hyperparameters in the function may be different from the order given when you made them in @vars. Check the created function file (or the print statement below) to see what order you need to actually use."
     println("$kernel_name() created at $file_loc")
-    println("hyperparameters == ",symbols_str[3:end])
+    println("hyperparameters == ",symbols_str[2:end])
 end
