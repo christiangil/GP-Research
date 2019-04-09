@@ -168,23 +168,34 @@ function remove_kepler(y_obs_w_planet::AbstractArray{T1,1}, times::AbstractArray
 end
 
 
-"Find GP likelihoods for best fit Keplerian orbit of a specified period"
-function kep_signal_likelihoods(period_grid::AbstractArray{T1,1}, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, problem_definition::Jones_problem_definition, total_hyperparameters::AbstractArray{T4,1}, K_obs::Cholesky{T5,Array{T5,2}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+"""
+Evaluate the likelihood function with data after removing the best-fit circular
+Keplerian orbit for given period.
+
+    kep_signal_likelihood(likelihood_func::Function, period::Real, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, covariance::Union{Cholesky{T4,Array{T4,2}},Symmetric{T5,Array{T5,2}},AbstractArray{T6}})
+
+likelihood_func is a wrapper function handle that returns the likelihood given a single input of the data without the best-fit Kperleian signal
+period is the orbital period that you want to attempt to remove
+times_obs are the times of the measurements
+signal_data is your data including the planetary signal
+covariance is either the covariance matrix relating all of your data points, or a vector of noise measuremnets
+"""
+function kep_signal_likelihood(likelihood_func::Function, period::Real, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, covariance::Union{Cholesky{T4,Array{T4,2}},Symmetric{T5,Array{T5,2}},AbstractArray{T6}}) where {T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
+    return likelihood_func(remove_kepler(signal_data, times_obs, period, covariance))
+end
+
+"""
+Evaluate the likelihood function with data after removing the best-fit circular
+Keplerian orbit for many periods without unnecessary memory reallocations
+"""
+function kep_signal_likelihoods(likelihood_func::Function, period_grid::AbstractArray{T1,1}, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, covariance::Union{Cholesky{T4,Array{T4,2}},Symmetric{T5,Array{T5,2}},AbstractArray{T6}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
     # @warn "make sure that period_grid and time_obs are in the same units!"
     likelihoods = zeros(length(period_grid))
     new_data = zeros(length(signal_data))
     for i in 1:length(period_grid)
         new_data .= signal_data
-        remove_kepler!(new_data, times_obs, period_grid[i], K_obs)
-        likelihoods[i] = nlogL_Jones(problem_definition, total_hyperparameters, y_obs=new_data)
+        remove_kepler!(new_data, times_obs, period_grid[i], covariance)
+        likelihoods[i] = likelihood_func(new_data)
     end
     return likelihoods
-end
-
-
-"Find GP likelihoods for best fit Keplerian orbit of a specified period"
-function kep_signal_likelihoods(period_grid::AbstractArray{T1,1}, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, problem_definition::Jones_problem_definition, total_hyperparameters::AbstractArray{T4,1}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
-    # @warn "make sure that period_grid and time_obs are in the same units!"
-    K_obs = K_observations(problem_definition, total_hyperparameters)
-    return kep_signal_likelihoods(period_grid, times_obs, signal_data, problem_definition, total_hyperparameters, K_obs)
 end
