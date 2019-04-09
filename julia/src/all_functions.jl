@@ -1,6 +1,4 @@
 #all_functions.jl
-using Pkg
-Pkg.activate(".")
 
 # importing functions
 include("base_functions.jl")
@@ -25,4 +23,4 @@ function juno_profile(f::Function)
 end
 
 using BenchmarkTools
-using Traceur
+# using Traceur

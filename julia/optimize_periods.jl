@@ -1,7 +1,7 @@
 # getting packages ready and making sure they are up to date
 include("src/setup.jl")
-include("src/all_functions.jl")
 # include("test/runtests.jl")
+include("src/all_functions.jl")
 
 using Distributed
 if (nworkers()==1) & (length(Sys.cpu_info())<18)  # only add processors if we are on a consumer chip
@@ -45,8 +45,6 @@ freq_grid = linspace(1 / (times_obs[end] - times_obs[1]) / 4, uneven_nyquist_fre
 period_grid = 1 ./ reverse(freq_grid)
 
 K_obs = K_observations(problem_def_528, total_hyperparameters)
-likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data)
-
 
 if length(ARGS)>1
     parallelize = parse(Int, ARGS[2])
@@ -57,6 +55,7 @@ end
 
 if parallelize == 0
 
+    likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data)
     kep_signal_likelihoods(likelihood_func, period_grid[1:2], times_obs, fake_data, K_obs)
     serial_time = @elapsed likelihoods = kep_signal_likelihoods(likelihood_func, period_grid, times_obs, fake_data, K_obs)
     println("Serial likelihood calculation took $(serial_time)s")
@@ -64,20 +63,12 @@ if parallelize == 0
 else
 
     # making necessary variables local to all workers
-    @sync @everywhere include_kernel("quasi_periodic_kernel")
-    @sync sendto(workers(), times_obs=times_obs, fake_data=fake_data, problem_def_528=problem_def_528, total_hyperparameters=total_hyperparameters)
-
-    # @sync for i in workers()
-    #     remotecall_fetch(()->times_obs, i)
-    #     remotecall_fetch(()->fake_data, i)
-    #     remotecall_fetch(()->problem_def_528, i)
-    #     remotecall_fetch(()->K_obs, i)
-    #     remotecall_fetch(()->total_hyperparameters, i)
-    # end
-
+    sendto(workers(), kernel_name=kernel_name)
+    @everywhere include_kernel(kernel_name)
+    sendto(workers(), times_obs=times_obs, fake_data=fake_data, problem_def_528=problem_def_528, total_hyperparameters=total_hyperparameters, K_obs=K_obs)
+    @everywhere likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data)
     @everywhere kep_signal_likelihood_distributed(period::Real) = kep_signal_likelihood(likelihood_func, period, times_obs, fake_data, K_obs)
     @sync @everywhere kep_signal_likelihood_distributed(4)  # make sure everything is compiled
-
 
     if parallelize == 2
 

@@ -264,8 +264,10 @@ e.g.
 sendto([1, 2], x=100, y=rand(2, 3))
 z = randn(10, 10); sendto(workers(), z=z)
 """
-function sendto(p::Int; args...)
-    for (nm, val) in args
-        @spawnat(p, Core.eval(Main, Expr(:(=), nm, val)))
+function sendto(p::Union{T,Array{T,1}}; args...) where {T<:Integer}
+    for i in p
+        for (nm, val) in args
+            @spawnat(i, Core.eval(Main, Expr(:(=), nm, val)))
+        end
     end
 end

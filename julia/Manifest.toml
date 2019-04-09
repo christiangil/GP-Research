@@ -72,12 +72,6 @@ git-tree-sha1 = "437c93bc191cd55957b3f8dee7794b6131997c56"
 uuid = "00ebfdb7-1f24-5e51-bd34-a7502290713f"
 version = "0.5.2"
 
-[[Cassette]]
-deps = ["InteractiveUtils", "LinearAlgebra", "Test"]
-git-tree-sha1 = "5536cf95a81ff784f4d1eca2df39bb2629a7ee59"
-uuid = "7057c7e9-c182-5462-911a-8362d720325c"
-version = "0.2.3"
-
 [[CodecZlib]]
 deps = ["BinaryProvider", "Libdl", "Test", "TranscodingStreams"]
 git-tree-sha1 = "36bbf5374c661054d41410dc53ff752972583b9b"
@@ -462,12 +456,6 @@ deps = ["Printf", "Test"]
 git-tree-sha1 = "3e83f60b74911d3042d3550884ca2776386a02b8"
 uuid = "0796e94c-ce3b-5d07-9a54-7f471281c624"
 version = "0.5.3"
-
-[[Traceur]]
-deps = ["Cassette", "InteractiveUtils", "Logging", "MacroTools", "Test"]
-git-tree-sha1 = "c007db8fbec24668a7cdf4a878202abb648d568f"
-uuid = "37b6cedf-1f77-55f8-9503-c64b63398394"
-version = "0.3.0"
 
 [[Tracker]]
 deps = ["Adapt", "DiffRules", "ForwardDiff", "LinearAlgebra", "MacroTools", "NNlib", "NaNMath", "Printf", "Random", "Requires", "SpecialFunctions", "Statistics", "Test"]

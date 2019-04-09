@@ -1,6 +1,13 @@
 using JLD2, FileIO
 using Test
 
+# import activate Project.toml in top folder and import functions
+old_dir = pwd()
+cd(@__DIR__)
+cd("..")
+include("../src/all_functions.jl")
+cd(old_dir)
+
 @testset "cholesky factorizations" begin
     A = [4. 12 -16; 12 37 -43; -16 -43 98]
     chol_A = ridge_chol(A)
