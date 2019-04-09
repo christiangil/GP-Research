@@ -110,7 +110,6 @@ end
 "bootstrapping for errors in PCA scores. Takes ~28s per bootstrap on my computer"
 function bootstrap_errors(time_series_spectra::AbstractArray{T,2}; boot_amount::Integer=10, save_filename::String="jld2_files/bootstrap.jld2") where {T<:Real}
 
-    # @load "jld2_files/rv_data.jld2" lambda phases quiet doppler_comp mu M scores fracvar rvs
     @load "jld2_files/rv_data.jld2" M scores
     scores0 = copy(scores)
 
