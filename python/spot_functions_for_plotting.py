@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.stats as stats
+# import ConfigParser
 # from scipy.special import erfinv, erf
 
 def time_to_phase(PROT, time, time_unit='day'):
@@ -20,7 +21,7 @@ def time_to_phase(PROT, time, time_unit='day'):
         phase : float or array
             phase
         """
-    phase = (2 * np.pi / PROT) * time
+    phase = time / PROT
     if time_unit == 'day':
         return phase
     elif time_unit == 'year':
@@ -49,13 +50,13 @@ def phase_to_time(PROT, phase, time_unit='day'):
         time : float or array
             time
         """
-    time = phase / (2 * np.pi / PROT)
+    time = phase * PROT
     if time_unit == 'day':
-        return phase
+        return time
     elif time_unit == 'year':
-        return phase / 365.25
+        return time / 365.25
     elif time_unit == 'hour':
-        return phase * 24.
+        return time * 24.
     else:
         print("**INCORRECT TIME_UNIT SPECIFIED**")
 
@@ -90,11 +91,11 @@ def trunc_lognormal_draw(mu=0, sigma=1, lower=np.finfo(float).eps, upper=np.inf,
 
 def two_lognormal_draw(types, mus, sigmas, lower=np.finfo(float).eps, upper=np.inf):
     # drawing values from two different log normals
-	# types is an array of ones and zeros telling which one to draw from
-	assert np.maximum(types) == 1
-	assert np.minimum(types) == 0
-	assert len(mus) == 2
-	assert len(sigmas) == 2
+    # types is an array of ones and zeros telling which one to draw from
+    assert np.max(types) == 1
+    assert np.min(types) == 0
+    assert len(mus) == 2
+    assert len(sigmas) == 2
 
     draw_amount = len(types)
     draws = np.zeros(draw_amount)
@@ -214,9 +215,9 @@ def spot_size_gen(phases, start_ph, len_ph, A, Gf, spot_func='parabolic'):
                = size1**2/2 -> size1 = sqrt(2*S1)
             For 0.1% of the visible hemisphere, put 0.045
         Gf : float
-            Ratio of growth/(growth + decay) of spot. Range between 0-1.
+            Ratio of growth/decay of spot
         spot_func : string
-            Type of spot to build. Currently triangle and constant (no
+            Type of spot to build. Currently parabolic and constant (no
             growth/decay) available.
 
         Returns
@@ -226,43 +227,6 @@ def spot_size_gen(phases, start_ph, len_ph, A, Gf, spot_func='parabolic'):
         """
     if spot_func == 'constant':
         return A*np.ones(len(phases))
-
-    # this is broken, assumes that phases grow linearly with `index, and that all spots start and stop at exact observation indices
-    elif spot_func == 'triangle':
-        if start_ph < phases[0]:
-            print("**start phase for spot must be in the range of passed phases, **SKIPPING**")
-            return None
-        elif start_ph + Gf*len_ph > phases[-2]:
-            print("**starspot phases severely outside observing range, **SKIPPING**")
-            return None
-
-        phases = np.asarray(phases)
-
-        # reference points
-        fin_ph = start_ph + len_ph
-        start = np.argmin(np.abs(phases - start_ph)) # starting index of spot
-        middle = np.argmin(np.abs(phases - (Gf*len_ph + start_ph))) # split point for spot
-        end = np.argmin(np.abs(phases - fin_ph)) # ending index of spot
-
-        # growth of spot
-        Ng = len(phases[start:middle])
-        spotg = A*np.linspace(0, 1, Ng)
-
-        # decay of spot
-        if start_ph + len_ph >= phases[-1]:  # spot decays to 0 outside phase range
-            Nd = len(phases[middle:end+1])
-            decay_amp = 1 - np.abs(phases[-1] - phases[middle])/float(np.abs(fin_ph - phases[middle]))
-            end_padding = np.zeros(0)
-        else:
-            Nd = len(phases[middle:end])
-            decay_amp = 0
-            end_padding = np.zeros(len(phases[end:]))
-        spotd = A*np.linspace(1, decay_amp, Nd)
-
-        # sizes over total range
-        spot = np.concatenate((np.zeros(len(phases[0:start])),
-                               np.concatenate((spotg, spotd)), end_padding))
-        return spot
 
     elif spot_func == 'parabolic':
         if start_ph < phases[0]:
@@ -277,28 +241,6 @@ def spot_size_gen(phases, start_ph, len_ph, A, Gf, spot_func='parabolic'):
         # reference points
         fin_ph = start_ph + len_ph
         mid_ph = start_ph + (Gf * len_ph)
-        # start = np.argmin(np.abs(phases - start_ph)) # starting index of spot
-        # middle = np.argmin(np.abs(phases - (Gf*len_ph + start_ph))) # split point for spot
-        # end = np.argmin(np.abs(phases - fin_ph)) # ending index of spot
-
-        # # growth of spot
-        # Ng = len(phases[start:middle])
-        # spotg = A * np.linspace(0, 1, Ng)
-
-        # # decay of spot
-        # if start_ph + len_ph >= phases[-1]:  # spot decays to 0 outside phase range
-        #     Nd = len(phases[middle:end+1])
-        #     decay_amp = 1 - np.abs(phases[-1] - phases[middle])/float(np.abs(fin_ph - phases[middle]))
-        #     end_padding = np.zeros(0)
-        # else:
-        #     Nd = len(phases[middle:end])
-        #     decay_amp = 0
-        #     end_padding = np.zeros(len(phases[end:]))
-        # spotd = A*np.linspace(1, decay_amp, Nd)
-
-        # # sizes over total range
-        # spot = np.concatenate((np.zeros(len(phases[0:start])),
-        #                        np.concatenate((spotg, spotd)), end_padding))
 
         # this is linear decay (and growth because im lazy) in radius space which becomes parabolic decay in area space
         spot = np.zeros(len(phases))

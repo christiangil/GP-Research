@@ -1,5 +1,5 @@
 #adding in custom functions
-include("src/setup.jl")
+# include("src/setup.jl")
 include("src/all_functions.jl")
 # include("test/runtests.jl")
 
@@ -8,6 +8,7 @@ include("src/all_functions.jl")
 
 # loading in data
 using JLD2, FileIO
+using Flux; using Flux.Tracker: track, @grad, data
 
 kernel_names = ["quasi_periodic_kernel", "se_kernel", "rq_kernel", "matern52_kernel"]
 
@@ -20,13 +21,15 @@ if length(ARGS)>0
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_full_base)
     flux_cb_delay = 3600 / 2
     grad_norm_thres = 1e1
+    opt = ADAM(0.1)
 else
-    kernel_name = kernel_names[1]
+    kernel_name = kernel_names[4]
     @load "jld2_files/problem_def_sample_base.jld2" problem_def_sample_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_sample_base)
     flux_cb_delay = 3600 / 1000
     grad_norm_thres = 1e0
+    opt = ADAM(0.2)
 end
 
 mkpath("figs/gp/$kernel_name/training")
@@ -34,7 +37,8 @@ mkpath("figs/gp/$kernel_name/training")
 ##############################################################################
 # kernel hyper parameters
 time_span = maximum(problem_definition.x_obs) - minimum(problem_definition.x_obs)
-kernel_lengths = time_span/20 * ones(problem_definition.n_kern_hyper)
+# kernel_lengths = time_span/3 * ones(problem_definition.n_kern_hyper)
+kernel_lengths = time_span/10 * ones(problem_definition.n_kern_hyper)
 total_hyperparameters = append!(collect(Iterators.flatten(problem_definition.a0)), kernel_lengths)
 # problem_definition.a0
 
@@ -47,7 +51,7 @@ amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
 Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/initial_gp", find_post=false, plot_K=true, plot_K_profile=true)
 Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/post_gp", plot_K=true, plot_K_profile=true)
 
-using Flux; using Flux.Tracker: track, @grad, data
+
 
 # Allowing Flux to use the analytical gradients we have calculated
 f_custom(non_zero_hyper) = nlogL_Jones(problem_definition, non_zero_hyper)
@@ -64,7 +68,6 @@ f_custom() = f_custom(non_zero_hyper_param)
 
 # setting things for Flux to use
 flux_data = Iterators.repeated((), 500)  # use at most 500 iterations
-opt = ADAM(0.1)
 
 # save plots as we are training every flux_cb_delay seconds
 # stop training if our gradient norm gets small enough

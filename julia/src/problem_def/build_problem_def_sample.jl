@@ -15,13 +15,13 @@ n_dif = 3
 
 # Setting up all of the data things
 # how much of the data you want to use (on time domain)
-start_ind = 300
-end_ind = 370  # 730
+start_ind = 100
+end_ind = 170  # 730
 amount_of_measurements = end_ind - start_ind + 1
 total_amount_of_measurements = amount_of_measurements * n_out
 
 # getting proper slice of data and converting to days
-x_obs = convert_phases_to_days.(phases[start_ind:end_ind])
+x_obs = convert_SOAP_phases_to_days.(phases[start_ind:end_ind])
 x_obs_units = "Time (days)"
 y_obs_hold = scores[1:n_out, start_ind:end_ind]
 @load "../../jld2_files/bootstrap.jld2" error_ests

@@ -131,15 +131,15 @@ end
 
 
 "Convert the solar phase information from SOAP 2.0 into days"
-function convert_phases_to_days(phase::Real; P_rot=25.05)
+function convert_SOAP_phases_to_days(phase::Real; P_rot=25.05)
     # default P_rot is the solar rotation period used by SOAP 2.0 in days
     assert_positive(P_rot)
-    return phase / (2 * pi / P_rot)
+    return phase * P_rot
 end
 
 "Convert the solar phase information from SOAP 2.0 into years"
-function convert_phases_to_years(phase::Real; P_rot = 25.05)
-    return convert_and_strip_units(u"yr", convert_phases_to_days(phase; P_rot=P_rot)u"d")
+function convert_SOAP_phases_to_years(phase::Real; P_rot = 25.05)
+    return convert_and_strip_units(u"yr", convert_SOAP_phases_to_days(phase; P_rot=P_rot)u"d")
 end
 
 

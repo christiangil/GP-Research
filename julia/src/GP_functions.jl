@@ -463,13 +463,13 @@ function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_ze
 end
 
 
-"generic GP nLogL"
+"generic GP nLogL (see Algorithm 2.1 in Rasmussen and Williams 2006)"
 function nlogL(K_obs::Cholesky{T1,Array{T1,2}}, y_obs::AbstractArray{T2,1}, α::AbstractArray{T3,1}) where {T1<:Real, T2<:Real, T3<:Real}
 
     n = length(y_obs)
 
     # goodness of fit term
-    data_fit = -1 / 2 * (transpose(y_obs) * (α))
+    data_fit = -1 / 2 * (transpose(y_obs) * α)
     # complexity penalization term
     # complexity_penalty = -1 / 2 * log(det(K_obs))
     complexity_penalty = -1 / 2 * logdet(K_obs)  # half memory but twice the time
@@ -516,6 +516,7 @@ function dnlogLdθ(dK_dθj::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}}
     # derivative of complexity penalization term
     complexity_penalty = -1 / 2 * tr(K_obs \ dK_dθj)
 
+    # return -1 / 2 * tr((α * transpose(α) - inv(K_obs)) * dK_dθj)
     return -1 * (data_fit + complexity_penalty)
 
 end
