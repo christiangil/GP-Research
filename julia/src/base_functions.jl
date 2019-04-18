@@ -1,11 +1,7 @@
 # run this to have access to all of the functions Christian has written
 
 using Pkg
-# add SpecialFunctions JLD2 FileIO MultivariateStats HDF5 PyPlot Distributions SymEngine Flux IterativeSolvers UnitfulAstro Unitful
 Pkg.activate(".")
-# Pkg.instantiate()
-# Pkg.update()
-
 
 # importing functions
 include("general_functions.jl")

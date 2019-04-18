@@ -145,20 +145,6 @@ linspace(start::Real, stop::Real, length::Integer) = range(start, stop=stop, len
 log_linspace(start::Real, stop::Real, length) = exp.(linspace(log(start), log(stop), length))
 
 
-"set all variables equal to nothing to save some memory"
-function clear_variables()
-    for var in names(Main)
-        try
-            # eval(Meta.parse("$var=0"))\
-            # eval(Meta.parse("$var=nothing"))
-            clear!(var)
-        catch
-        end
-    end
-    # GC.gc()
-end
-
-
 "Create a new array filling the non-zero entries of a template array with a vector of values"
 function reconstruct_array(non_zero_entries, template_array::AbstractArray{T,2}) where {T<:Real}
     @assert length(findall(!iszero, template_array))==length(non_zero_entries)
@@ -264,8 +250,10 @@ e.g.
 sendto([1, 2], x=100, y=rand(2, 3))
 z = randn(10, 10); sendto(workers(), z=z)
 """
-function sendto(p::Int; args...)
-    for (nm, val) in args
-        @spawnat(p, Core.eval(Main, Expr(:(=), nm, val)))
+function sendto(p::Union{T,Array{T,1}}; args...) where {T<:Integer}
+    for i in p
+        for (nm, val) in args
+            @spawnat(i, Core.eval(Main, Expr(:(=), nm, val)))
+        end
     end
 end

@@ -2,7 +2,7 @@
 using SpecialFunctions
 using LinearAlgebra
 using Test
-
+using Memoize
 
 """
 A structure that holds all of the relevant information for doing the analysis in
@@ -157,6 +157,7 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
 
     @assert dKdθ_total >= 0
     @assert length(total_hyperparameters) == prob_def.n_kern_hyper + length(prob_def.a0)
+
     num_coefficients = length(total_hyperparameters) - prob_def.n_kern_hyper
     n_out = prob_def.n_out
     n_dif = prob_def.n_dif
@@ -234,7 +235,7 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
         # ((output pair), (which A matrix to use), (which a coefficent to use))
         # get all of the coefficients for coefficient hyperparameters based on
         # the amount of outputs and differentiations
-        coeff = dif_coefficients(n_out, n_dif, dKdθ_total; coeff_orders=prob_def.coeff_orders, a=a)
+        coeff = dif_coefficients(n_out, n_dif, dKdθ_total, prob_def.coeff_orders)
 
         for i in 1:n_out
             for j in 1:n_out
@@ -356,13 +357,9 @@ end
 find the powers that each Jones coefficient is taken to for each part of the
 matrix construction. Used for constructing differentiated versions of the kernel
 """
-function coefficient_orders(n_out::Integer, n_dif::Integer; a::AbstractArray{T,2}=ones(1,1)) where {T<:Real}
+function coefficient_orders(n_out::Integer, n_dif::Integer; a::AbstractArray{T,2}=ones(n_out, n_dif)) where {T<:Real}
 
-    if a == ones(1,1)
-        a = ones(n_out, n_dif)
-    else
-        @assert size(a) == (n_out, n_dif)
-    end
+    @assert size(a) == (n_out, n_dif)
 
     coeff_orders = zeros(n_out, n_out, n_dif, n_dif, n_out, n_dif)
     for i in 1:n_out
@@ -399,17 +396,11 @@ end
 Getting the coefficients for constructing differentiated versions of the kernel
 using the powers that each coefficient is taken to for each part of the matrix construction
 """
-function dif_coefficients(n_out::Integer, n_dif::Integer, dKdθ_total::Integer; coeff_orders::AbstractArray{T1,6}=zeros(1,1,1,1,1,1), a::AbstractArray{T2,2}=ones(1,1)) where {T1<:Real, T2<:Real}
+function dif_coefficients(n_out::Integer, n_dif::Integer, dKdθ_total::Integer, coeff_orders::AbstractArray{T,6}) where {T<:Real}
 
     @assert dKdθ_total>0 "Can't get differential coefficients when you aren't differentiating "
     @assert dKdθ_total<=(n_out*n_dif) "Can't get differential coefficients fpr non-coefficient hyperparameters"
-
-    if coeff_orders == zeros(1,1,1,1,1,1)
-        coeff_orders = coefficient_orders(n_out, n_dif, a=a)
-        # println("found new coeff_orders")
-    else
-        @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)
-    end
+    @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)
 
     # ((output pair), (which A matrix to use), (which a coefficent to use))
     coeff = zeros(n_out, n_out, n_dif, n_dif, n_out, n_dif)
@@ -438,19 +429,13 @@ function dif_coefficients(n_out::Integer, n_dif::Integer, dKdθ_total::Integer; 
 end
 
 
-"Calculates the quantities shared by the LogL and ∇LogL calculations"
-function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_zero_hyperparameters::AbstractArray{T1,1}; y_obs::AbstractArray{T2,1}=zeros(1), K_obs::Cholesky{T3,Array{T3,2}}=cholesky(Matrix{Float64}(I, 2, 2))) where {T1<:Real, T2<:Real, T3<:Real}
+# "Calculates the quantities shared by the LogL and ∇LogL calculations"
+# can't use docstrings with @memoize macro :(
+@memoize function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real; y_obs::AbstractArray{T2,1}  where T2<:Real=prob_def.y_obs, K_obs::Cholesky{T3,Array{T3,2}}  where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters); ignore_asymmetry=true))
+# function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real; y_obs::AbstractArray{T2,1}  where T2<:Real=prob_def.y_obs, K_obs::Cholesky{T3,Array{T3,2}}  where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters); ignore_asymmetry=true))
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
-
-    if y_obs == zeros(1)
-        y_obs = prob_def.y_obs
-    end
-
-    if K_obs == cholesky(Matrix{Float64}(I, 2, 2))
-        K_obs = K_observations(prob_def, total_hyperparameters; ignore_asymmetry=true)
-    end
 
     α = K_obs \ y_obs
 
@@ -463,13 +448,13 @@ function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_ze
 end
 
 
-"generic GP nLogL"
+"generic GP nLogL (see Algorithm 2.1 in Rasmussen and Williams 2006)"
 function nlogL(K_obs::Cholesky{T1,Array{T1,2}}, y_obs::AbstractArray{T2,1}, α::AbstractArray{T3,1}) where {T1<:Real, T2<:Real, T3<:Real}
 
     n = length(y_obs)
 
     # goodness of fit term
-    data_fit = -1 / 2 * (transpose(y_obs) * (α))
+    data_fit = -1 / 2 * (transpose(y_obs) * α)
     # complexity penalization term
     # complexity_penalty = -1 / 2 * log(det(K_obs))
     complexity_penalty = -1 / 2 * logdet(K_obs)  # half memory but twice the time
@@ -501,7 +486,7 @@ function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::
 
 end
 
-function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T1,1}; y_obs::AbstractArray{T2,1}=zeros(1), K_obs::Cholesky{T3,Array{T3,2}}=cholesky(Matrix{Float64}(I, 2, 2))) where {T1<:Real, T2<:Real, T3<:Real}
+function nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T1,1}; y_obs::AbstractArray{T2,1}=prob_def.y_obs, K_obs::Cholesky{T3,Array{T3,2}}=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true)) where {T1<:Real, T2<:Real, T3<:Real}
     non_zero_hyperparameters = total_hyperparameters[findall(!iszero, total_hyperparameters)]
     total_hyperparameters, K_obs, y_obs, α, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters, y_obs=y_obs, K_obs=K_obs)
     return nlogL_Jones(prob_def, total_hyperparameters, K_obs, y_obs, α, prior_params)
@@ -516,6 +501,7 @@ function dnlogLdθ(dK_dθj::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}}
     # derivative of complexity penalization term
     complexity_penalty = -1 / 2 * tr(K_obs \ dK_dθj)
 
+    # return -1 / 2 * tr((α * transpose(α) - inv(K_obs)) * dK_dθj)
     return -1 * (data_fit + complexity_penalty)
 
 end
@@ -553,7 +539,7 @@ end
 
 
 "Replaces G with gradient of nLogL for non-zero hyperparameters"
-function ∇nlogL_Jones!(G::AbstractArray{T1,1}, prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T2,1}; y_obs::AbstractArray{T3,1}=zeros(1)) where {T1<:Real, T2<:Real, T3<:Real}
+function ∇nlogL_Jones!(G::AbstractArray{T1,1}, prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T2,1}; y_obs::AbstractArray{T3,1}=prob_def.y_obs) where {T1<:Real, T2<:Real, T3<:Real}
     non_zero_hyperparameters = total_hyperparameters[findall(!iszero, total_hyperparameters)]
     total_hyperparameters, K_obs, y_obs, α, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs)
     ∇nlogL_Jones!(G, prob_def, total_hyperparameters, K_obs, y_obs, α, prior_params)
@@ -561,20 +547,24 @@ end
 
 
 "Returns gradient of nLogL for non-zero hyperparameters"
-function ∇nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T1,1}; y_obs::AbstractArray{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
+function ∇nlogL_Jones(prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T1,1}; y_obs::AbstractArray{T2,1}=prob_def.y_obs) where {T1<:Real, T2<:Real}
     G = zeros(length(total_hyperparameters[findall(!iszero, total_hyperparameters)]))
     ∇nlogL_Jones!(G, prob_def, total_hyperparameters; y_obs=y_obs)
     return G
 end
 
 
-"reinsert the zero coefficients into the non-zero hyperparameter list"
-function reconstruct_total_hyperparameters(prob_def::Jones_problem_definition, non_zero_hyperparameters::AbstractArray{T,1}) where {T<:Real}
+"reinsert the zero coefficients into the non-zero hyperparameter list if needed"
+function reconstruct_total_hyperparameters(prob_def::Jones_problem_definition, hyperparameters::AbstractArray{T,1}) where {T<:Real}
 
-    new_coeff_array = reconstruct_array(non_zero_hyperparameters[1:end - prob_def.n_kern_hyper], prob_def.a0)
+    if length(hyperparameters)!=(prob_def.n_kern_hyper + length(prob_def.a0))
+        new_coeff_array = reconstruct_array(hyperparameters[1:end - prob_def.n_kern_hyper], prob_def.a0)
+        coefficient_hyperparameters = collect(Iterators.flatten(new_coeff_array))
+        total_hyperparameters = append!(coefficient_hyperparameters, hyperparameters[end - prob_def.n_kern_hyper + 1:end])
+    else
+        total_hyperparameters = copy(hyperparameters)
+    end
 
-    coefficient_hyperparameters = collect(Iterators.flatten(new_coeff_array))
-    total_hyperparameters = append!(coefficient_hyperparameters, non_zero_hyperparameters[end - prob_def.n_kern_hyper + 1:end])
     @assert length(total_hyperparameters)==(prob_def.n_kern_hyper + length(prob_def.a0))
 
     return total_hyperparameters

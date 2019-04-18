@@ -3,12 +3,17 @@ if nworkers() < 2
     addprocs(1)
 end
 
-@everywhere include("../src/all_functions.jl")
+@everywhere old_dir = pwd()
+@everywhere cd(@__DIR__)
+@everywhere cd("..")
+@everywhere include("src/base_functions.jl")
+@everywhere cd(old_dir)
 
 # loading in data
 using JLD2, FileIO
 
-include_kernel("quasi_periodic_kernel")
+kernel_name="quasi_periodic_kernel"
+include_kernel(kernel_name)
 @load "../jld2_files/problem_def_528.jld2" problem_def_528 normals
 
 # original kernel hyper parameters
@@ -29,19 +34,16 @@ fake_data[1:amount_of_samp_points] += planet_rvs/normals[1]
 period_grid = [1, 30., 400] ./ 365
 
 K_obs = K_observations(problem_def_528, total_hyperparameters)
-likelihoods_serial = kep_signal_likelihoods(period_grid, times_obs, fake_data, problem_def_528, total_hyperparameters, K_obs)
+
+likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data)
+likelihoods_serial = kep_signal_likelihoods(likelihood_func, period_grid, times_obs, fake_data, K_obs)
 
 # making necessary variables local to all workers
-@sync @everywhere include_kernel("quasi_periodic_kernel")
-for i in workers()
-    remotecall_fetch(()->times_obs, i)
-    remotecall_fetch(()->fake_data, i)
-    remotecall_fetch(()->problem_def_528, i)
-    remotecall_fetch(()->K_obs, i)
-    remotecall_fetch(()->total_hyperparameters, i)
-end
-
-@sync @everywhere kep_signal_likelihood_distributed(period::Real) = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=remove_kepler(fake_data, times_obs, period, K_obs))
+sendto(workers(), kernel_name=kernel_name)
+@everywhere include_kernel(kernel_name)
+sendto(workers(), times_obs=times_obs, fake_data=fake_data, problem_def_528=problem_def_528, total_hyperparameters=total_hyperparameters, K_obs=K_obs)
+@everywhere likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data)
+@everywhere kep_signal_likelihood_distributed(period::Real) = kep_signal_likelihood(likelihood_func, period, times_obs, fake_data, K_obs)
 
 # parallelize with pmap
 likelihoods_pmap = pmap(x->kep_signal_likelihood_distributed(x), period_grid, batch_size=floor(length(period_grid) / nworkers()) + 1)

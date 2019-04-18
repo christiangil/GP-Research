@@ -15,14 +15,14 @@ n_dif = 3
 
 # Setting up all of the data things
 # how much of the data you want to use (on time domain)
-start_ind = 300
-end_ind = 370  # 730
+start_ind = 100
+end_ind = 170  # 730
 amount_of_measurements = end_ind - start_ind + 1
 total_amount_of_measurements = amount_of_measurements * n_out
 
 # getting proper slice of data and converting to days
-x_obs = convert_phases_to_days.(phases[start_ind:end_ind])
-x_obs_units = "days"
+x_obs = convert_SOAP_phases_to_days.(phases[start_ind:end_ind])
+x_obs_units = "Time (days)"
 y_obs_hold = scores[1:n_out, start_ind:end_ind]
 @load "../../jld2_files/bootstrap.jld2" error_ests
 measurement_noise_hold = error_ests[1:n_out, start_ind:end_ind]
@@ -37,7 +37,7 @@ for i in 1:n_out
     y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :] / normals[i]
     measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :] / normals[i]
 end
-y_obs_units = "normalized RV + PCA scores"
+y_obs_units = "Normalized RV + PCA scores"
 
 # a0 = ones(n_out, n_dif) / 20
 a0 = zeros(n_out, n_dif)
