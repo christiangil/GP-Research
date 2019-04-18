@@ -7,11 +7,11 @@ using MultivariateStats
 using HDF5
 
 hdf5_locs = ["D:/Christian/Downloads/lambda-3923-6664-1years_1574spots_diffrot_id6.h5",
-    "D:/Christian/Downloads/lambda-3923-6664-0years_7spots_diffrot_id123.h5",
+    "D:/Christian/Downloads/lambda-3923-6664-0years_1spots_diffrot_id123.h5",
     "D:/Christian/Downloads/lambda-3923-6664-0years_1spots_diffrot_id1.h5"]
 file_addns = ["", "_singles", "_const"]
 
-file_choice = 1
+file_choice = 2
 hdf5_loc = hdf5_locs[file_choice]
 file_str =  file_addns[file_choice]
 

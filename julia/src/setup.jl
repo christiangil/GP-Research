@@ -16,6 +16,7 @@ using Pkg; using Pkg.API
 # Pkg.add("Test")
 # Pkg.add("Unitful")
 # Pkg.add("UnitfulAstro")
+# Pkg.add("Memoize")
 Pkg.activate(".")
 Pkg.instantiate()
 Pkg.update()

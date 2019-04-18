@@ -11,16 +11,3 @@ include("base_functions.jl")
 include("plotting_functions.jl")
 include("GP_plotting_functions.jl")
 include("diagnostic_functions.jl")
-
-using Juno
-using Profile
-function juno_profile(f::Function)
-    Profile.clear()
-    @profile f()
-    Juno.profiletree()
-    Juno.profiler()
-    @profiler f()
-end
-
-using BenchmarkTools
-# using Traceur

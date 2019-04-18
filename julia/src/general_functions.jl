@@ -145,20 +145,6 @@ linspace(start::Real, stop::Real, length::Integer) = range(start, stop=stop, len
 log_linspace(start::Real, stop::Real, length) = exp.(linspace(log(start), log(stop), length))
 
 
-"set all variables equal to nothing to save some memory"
-function clear_variables()
-    for var in names(Main)
-        try
-            # eval(Meta.parse("$var=0"))\
-            # eval(Meta.parse("$var=nothing"))
-            clear!(var)
-        catch
-        end
-    end
-    # GC.gc()
-end
-
-
 "Create a new array filling the non-zero entries of a template array with a vector of values"
 function reconstruct_array(non_zero_entries, template_array::AbstractArray{T,2}) where {T<:Real}
     @assert length(findall(!iszero, template_array))==length(non_zero_entries)

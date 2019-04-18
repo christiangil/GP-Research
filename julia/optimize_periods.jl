@@ -1,5 +1,5 @@
 # getting packages ready and making sure they are up to date
-include("src/setup.jl")
+# include("src/setup.jl")
 # include("test/runtests.jl")
 include("src/all_functions.jl")
 
@@ -55,7 +55,7 @@ end
 
 if parallelize == 0
 
-    likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data)
+    likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data, K_obs=K_obs)
     kep_signal_likelihoods(likelihood_func, period_grid[1:2], times_obs, fake_data, K_obs)
     serial_time = @elapsed likelihoods = kep_signal_likelihoods(likelihood_func, period_grid, times_obs, fake_data, K_obs)
     println("Serial likelihood calculation took $(serial_time)s")
@@ -66,7 +66,7 @@ else
     sendto(workers(), kernel_name=kernel_name)
     @everywhere include_kernel(kernel_name)
     sendto(workers(), times_obs=times_obs, fake_data=fake_data, problem_def_528=problem_def_528, total_hyperparameters=total_hyperparameters, K_obs=K_obs)
-    @everywhere likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data)
+    @everywhere likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data, K_obs=K_obs)
     @everywhere kep_signal_likelihood_distributed(period::Real) = kep_signal_likelihood(likelihood_func, period, times_obs, fake_data, K_obs)
     @sync @everywhere kep_signal_likelihood_distributed(4)  # make sure everything is compiled
 
@@ -101,6 +101,8 @@ else
     println("Parallel likelihood calculation took $(parallel_time)s")
 
 end
+
+# @profiler kep_signal_likelihoods(likelihood_func, period_grid, times_obs, fake_data, K_obs)
 
 # begin
 #     ax = init_plot()

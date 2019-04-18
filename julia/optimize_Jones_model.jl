@@ -1,7 +1,8 @@
 #adding in custom functions
 # include("src/setup.jl")
-include("src/all_functions.jl")
 # include("test/runtests.jl")
+include("src/all_functions.jl")
+
 
 # can use this if you want to replicate results
 # srand(1234)
