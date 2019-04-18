@@ -24,7 +24,6 @@ From within the julia folder, you can import all of the functions and run all of
 
 ```julia
 include("src/setup.jl")
-include("src/all_functions.jl")
 include("test/runtests.jl")
 ```
 
@@ -76,6 +75,5 @@ From within the julia folder, you can import all of the functions and run all of
 
 ```julia
 include("src/setup.jl")
-include("src/all_functions.jl")
 include("test/runtests.jl")
 ```
