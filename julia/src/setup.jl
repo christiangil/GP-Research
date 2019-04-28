@@ -17,6 +17,12 @@ using Pkg; using Pkg.API
 # Pkg.add("Unitful")
 # Pkg.add("UnitfulAstro")
 # Pkg.add("Memoize")
+
+# Pkg.add("CUDAdrv")
+# Pkg.add("CUDAnative")
+# Pkg.add("CuArrays")
+# Pkg.add("GPUArrays")
+
 Pkg.activate(".")
 Pkg.instantiate()
 Pkg.update()

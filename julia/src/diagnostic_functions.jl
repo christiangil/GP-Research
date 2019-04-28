@@ -76,9 +76,7 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
                 est_dKdθs[i, :, :] =  (covariance(prob_def, hold) - val) / dif
             end
         end
-        if return_est
-            append!(return_vec, [est_dKdθs])
-        end
+        if return_est; append!(return_vec, [est_dKdθs]) end
     end
 
     # construct analytical dKdθs
@@ -87,9 +85,7 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
         for i in 1:length(total_hyperparameters)
             anal_dKdθs[i, :, :] =  covariance(prob_def, total_hyperparameters; dKdθ_total=i)
         end
-        if return_anal
-            append!(return_vec, [anal_dKdθs])
-        end
+        if return_anal; append!(return_vec, [anal_dKdθs]) end
     end
 
     if return_dif | return_bool
@@ -109,14 +105,10 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
             max_val = maximum([max_val, val])
             if val>min_thres
                 no_differences = false
-                if print_stuff
-                    println("dK/dθ$ind has a average ratioed difference of: ", val)
-                end
+                if print_stuff; println("dK/dθ$ind has a average ratioed difference of: ", val) end
             end
         end
-        if print_stuff
-            println("Maximum average dK/dθ ratioed difference of: ", max_val)
-        end
+        if print_stuff; println("Maximum average dK/dθ ratioed difference of: ", max_val) end
         return_vec = no_differences
     end
 

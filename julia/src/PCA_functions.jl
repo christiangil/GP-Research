@@ -55,7 +55,7 @@ function compute_pca_component_RVSKL!(X::AbstractArray{T,2}, r::AbstractArray{T,
 		end
 		mag_s = norm(s)
 		r[:]  = s / mag_s
-		if abs(mag_s - last_mag_s) < (tol * mag_s) break end
+		if abs(mag_s - last_mag_s) < (tol * mag_s); break end
 		last_mag_s = mag_s
 	end
 	return r

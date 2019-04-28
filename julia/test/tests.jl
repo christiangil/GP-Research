@@ -59,10 +59,26 @@ end
     m_star = 1u"Msun"
     P = 1u"yr"
     m_planet = 1u"Mearth"
-    @test isapprox(kepler_rv(0., P, m_star, m_planet), -kepler_rv(1/2 * P, P, m_star, m_planet))
-    @test isapprox(kepler_rv(1/4 * P, P, m_star, m_planet), 0; atol=1e-8)
-    @test isapprox(kepler_rv(0., P, m_star, m_planet, i=0.), 0)
-    @test isapprox(kepler_rv(0., P, m_star, m_planet, i=pi/4), 1 / sqrt(2) * kepler_rv(0., P, m_star, m_planet))
+    e = 0.
+    ω = 0
+    M0 = 0
+
+    @test isapprox(kepler_rv(0., P, e, M0, m_star, m_planet, ω), -kepler_rv(1/2 * P, P, e, M0, m_star, m_planet, ω))
+    @test isapprox(kepler_rv(1/4 * P, P, e, M0, m_star, m_planet, ω), 0; atol=1e-8)
+    @test isapprox(kepler_rv(0., P, e, M0, m_star, m_planet, ω; i=0.), 0)
+    @test isapprox(kepler_rv(0., P, e, M0, m_star, m_planet, ω; i=pi/4), 1 / sqrt(2) * kepler_rv(0., P, e, M0, m_star, m_planet, ω))
+
+    # making sure our two RV equations produce the same results
+    K = 1.
+    times = linspace(0,1,10)
+    h = 0.0
+    k = 0.99
+    P = 1.
+    M0 = pi / 2
+    γ = 0.1
+
+    @test isapprox(kepler_rv.(times, P, sqrt(h * h + k * k), M0, K, atan(h, k); γ=γ), kepler_rv_hk.(times, P, M0, K, h, k; γ=γ))
+
     println()
 end
 

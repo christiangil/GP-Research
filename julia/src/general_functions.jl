@@ -41,7 +41,7 @@ function symmetric_A(A::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}}; ig
     else
         return A
     end
-
+    
 end
 
 
@@ -191,12 +191,8 @@ function find_modes(data::AbstractArray{T,1}; amount::Integer=3) where {T<:Real}
 
     # creating index list for inds at modes
     mode_inds = [i for i in 2:(length(data)-1) if (data[i]>=data[i-1]) && (data[i]>=data[i+1])]
-    if data[1] > data[2]
-        prepend!(mode_inds, 1)
-    end
-    if data[end] > data[end-1]
-        append!(mode_inds, length(data))
-    end
+    if data[1] > data[2]; prepend!(mode_inds, 1) end
+    if data[end] > data[end-1]; append!(mode_inds, length(data)) end
 
     # return highest mode indices
     return mode_inds[partialsortperm(-data[mode_inds], 1:amount)]

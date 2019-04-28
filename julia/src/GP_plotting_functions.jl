@@ -39,9 +39,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
     # calculate mean, σ, and show_curves
     if find_post
         mean, σ, K = GP_posteriors(prob_def, x_samp, total_hyperparameters)
-        if plot_K
-            plot_im(K, file = file * "_K_post." * filetype)
-        end
+        if plot_K; plot_im(K, file = file * "_K_post." * filetype) end
         L = ridge_chol(K).L
         for i in 1:show
             show_curves[i,:] = L * randn(amount_of_total_samp_points) + mean
@@ -93,11 +91,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
 
         xlabel(prob_def.x_obs_units)
         ylabel(prob_def.y_obs_units)
-        if output==1
-            title_string = "Apparent RVs"
-        else
-            title_string = "DCPCA Component " * string(output-1)
-        end
+        output==1 ? title_string = "Apparent RVs" : title_string = "DCPCA Component " * string(output-1)
         title(title_string, fontsize=45)
 
         if find_post
@@ -111,9 +105,8 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
         text(minimum(prob_def.x_obs), 1 * minimum([minimum(y_o), minimum(show_curves_o)]), "Hyperparameters: " * string(kernel_lengths), fontsize=30)
         # text(minimum(prob_def.x_obs), 1 *minimum(y_o), "Wavelengths: " * string(kernel_lengths), fontsize=30)
 
-        if file!=""
-            savefig(file * "_$output." * filetype)
-        end
+        if file!=""; savefig(file * "_$output." * filetype) end
+
     end
 
     PyPlot.close_figs()

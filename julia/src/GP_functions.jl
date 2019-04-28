@@ -88,9 +88,7 @@ function kernel(kernel_func::Function, kernel_hyperparameters::AbstractArray{T1,
     dif = (t1 - t2)
     dorder_tot = append!(copy(dorder), zeros(length(kernel_hyperparameters)))
 
-    if dKdθ_kernel > 0
-        dorder_tot[2 + dKdθ_kernel] = 1
-    end
+    if dKdθ_kernel > 0; dorder_tot[2 + dKdθ_kernel] = 1 end
 
     return kernel_func(kernel_hyperparameters, dif; dorder=dorder_tot)
 
@@ -132,9 +130,7 @@ function covariance(kernel_func::Function, x1list::AbstractArray{T1,1}, x2list::
     elseif same_x && symmetric
         for i in 1:x1_length
             for j in 1:x1_length
-                if i <= j
-                    K[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x1list[j], dorder=dorder, dKdθ_kernel=dKdθ_kernel)
-                end
+                if i <= j; K[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x1list[j], dorder=dorder, dKdθ_kernel=dKdθ_kernel) end
             end
         end
         return Symmetric(K)
@@ -197,11 +193,8 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
         dorder = [rem(i - 1, 2) + 1, 2 * div(i - 1, 2)]
 
         # things that have been differentiated an even amount of times are symmetric about t1-t2==0
-        if iseven(i)
-            A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dKdθ_kernel=dKdθ_kernel)
-        else
-            A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, dKdθ_kernel=dKdθ_kernel)
-        end
+        iseven(i) ? A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dKdθ_kernel=dKdθ_kernel) : A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, dKdθ_kernel=dKdθ_kernel)
+
     end
 
     # return the properly negative differentiated A matrix from the list
@@ -217,14 +210,14 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
             for j in 1:n_out
                 for k in 1:n_dif
                     for l in 1:n_dif
-                        if false  # (i == j) & isodd(k + l)
-                            # the cross terms (of odd differentiation orders) cancel each other out in matrices on diagonal
-                        else
-                            K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
-                                ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=
-                                # a[i, k] * a[j, l] * A[k, l]
-                                (a[i, k] * a[j, l]) *  A_mat(k, l, A_list)
-                        end
+                        # if false  # (i == j) & isodd(k + l)
+                        #     # the cross terms (of odd differentiation orders) cancel each other out in matrices on diagonal
+                        # else
+                        K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
+                            ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=
+                            # a[i, k] * a[j, l] * A[k, l]
+                            (a[i, k] * a[j, l]) *  A_mat(k, l, A_list)
+                        # end
                     end
                 end
             end
@@ -366,18 +359,12 @@ function coefficient_orders(n_out::Integer, n_dif::Integer; a::AbstractArray{T,2
         for j in 1:n_out
             for k in 1:n_dif
                 for l in 1:n_dif
-                    if (i == j) & isodd(k + l)
-                        # the cross terms (of odd differentiation orders) cancel each other out in diagonal matrices
-                    else
+                    if !((i == j) & isodd(k + l))  # the cross terms (of odd differentiation orders) cancel each other out in diagonal matrices
                         for m in 1:n_out
                             for n in 1:n_dif
                                 if a[m, n] != 0
-                                    if [m, n] == [i, k]
-                                        coeff_orders[i, j, k, l, m, n] += 1
-                                    end
-                                    if [m, n] == [j, l]
-                                        coeff_orders[i, j, k, l, m, n] += 1
-                                    end
+                                    if [m, n] == [i, k]; coeff_orders[i, j, k, l, m, n] += 1 end
+                                    if [m, n] == [j, l]; coeff_orders[i, j, k, l, m, n] += 1 end
                                 end
                             end
                         end

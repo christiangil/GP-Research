@@ -117,11 +117,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     # write(io, string("    if isnan(func)\n"))
     # write(io, string("        func = 0\n"))
     # write(io, string("    end\n\n"))
-    if uses_abs_dif
-        write(io, "    return (2 * (dif_positive | iseven(dorder[1])) - 1) * even_time_derivative * float(func)  # correcting for use of abs_dif and amount of t2 derivatives\n\n")
-    else
-        write(io, "    return even_time_derivative * float(func)  # correcting for amount of t2 derivatives\n\n")
-    end
+    uses_abs_dif ? write(io, "    return (2 * (dif_positive | iseven(dorder[1])) - 1) * even_time_derivative * float(func)  # correcting for use of abs_dif and amount of t2 derivatives\n\n") : write(io, "    return even_time_derivative * float(func)  # correcting for amount of t2 derivatives\n\n")
     write(io, "end\n\n\n")
     write(io, "return $kernel_name, $num_kernel_hyperparameters  # the function handle and the number of kernel hyperparameters\n")
     close(io)

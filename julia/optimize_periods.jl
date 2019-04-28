@@ -50,7 +50,7 @@ if length(ARGS)>1
     parallelize = parse(Int, ARGS[2])
     @assert parallelize >= 0
 else
-    parallelize = 2
+    parallelize = 4
 end
 
 if parallelize == 0
@@ -59,6 +59,10 @@ if parallelize == 0
     kep_signal_likelihoods(likelihood_func, period_grid[1:2], times_obs, fake_data, K_obs)
     serial_time = @elapsed likelihoods = kep_signal_likelihoods(likelihood_func, period_grid, times_obs, fake_data, K_obs)
     println("Serial likelihood calculation took $(serial_time)s")
+
+elseif parallelize>3
+
+
 
 else
 

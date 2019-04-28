@@ -44,8 +44,6 @@ function plot_im(A; file::String="")
     fig = imshow(A[:,:])
     colorbar()
     # title("Heatmap")
-    if file != ""
-        savefig(file)
-    end
+    if file != ""; savefig(file) end
     PyPlot.close_figs()
 end
