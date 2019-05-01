@@ -13,3 +13,5 @@ include("kernel_creation_functions.jl")
 # include("plotting_functions.jl")
 # include("GP_plotting_functions.jl")
 # include("diagnostic_functions.jl")
+
+const light_speed = convert_and_strip_units(u"m/s",1u"c")

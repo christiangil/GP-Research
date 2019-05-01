@@ -101,41 +101,46 @@ function fit_gen_pca_rv_RVSKL(X::AbstractArray{T,2}, fixed_comp::AbstractArray{T
 	end
 
 	# calculating radial velocities (in m/s) from redshifts
-	rvs = 299792458 * scores[1, :]  # c * z
+	rvs = light_speed * scores[1, :]  # c * z
 
 	return (mu, M, scores, fracvar, rvs)
 end
 
 
+make_noisy_spectra(time_series_spectra::AbstractArray{T,2}, NSR::Real) where {T<:Real} = time_series_spectra .* (1 .+ (NSR .* randn(size(time_series_spectra))))
+
+
 """
-Generate a noisy permutation of the data adding a noise-to-signal ratio amount of Gaussian noise to each flux bin
-Adapted from fit_gen_pca_rv_RVSKL() by taking out the
+Generate a noisy permutation of the data by recalculating PCA components and scores
+after adding a noise-to-signal ratio amount of Gaussian noise to each flux bin
 """
-function get_noisy_scores(time_series_spectra::AbstractArray{T1,2}, NSR::Real, M::AbstractArray{T2,2}) where {T1<:Real, T2<:Real}
-	num_lambda = size(time_series_spectra, 1)
+function noisy_scores_from_spectra(time_series_spectra::AbstractArray{T1,2}, NSR::Real, M::AbstractArray{T2,2}) where {T1<:Real, T2<:Real}
+	num_components = size(M, 2)
 	num_spectra = size(time_series_spectra, 2)
-	scores = zeros(num_components, num_spectra)
-	time_series_spectra_tmp = time_series_spectra .* (1 .+ (NSR .* randn(size(time_series_spectra))))
+	noisy_scores = zeros(num_components, num_spectra)
+	time_series_spectra_tmp = make_noisy_spectra(time_series_spectra, NSR)
 	time_series_spectra_tmp .-= vec(mean(time_series_spectra_tmp, dims=2))
 	fixed_comp_norm2 = sum(abs2, view(M, :, 1))
 	for i in 1:num_spectra
-		scores[1, i] = (dot(view(time_series_spectra_tmp, :, i), view(M, :, 1)) / fixed_comp_norm2)  # Normalize differently, so scores are z (i.e., doppler shift)
-		time_series_spectra_tmp[:, i] -= scores[1, i] * view(M, :, 1)
+		noisy_scores[1, i] = (dot(view(time_series_spectra_tmp, :, i), view(M, :, 1)) / fixed_comp_norm2)  # Normalize differently, so scores are z (i.e., doppler shift)
+		time_series_spectra_tmp[:, i] -= noisy_scores[1, i] * view(M, :, 1)
 	end
 	for j in 2:num_components
 		for i in 1:num_spectra
-			scores[j, i] = dot(view(time_series_spectra_tmp, :, i), view(M, :, j)) #/sum(abs2,view(M,:,j-1))
-			time_series_spectra_tmp[:, i] .-= scores[j, i] * view(M, :, j)
+			noisy_scores[j, i] = dot(view(time_series_spectra_tmp, :, i), view(M, :, j)) #/sum(abs2,view(M,:,j-1))
+			time_series_spectra_tmp[:, i] .-= noisy_scores[j, i] * view(M, :, j)
 		end
 	end
-	return scores
+	return noisy_scores
 end
 
 
 "bootstrapping for errors in PCA scores. Takes ~28s per bootstrap on my computer"
-function bootstrap_errors(time_series_spectra::AbstractArray{T,2}; boot_amount::Integer=10, save_filename::String="jld2_files/bootstrap.jld2") where {T<:Real}
+function bootstrap_errors(time_series_spectra::AbstractArray{T,2}, hdf5_filename::String; boot_amount::Integer=10, save_filename::String="jld2_files/bootstrap.jld2") where {T<:Real}
 
     @load "jld2_files/rv_data.jld2" M scores
+
+	scores_mean = copy(scores)  # saved to ensure that the scores are paired with the proper rv_data
 
     NSR = 1e-2
     num_lambda = size(time_series_spectra, 1)
@@ -145,24 +150,46 @@ function bootstrap_errors(time_series_spectra::AbstractArray{T,2}; boot_amount::
     scores_tot_new = zeros(boot_amount, num_components, num_spectra)
 
     for k in 1:boot_amount
-        scores = get_noisy_scores(time_series_spectra, NSR, M)
+        scores = noisy_scores_from_spectra(time_series_spectra, NSR, M)
         scores_tot_new[k, :, :] = scores
     end
 
     if isfile(save_filename)
-        @load save_filename scores_tot
+		hdf5_filename_new = hdf5_filename
+        @load save_filename scores_tot hdf5_filename
+		@assert hdf5_filename_new==hdf5_filename  # ensure that we are combining scores from different SOAP runs
         scores_tot = vcat(scores_tot, scores_tot_new)
     else
         scores_tot = scores_tot_new
     end
 
     error_ests = zeros(num_components, num_spectra)
-    est_point_error(a::AbstractArray{T,1}) where {T<:Real} = fit_mle(Normal, a).σ
+
+	# est_point_error(a) = fit_mle(Normal, a).σ
+    # std_uncorr(a) = std(a; corrected=false)
 
     for i in 1:num_components
-        error_ests[i, :] = mapslices(est_point_error, scores_tot[:, i, :]; dims=1)
-        # error_ests[i,:] = mapslices(std, scores_tot[:, i, :]; dims=1)
+		# # produce same results
+        # error_ests[i, :] = mapslices(est_point_error, scores_tot[:, i, :]; dims=1)
+        # error_ests[i,:] = mapslices(std_uncorr, scores_tot[:, i, :]; dims=1)
+
+        error_ests[i,:] = mapslices(std, scores_tot[:, i, :]; dims=1)
     end
 
-    @save save_filename scores_tot error_ests
+    @save save_filename scores_mean scores_tot error_ests hdf5_filename
+end
+
+
+"""
+Generate a noisy permutation of the data by drawing from a multivariate Gaussian
+based on the covariance of many data draws
+"""
+function noisy_scores_from_covariance(mean_scores::AbstractArray{T,2}, many_scores::AbstractArray{T,3}) where {T<:Real}
+	@assert size(mean_scores, 1) == size(many_scores, 2)  # amount of score dimensions
+	@assert size(mean_scores, 2) == size(many_scores, 3)  # amount of time points
+	noisy_scores = zeros(size(mean_scores))
+	for i in 1:size(mean_scores, 2)
+	    noisy_scores[:, i] = rand(MvNormal(mean_scores[:, i], cov(many_scores[:, :, i]; dims=1)))
+	end
+	return noisy_scores
 end

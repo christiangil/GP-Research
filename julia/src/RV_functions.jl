@@ -256,8 +256,7 @@ function kepler_rv_linear_e(t, P::Union{Real, Quantity}, coefficients::AbstractA
     assert_positive(P)
     t = convert_and_strip_units.(u"yr", t)
     phase = unit_phase.(t, P)
-    twophase = 2 .* phase
-    return (coefficients[1] .* cos.(phase)) + (coefficients[2] .* sin.(phase)) + (coefficients[3] .* cos.(twophase)) + (coefficients[4] .* sin.(twophase)) + (coefficients[5] .* ones(length(t)))
+    return (coefficients[1] .* cos.(phase)) + (coefficients[2] .* sin.(phase)) + (coefficients[3] .* cos.(2 .* phase)) + (coefficients[4] .* sin.(2 .* phase)) + (coefficients[5] .* ones(length(t)))
 end
 
 
