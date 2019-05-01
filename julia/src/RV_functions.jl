@@ -17,14 +17,14 @@ convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Real) = quant
 Calculate velocity semi-amplitude for RV signal of planets in m/s
 adapted from eq. 12 of (http://exoplanets.astro.yale.edu/workshop/EPRV/Bibliography_files/Radial_Velocity.pdf)
 """
-function velocity_semi_amplitude(P::Real, m_star::Real, m_planet::Real; e::Real=0., i::Real=pi/2)
+function velocity_semi_amplitude(P::Real, m_star::Real, m_planet::Real; e::Real=0., i::Real=π/2)
     assert_positive(P, m_star, m_planet)
     comb_mass = m_star + m_planet
-    K_au_yr = 2 * pi * sin(i) * m_planet / (sqrt(1 - (e * e)) * cbrt(comb_mass * comb_mass * P))
+    K_au_yr = 2 * π * sin(i) * m_planet / (sqrt(1 - (e * e)) * cbrt(comb_mass * comb_mass * P))
     return K_au_yr * convert_and_strip_units(u"m", 1u"AU") / convert_and_strip_units(u"s", 1u"yr")
 end
 
-function velocity_semi_amplitude(P::Union{Real, Quantity}, m_star::Union{Real, Quantity}, m_planet::Union{Real, Quantity}; e::Real=0., i::Real=pi/2)
+function velocity_semi_amplitude(P::Union{Real, Quantity}, m_star::Union{Real, Quantity}, m_planet::Union{Real, Quantity}; e::Real=0., i::Real=π/2)
     m_star = convert_and_strip_units(u"Msun", m_star)
     m_planet = convert_and_strip_units(u"Msun", m_planet)
     P = convert_and_strip_units(u"yr", P)
@@ -32,8 +32,14 @@ function velocity_semi_amplitude(P::Union{Real, Quantity}, m_star::Union{Real, Q
 end
 
 
+# unit_phase(t::Real, P::Real) = mod(t / P * 2 * π, 2 * π)
+unit_phase(t::Real, P::Real) = t / P * 2 * π
+
+
 "calculate mean anomaly"
-mean_anomaly(t::Real, P::Real, M0::Real) = mod(t / P * 2 * pi - M0, 2 * pi)
+mean_anomaly(t::Real, P::Real, M0::Real) = unit_phase(t, P) - M0
+# mean_anomaly(t::Real, P::Real, M0::Real) = mod(unit_phase(t, P) - M0, 2 * π)
+# mean_anomaly(t::Real, P::Real, M0::Real) = mod(t / P * 2 * π - M0, 2 * π)
 
 
 """   ecc_anom_init_guess_danby(M, ecc)
@@ -44,18 +50,18 @@ Julia function originally written by Eric Ford
 """
 function ecc_anom_init_guess_danby(M::Real, e::Real)
     k = convert(typeof(e), 0.85)
-    if M < zero(M); M += 2 * pi end
-    (M < pi) ? M + k * e : M - k * e;
+    if M < zero(M); M += 2 * π end
+    (M < π) ? M + k * e : M - k * e;
 end
 
 
 """   update_ecc_anom_laguerre(E, M, ecc)
 Update the current guess (E) for the solution to Kepler's equation given mean anomaly (M) and eccentricity (ecc)
-   Based on "An Improved Algorithm due to Laguerre for the Solution of Kepler's Equation"
-   Conway, B. A.  (1986) Celestial Mechanics, Volume 39, Issue 2, pp.199-211  1986CeMec..39..199C
+    Based on "An Improved Algorithm due to Laguerre for the Solution of Kepler's Equation"
+    Conway, B. A.  (1986) Celestial Mechanics, Volume 39, Issue 2, pp.199-211  1986CeMec..39..199C
 Julia function originally written by Eric Ford
-    Basically looks for root of an nth order polynomial assuming that 1 root is
-    the one you are looking for (E) and the rest are evenly spaced
+Basically looks for root of an nth order polynomial assuming that 1 root is
+the one you are looking for (E) and the rest are evenly spaced
 """
 function update_ecc_anom_laguerre(E::Real, M::Real, e::Real)
     # es = e * sin(E)
@@ -146,15 +152,46 @@ from (https://en.wikipedia.org/wiki/True_anomaly#From_the_eccentric_anomaly)
 
 
 """
-Radial velocity formula
-adapted from eq. 11 of (http://exoplanets.astro.yale.edu/workshop/EPRV/Bibliography_files/Radial_Velocity.pdf)
+kepler_rv(t, P, e, M0, K, ω; γ)
+Calculate radial velocity of star due to planet following Keplerian orbit at specified time.
+Inputs:
+- time
+- Period
+- eccentricity
+- mean anomaly at time=0
+- RV amplitude
+- argument of periapsis
+Optionally:
+- velocity offset
 """
 function kepler_rv(t::Real, P::Real, e::Real, M0::Real, K::Real, ω::Real; γ::Real=0.)
     assert_positive(P)
-    return K * (e * cos(ω) + cos(ω + ϕ(t, P, e, M0))) + γ
+    k = e * cos(ω)
+    return kepler_rv_andras(t, P, e, M0, K, k, ω; γ=γ)
 end
 
-function kepler_rv(t::Union{Real, Quantity}, P::Union{Real, Quantity}, e::Real, M0::Real, m_star::Union{Real, Quantity}, m_planet::Union{Real, Quantity}, ω::Real; i::Real=pi/2, γ::Real=0.)
+
+"adapted from eq. 11 of (http://exoplanets.astro.yale.edu/workshop/EPRV/Bibliography_files/Radial_Velocity.pdf)"
+kepler_rv_true_anomaly(t::Real, P::Real, e::Real, M0::Real, K::Real, ω::Real; γ::Real=0.) = K * (e * cos(ω) + cos(ω + ϕ(t, P, e, M0))) + γ
+
+
+"""
+Radial velocity formula directly using eccentric anomaly
+Based on "An analytical solution for Kepler's problem"
+Pál, András, Monthly Notices of the Royal Astronomical Society, 396, 3, 1737-1742.  2009MNRAS.396.1737P
+see ηdot part of eq. 19
+"""
+function kepler_rv_andras(t::Real, P::Real, e::Real, M0::Real, K::Real, k::Real, ω::Real; γ::Real=0.)
+    E = ecc_anomaly(t, P, e, M0)
+    j = sqrt(1 - e*e)
+    q = e * cos(E)
+    # return K * j / (1 - q) * (cos(ω + E) - (1 - j) * cos(E) * cos(ω))  # equivalent
+    return K * j / (1 - q) * (cos(ω + E) - k * q / (1 + j)) + γ
+end
+
+
+"Convert Unitful things to proper units for RV calculations"
+function kepler_rv(t::Union{Real, Quantity}, P::Union{Real, Quantity}, e::Real, M0::Real, m_star::Union{Real, Quantity}, m_planet::Union{Real, Quantity}, ω::Real; i::Real=π/2, γ::Real=0.)
     m_star = convert_and_strip_units(u"Msun", m_star)
     m_planet = convert_and_strip_units(u"Msun", m_planet)
     P = convert_and_strip_units(u"yr", P)
@@ -165,45 +202,84 @@ function kepler_rv(t::Union{Real, Quantity}, P::Union{Real, Quantity}, e::Real, 
 end
 
 
-"""   kepler_rv_hk(t, P, M0, K, h, k)
-Calculate radial velocity of star due to planet following Keplerian orbit at specified time.
-Inputs:
-- time
-- Period
-- mean anomaly at time=0
-- RV amplitude
-- h = e sin(ω)
-- k = e cos(ω)
-This differs from usual expressions so as to be differntiable, even at zero eccentricity.
-Based on "An analytical solution for Kepler's problem"
-Pál, András, Monthly Notices of the Royal Astronomical Society, 396, 3, 1737-1742.  2009MNRAS.396.1737P
-see ηdot part of eq. 19
-Modified version of Julia code originally written by Eric Ford
+"""
+This differs from usual expressions so as to be differentiable, even at zero eccentricity.
+Done by replacing e and ω, with h and k
+h = e * sin(ω)
+k = e * cos(ω)
 """
 function kepler_rv_hk(t::Real, P::Real, M0::Real, K::Real, h::Real, k::Real; γ::Real=0.)
-    e_sq = h * h + k * k
-    e = sqrt(e_sq)
+    e = sqrt(h * h + k * k)
     ω = atan(h, k)
-    E = ecc_anomaly(t, P, e, M0)
-    j = sqrt(1 - e_sq)
-    q = e * cos(E)
-    # return K * j / (1 - q) * (cos(ω + E) - (1 - j) * cos(E) * cos(ω))  # equivalent
-    return K * j / (1 - q) * (cos(ω + E) - k * q / (1 + j)) + γ
+    return kepler_rv_andras(t, P, e, M0, K, k, ω; γ=γ)
 end
 
 
 """
-A linear formulation of a Keplerian RV signal i.e. e-> 0 so ω becomes meaningless and ϕ -> M
-coefficients[1] = K * cos(M0)
-coefficients[2] = K * sin(M0)
+A circular formulation of a Keplerian RV signal i.e. e-> 0 so ϕ -> M
+for initial full orbit fits
+coefficients[1] = K * cos(M0 - ω)
+coefficients[2] = K * sin(M0 - ω)
 coefficients[3] = γ
+so
+K = sqrt(coefficients[1]^2 + coefficients[2]^2)
+M0 - ω = atan(coefficients[2], coefficients[1])
 """
-function kepler_rv_linear(t, P::Union{Real, Quantity}, coefficients::AbstractArray{T,1}) where {T<:Real}
+function kepler_rv_circ(t, P::Union{Real, Quantity}, coefficients::AbstractArray{T,1}) where {T<:Real}
     @assert length(coefficients) == 3 "wrong number of coefficients"
     P = convert_and_strip_units(u"yr", P)
     assert_positive(P)
     t = convert_and_strip_units.(u"yr", t)
-    return (coefficients[1] .* cos.(mean_anomaly.(t, P, 0))) + (coefficients[2] .* sin.(mean_anomaly.(t, P, 0))) + (coefficients[3] .* ones(length(t)))
+    phase = unit_phase.(t, P)
+    return (coefficients[1] .* cos.(phase)) + (coefficients[2] .* sin.(phase)) + (coefficients[3] .* ones(length(t)))
+end
+
+
+"""
+A linear formulation of a Keplerian RV signal for low eccentricity by expanding about e=0
+average difference is < 1% for e < 0.1 and < 10% for e < 0.35
+for initial full orbit fits
+coefficients[1] = K * cos(M0 - ω)
+coefficients[2] = K * sin(M0 - ω)
+coefficients[3] = e * K * cos(2 * M0 - ω)
+coefficients[4] = e * K * sin(2 * M0 - ω)
+coefficients[5] = γ
+so
+K = sqrt(coefficients[1]^2 + coefficients[2]^2)
+e = sqrt(coefficients[3]^2 + coefficients[4]^2) / K
+M0 = atan(coefficients[4], coefficients[3]) - atan(coefficients[2], coefficients[1])
+ω = atan(coefficients[4], coefficients[3]) - 2 * atan(coefficients[2], coefficients[1])
+"""
+function kepler_rv_linear_e(t, P::Union{Real, Quantity}, coefficients::AbstractArray{T,1}) where {T<:Real}
+    @assert length(coefficients) == 5 "wrong number of coefficients"
+    P = convert_and_strip_units(u"yr", P)
+    assert_positive(P)
+    t = convert_and_strip_units.(u"yr", t)
+    phase = unit_phase.(t, P)
+    twophase = 2 .* phase
+    return (coefficients[1] .* cos.(phase)) + (coefficients[2] .* sin.(phase)) + (coefficients[3] .* cos.(twophase)) + (coefficients[4] .* sin.(twophase)) + (coefficients[5] .* ones(length(t)))
+end
+
+
+"""
+A linear formulation of a Keplerian RV signal for a given eccentricity, period and initial mean anomaly
+for fitting non-(e, P, M0) components
+see Wright and Howard 2009 "EFFICIENT FITTING OF MULTI-PLANET KEPLERIAN MODELS TO RADIAL VELOCITY AND ASTROMETRY DATA" (https://arxiv.org/abs/0904.3725)
+coefficients[1] = K * cos(ω)
+coefficients[2] = -K * sin(ω)
+coefficients[3] = γ + K * e * cos(ω)
+so
+K = sqrt(coefficients[1]^2 + coefficients[2]^2)
+ω = atan(-coefficients[2], coefficients[1])
+γ = coefficients[3] - K * e * cos(ω)
+"""
+function kepler_rv_linear_gen(t, P::Union{Real, Quantity}, coefficients::AbstractArray{T,1}) where {T<:Real}
+    @assert length(coefficients) == 3 "wrong number of coefficients"
+    P = convert_and_strip_units(u"yr", P)
+    assert_positive(P)
+    t = convert_and_strip_units.(u"yr", t)
+    ϕ_t = ϕ.(t, P, e, M0)
+    return (coefficients[1] .* cos.(ϕ_t)) + (coefficients[2] .* sin.(ϕ_t)) + (coefficients[3] .* ones(length(t)))
 end
 
 
@@ -228,10 +304,10 @@ function remove_kepler!(data::AbstractArray{T1,1}, times::AbstractArray{T2,1}, P
     end
     amount_of_total_samp_points = length(data)
     amount_of_samp_points = length(times)
-    kepler_rv_linear_terms = hcat(cos.(mean_anomaly.(times, P)), sin.(mean_anomaly.(times, P)), ones(length(times)))
+    kepler_rv_linear_terms = hcat(cos.(unit_phase.(times, P)), sin.(unit_phase.(times, P)), ones(length(times)))
     amount_of_total_samp_points > amount_of_samp_points ? kepler_linear_terms = vcat(kepler_rv_linear_terms, zeros(amount_of_total_samp_points - amount_of_samp_points, 3)) : kepler_linear_terms = kepler_rv_linear_terms
     x = general_lst_sq(kepler_linear_terms, data; Σ=covariance)
-    data[1:amount_of_samp_points] -= kepler_rv_linear(times, P, x)
+    data[1:amount_of_samp_points] -= kepler_rv_circ(times, P, x)
 end
 
 function remove_kepler(y_obs_w_planet::AbstractArray{T1,1}, times::AbstractArray{T2,1}, P::Real, covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},AbstractArray{T5}}) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}

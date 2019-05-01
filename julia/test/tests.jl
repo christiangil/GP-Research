@@ -48,9 +48,10 @@ end
     test_time = rand()
     P=2.
     ecc=0.01
-    @test isapprox(ϕ(test_time, P, ecc), ϕ_approx(test_time, P, ecc); rtol=1e-2)
-    @test ϕ(test_time, P, ecc)!=mean_anomaly(test_time, P)
-    @test ϕ_approx(test_time, P, ecc)!=mean_anomaly(test_time, P)
+    M0=1
+    # @test isapprox(ϕ(test_time, P, ecc, M0), ϕ_approx(test_time, P, ecc); rtol=1e-2)
+    @test ϕ(test_time, P, ecc, M0) != mean_anomaly(test_time, P, M0)
+    # @test ϕ_approx(test_time, P, ecc, M0) != mean_anomaly(test_time, P, M0)
     println()
 end
 
@@ -76,8 +77,11 @@ end
     P = 1.
     M0 = pi / 2
     γ = 0.1
+    e = sqrt(h * h + k * k)
+    ω = atan(h, k)
 
-    @test isapprox(kepler_rv.(times, P, sqrt(h * h + k * k), M0, K, atan(h, k); γ=γ), kepler_rv_hk.(times, P, M0, K, h, k; γ=γ))
+    @test isapprox(kepler_rv.(times, P, e, M0, K, ω; γ=γ), kepler_rv_hk.(times, P, M0, K, h, k; γ=γ))
+    @test isapprox(kepler_rv.(times, P, e, M0, K, ω; γ=γ), kepler_rv_true_anomaly.(times, P, e, M0, K, ω; γ=γ))
 
     println()
 end
@@ -102,10 +106,10 @@ end
     println()
 end
 
-old_dir = pwd()
-cd(@__DIR__)
-include("parallel_rv_test.jl")
-cd(old_dir)
+# old_dir = pwd()
+# cd(@__DIR__)
+# include("parallel_rv_test.jl")
+# cd(old_dir)
 
 @testset "A \\ b == x working as intended?" begin
 

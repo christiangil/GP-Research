@@ -87,10 +87,7 @@ function fit_gen_pca_rv_RVSKL(X::AbstractArray{T,2}, fixed_comp::AbstractArray{T
 	    Xtmp[:, i] -= z * fixed_comp
     end
 	fracvar[1] = sum(abs2, Xtmp) / totalvar
-    println("# j = ", 1, " sum(abs2, Xtmp) = ", sum(abs2, Xtmp), " frac_var_remain= ", fracvar[1] )
-
-	# calculating radial velocities (in m/s) from redshifts
-	rvs = 299792458 * scores[1, :]  # c * z
+    # println("# j = ", 1, " sum(abs2, Xtmp) = ", sum(abs2, Xtmp), " frac_var_remain= ", fracvar[1] )
 
 	# remaining component calculations
     for j in 2:num_components
@@ -100,10 +97,38 @@ function fit_gen_pca_rv_RVSKL(X::AbstractArray{T,2}, fixed_comp::AbstractArray{T
 			Xtmp[:,i] .-= scores[j, i] * view(M, :, j)
 		end
 		fracvar[j] = sum(abs2,Xtmp)/totalvar
-		println("# j = ", j, " sum(abs2, Xtmp) = ", sum(abs2,Xtmp), " frac_var_remain= ", fracvar[j] )
+		# println("# j = ", j, " sum(abs2, Xtmp) = ", sum(abs2,Xtmp), " frac_var_remain= ", fracvar[j] )
 	end
 
+	# calculating radial velocities (in m/s) from redshifts
+	rvs = 299792458 * scores[1, :]  # c * z
+
 	return (mu, M, scores, fracvar, rvs)
+end
+
+
+"""
+Generate a noisy permutation of the data adding a noise-to-signal ratio amount of Gaussian noise to each flux bin
+Adapted from fit_gen_pca_rv_RVSKL() by taking out the
+"""
+function get_noisy_scores(time_series_spectra::AbstractArray{T1,2}, NSR::Real, M::AbstractArray{T2,2}) where {T1<:Real, T2<:Real}
+	num_lambda = size(time_series_spectra, 1)
+	num_spectra = size(time_series_spectra, 2)
+	scores = zeros(num_components, num_spectra)
+	time_series_spectra_tmp = time_series_spectra .* (1 .+ (NSR .* randn(size(time_series_spectra))))
+	time_series_spectra_tmp .-= vec(mean(time_series_spectra_tmp, dims=2))
+	fixed_comp_norm2 = sum(abs2, view(M, :, 1))
+	for i in 1:num_spectra
+		scores[1, i] = (dot(view(time_series_spectra_tmp, :, i), view(M, :, 1)) / fixed_comp_norm2)  # Normalize differently, so scores are z (i.e., doppler shift)
+		time_series_spectra_tmp[:, i] -= scores[1, i] * view(M, :, 1)
+	end
+	for j in 2:num_components
+		for i in 1:num_spectra
+			scores[j, i] = dot(view(time_series_spectra_tmp, :, i), view(M, :, j)) #/sum(abs2,view(M,:,j-1))
+			time_series_spectra_tmp[:, i] .-= scores[j, i] * view(M, :, j)
+		end
+	end
+	return scores
 end
 
 
@@ -111,7 +136,6 @@ end
 function bootstrap_errors(time_series_spectra::AbstractArray{T,2}; boot_amount::Integer=10, save_filename::String="jld2_files/bootstrap.jld2") where {T<:Real}
 
     @load "jld2_files/rv_data.jld2" M scores
-    scores0 = copy(scores)
 
     NSR = 1e-2
     num_lambda = size(time_series_spectra, 1)
@@ -120,23 +144,8 @@ function bootstrap_errors(time_series_spectra::AbstractArray{T,2}; boot_amount::
     num_components = size(M, 2)
     scores_tot_new = zeros(boot_amount, num_components, num_spectra)
 
-    # code adapted from fit_gen_pca_rv
-    # https://github.com/eford/RvSpectraKitLearn.jl/blob/master/src/generalized_pca.jl
     for k in 1:boot_amount
-        scores = zeros(num_components, num_spectra)
-        time_series_spectra_tmp = time_series_spectra .* (1 .+ (NSR .* randn(size(time_series_spectra))))
-        time_series_spectra_tmp .-= vec(mean(time_series_spectra_tmp, dims=2))
-        fixed_comp_norm2 = sum(abs2, view(M, :, 1))
-        for i in 1:num_spectra
-            scores[1, i] = (dot(view(time_series_spectra_tmp, :, i), view(M, :, 1)) / fixed_comp_norm2)  # Normalize differently, so scores are z (i.e., doppler shift)
-            time_series_spectra_tmp[:, i] -= scores[1, i] * view(M, :, 1)
-        end
-        for j in 2:num_components
-            for i in 1:num_spectra
-                scores[j, i] = dot(view(time_series_spectra_tmp, :, i), view(M, :, j)) #/sum(abs2,view(M,:,j-1))
-                time_series_spectra_tmp[:, i] .-= scores[j, i] * view(M, :, j)
-            end
-        end
+        scores = get_noisy_scores(time_series_spectra, NSR, M)
         scores_tot_new[k, :, :] = scores
     end
 

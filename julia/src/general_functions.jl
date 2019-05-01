@@ -14,7 +14,7 @@ function multiple_append!(a::AbstractArray{T,1}, b...) where {T<:Real}
 end
 
 
-"if array is symmetric, return the symmetric (and opionally cholesky factorized) version"
+"if array is symmetric, return the symmetric (and optionally cholesky factorized) version"
 function symmetric_A(A::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}}; ignore_asymmetry::Bool=false, chol::Bool=false) where {T1<:Real, T2<:Real}
 
     if size(A, 1) == size(A, 2)
@@ -41,7 +41,7 @@ function symmetric_A(A::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}}; ig
     else
         return A
     end
-    
+
 end
 
 

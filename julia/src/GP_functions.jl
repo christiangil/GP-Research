@@ -446,7 +446,7 @@ function nlogL(K_obs::Cholesky{T1,Array{T1,2}}, y_obs::AbstractArray{T2,1}, α::
     # complexity_penalty = -1 / 2 * log(det(K_obs))
     complexity_penalty = -1 / 2 * logdet(K_obs)  # half memory but twice the time
     # normalization term (functionally useless)
-    normalization = -n / 2 * log(2 * pi)
+    normalization = -n / 2 * log(2 * π)
 
     return -1 * (data_fit + complexity_penalty + normalization)
 

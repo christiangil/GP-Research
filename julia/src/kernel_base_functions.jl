@@ -29,7 +29,7 @@ function periodic_kernel_base(hyperparameters::Union{AbstractArray{T,1}, Abstrac
     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
     kernel_period, kernel_length = hyperparameters
 
-    sin_τ = sin(pi * (dif / kernel_period))
+    sin_τ = sin(π * (dif / kernel_period))
     return exp(-2 * sin_τ * sin_τ / (kernel_length * kernel_length))
 
 
