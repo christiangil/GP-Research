@@ -20,7 +20,9 @@ end
 # loading in data
 using JLD2, FileIO
 
-kernel_name = "se_kernel"
+kernel_names = ["quasi_periodic_kernel", "se_kernel", "rq_kernel", "matern52_kernel", "periodic_kernel"]
+
+kernel_name = kernel_names[2]
 @load "jld2_files/problem_def_full_base.jld2" problem_def_full_base normals
 kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
 problem_def_528 = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_full_base)
@@ -117,7 +119,7 @@ end
 #     axvline(x=convert_and_strip_units(u"d", P))
 #     title_string = @sprintf "%.0f day, %.2f Earth masses" convert_and_strip_units(u"d",P) convert_and_strip_units(u"Mearth",m_planet)
 #     title(title_string, fontsize=30)
-#     savefig("figs/rv/test$amount_of_periods.png")
+#     save_PyPlot_fig("figs/rv/test$amount_of_periods.png")
 #     PyPlot.close_figs()
 # end
 

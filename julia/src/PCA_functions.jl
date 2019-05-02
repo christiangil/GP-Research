@@ -136,7 +136,7 @@ end
 
 
 "bootstrapping for errors in PCA scores. Takes ~28s per bootstrap on my computer"
-function bootstrap_errors(time_series_spectra::AbstractArray{T,2}, hdf5_filename::String; boot_amount::Integer=10, save_filename::String="jld2_files/bootstrap.jld2") where {T<:Real}
+function bootstrap_errors(time_series_spectra::AbstractArray{T,2}, hdf5_filename::AbstractString; boot_amount::Integer=10, save_filename::AbstractString="jld2_files/bootstrap.jld2") where {T<:Real}
 
     @load "jld2_files/rv_data.jld2" M scores
 

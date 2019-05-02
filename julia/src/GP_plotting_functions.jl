@@ -14,7 +14,7 @@ function custom_GP_plot(x_samp::AbstractArray{T1,1}, show_curves::AbstractArray{
     init_plot()
 
     # filling the 5-95th percentile with a transparent orange
-    fill_between(x_samp, mean + 1.96 * σ, mean - 1.96 * σ, alpha=0.3, color="orange")
+    fill_between(x_samp, mean + 1.96 * σ, mean - 1.96 * σ, alpha=0.5, color="orange")
 
     plot(x_samp, mean, color="black", zorder=2)
 
@@ -28,7 +28,7 @@ function custom_GP_plot(x_samp::AbstractArray{T1,1}, show_curves::AbstractArray{
 end
 
 
-function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T,1}; show::Integer=5, file::String="", find_post::Bool=true, plot_K::Bool=false, plot_K_profile::Bool=false, filetype::String="png") where {T<:Real}
+function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T,1}; show::Integer=3, file::AbstractString="", find_post::Bool=true, plot_K::Bool=false, plot_K_profile::Bool=false, filetype::AbstractString="png") where {T<:Real}
 
     x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points))
     amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out
@@ -73,7 +73,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
             axvline(x=2, color="black")
             ylabel("Covariance")
             title("Covariance profile of Output $(output-1)", fontsize=30)
-            savefig(file * "_K_profile_$output." * filetype)
+            save_PyPlot_fig(file * "_K_profile_$output." * filetype)
         end
 
         # the indices corresponding to the proper output
@@ -105,7 +105,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
         text(minimum(prob_def.x_obs), 1 * minimum([minimum(y_o), minimum(show_curves_o)]), "Hyperparameters: " * string(kernel_lengths), fontsize=30)
         # text(minimum(prob_def.x_obs), 1 *minimum(y_o), "Wavelengths: " * string(kernel_lengths), fontsize=30)
 
-        if file!=""; savefig(file * "_$output." * filetype) end
+        if file!=""; save_PyPlot_fig(file * "_$output." * filetype) end
 
     end
 

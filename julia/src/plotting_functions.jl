@@ -39,11 +39,92 @@ function init_plot(;figsize=(16,9))
 end
 
 
-function plot_im(A; file::String="")
+"create a nice, large set of PyPlots with large text sizes (excluding title)"
+function init_subplots(;nrows::Integer=1, ncols::Integer=1, sharex::Bool=false, sharey::Bool=false, figsize=(16,16))
+    fig, axs = subplots(nrows=nrows, ncols=ncols, sharex=sharex, sharey=sharey, figsize=figsize)
+    for ax in axs; set_font_sizes(ax) end
+    return axs
+end
+
+
+"save current PyPlot figure and close all figures"
+function save_PyPlot_fig(filename::AbstractString)
+    savefig(filename)
+    PyPlot.close_figs()
+end
+
+
+function plot_im(A; file::AbstractString="")
     init_plot(figsize=(9,9))
-    fig = imshow(A[:,:])
+    fig = imshow(A[:,:], origin="lower")
     colorbar()
     # title("Heatmap")
-    if file != ""; savefig(file) end
+    if file != ""; save_PyPlot_fig(file) end
     PyPlot.close_figs()
+end
+
+
+"""
+Create a corner plot by evaluating a function around its current input values
+should scale as steps^2*n(n-1)/2 in time
+"""
+function corner_plot(f::Function, input::AbstractArray{T1,1}, filename::AbstractString; steps::Integer=15+1, spread::Real=1/2, input_labels::AbstractArray{T2,1}=repeat([L" "],length(input)), n::Integer=length(input)) where {T1<:Real, T2<:AbstractString}
+
+    @assert n <= length(input)
+    @assert length(input_labels) == n
+
+    figsize = 16/3 * n
+    axs = init_subplots(nrows=n, ncols=n, figsize=(figsize,figsize))
+
+    for k in 1:n
+        for l in 1:n
+
+            holder = copy(input)
+
+            # create function profiles on diagonals
+            if k == l
+                x = linspace(input[k] - spread, input[k] + spread, steps)
+                y = zero(x)
+                for i in 1:length(x)
+                    holder[k] = x[i]
+                    y[i] = f(holder)
+                end
+                axs[k, k].set_title(input_labels[k], fontsize=10*n)
+                axs[k, k].plot(x, y, linewidth=16/n)
+                axs[k, k].axvline(x=input[k], color="black", linewidth=16/n)
+
+            # create function heatmaps elsewhere
+            elseif k < l
+                xmin, xmax =  (input[k] - spread, input[k] + spread)
+                ymin, ymax =  (input[l] - spread, input[l] + spread)
+                x = linspace(xmin, xmax, steps)
+                y = linspace(ymin, ymax, steps)
+                Z = zeros((steps,steps))
+                for i in 1:steps
+                    for j in 1:steps
+                        holder[k] = x[i]
+                        holder[l] = y[j]
+                        Z[i,j] = f(holder)
+                    end
+                end
+                X = repeat(x', length(y), 1)
+                Y = repeat(y, 1, length(x))
+                axs[l, k].contour(X, Y, Z, colors="k", linewidths=16/n)
+                axs[l, k].imshow(Z, interpolation="bilinear", origin="lower", extent=(xmin, xmax, ymin, ymax))
+                axs[l, k].scatter(input[k], input[l], marker="X", c="k", s=1200/n)
+
+            # remove plots above the diagonal
+            else
+                axs[l, k].axis("off")
+            end
+        end
+    end
+
+    # remove plot labels for everything that isn't on the outside
+    for ax in axs
+        ax.label_outer()
+    end
+
+    save_PyPlot_fig(filename)
+
 end

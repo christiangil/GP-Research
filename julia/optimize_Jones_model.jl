@@ -1,5 +1,5 @@
 #adding in custom functions
-# include("src/setup.jl")
+include("src/setup.jl")
 # include("test/runtests.jl")
 include("src/all_functions.jl")
 
@@ -17,18 +17,18 @@ kernel_names = ["quasi_periodic_kernel", "se_kernel", "rq_kernel", "matern52_ker
 if length(ARGS)>0
     kernel_name = kernel_names[parse(Int, ARGS[1])]
     println("optimizing the full problem using the $kernel_name")
-    @load "jld2_files/problem_def_full_base.jld2" problem_def_full_base normals
+    @load "jld2_files/problem_def_full_base.jld2" problem_def_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_full_base)
+    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
     flux_cb_delay = 3600 / 2
     grad_norm_thres = 1e1
     opt = ADAM(0.1)
 else
     kernel_name = kernel_names[4]
-    @load "jld2_files/problem_def_sample_base.jld2" problem_def_sample_base normals
+    @load "jld2_files/problem_def_sample_base.jld2" problem_def_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_sample_base)
-    flux_cb_delay = 3600 / 1000
+    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
+    flux_cb_delay = 3600 / 500
     grad_norm_thres = 1e0
     opt = ADAM(0.2)
 end
@@ -39,9 +39,8 @@ mkpath("figs/gp/$kernel_name/training")
 # kernel hyper parameters
 time_span = maximum(problem_definition.x_obs) - minimum(problem_definition.x_obs)
 # kernel_lengths = time_span/3 * ones(problem_definition.n_kern_hyper)
-kernel_lengths = time_span/10 * ones(problem_definition.n_kern_hyper)
+kernel_lengths = maximum([10, time_span/10]) * ones(problem_definition.n_kern_hyper)
 total_hyperparameters = append!(collect(Iterators.flatten(problem_definition.a0)), kernel_lengths)
-# problem_definition.a0
 
 # how finely to sample the domain (for plotting)
 amount_of_samp_points = convert(Int, max(500, round(2 * sqrt(2) * length(problem_definition.x_obs))))
@@ -51,8 +50,6 @@ amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
 
 Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/initial_gp", find_post=false, plot_K=true, plot_K_profile=true)
 Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/post_gp", plot_K=true, plot_K_profile=true)
-
-
 
 # Allowing Flux to use the analytical gradients we have calculated
 f_custom(non_zero_hyper) = nlogL_Jones(problem_definition, non_zero_hyper)
@@ -87,7 +84,7 @@ flux_cb = function ()
     println()
 end
 
-Flux.train!(f_custom, ps, flux_data, opt, cb=Flux.throttle(flux_cb, flux_cb_delay))
+@profiler Flux.train!(f_custom, ps, flux_data, opt, cb=Flux.throttle(flux_cb, flux_cb_delay))
 
 # flux_train_to_target!(nLogL_custom, custom_g, ps)
 final_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))
@@ -101,3 +98,10 @@ println(final_total_hyperparameters)
 println(nlogL_Jones(problem_definition, final_total_hyperparameters), "\n")
 
 Jones_line_plots(amount_of_samp_points, problem_definition, final_total_hyperparameters; file="figs/gp/$kernel_name/fit_gp", plot_K=true, plot_K_profile=true)
+
+coeffs = final_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
+coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)
+
+f_corner(input) = nlogL_Jones(problem_definition, input)
+input_labels = [L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}", L"\lambda_{M52}"]
+@elapsed @profiler corner_plot(f_corner, data(non_zero_hyper_param), "figs/gp/$kernel_name/corner_$kernel_name.png"; input_labels=input_labels)
