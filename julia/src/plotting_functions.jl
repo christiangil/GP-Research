@@ -70,6 +70,7 @@ should scale as steps^2*n(n-1)/2 in time
 """
 function corner_plot(f::Function, input::AbstractArray{T1,1}, filename::AbstractString; steps::Integer=15+1, spread::Real=1/2, input_labels::AbstractArray{T2,1}=repeat([L" "],length(input)), n::Integer=length(input)) where {T1<:Real, T2<:AbstractString}
 
+    assert_positive(spread, steps, n)
     @assert n <= length(input)
     @assert length(input_labels) == n
 
@@ -92,6 +93,7 @@ function corner_plot(f::Function, input::AbstractArray{T1,1}, filename::Abstract
                 axs[k, k].set_title(input_labels[k], fontsize=10*n)
                 axs[k, k].plot(x, y, linewidth=16/n)
                 axs[k, k].axvline(x=input[k], color="black", linewidth=16/n)
+                if abs(input[k]) < spread; axs[k, k].axvline(x=0, color="grey", linewidth=16/n) end
 
             # create function heatmaps elsewhere
             elseif k < l
@@ -112,6 +114,8 @@ function corner_plot(f::Function, input::AbstractArray{T1,1}, filename::Abstract
                 axs[l, k].contour(X, Y, Z, colors="k", linewidths=16/n)
                 axs[l, k].imshow(Z, interpolation="bilinear", origin="lower", extent=(xmin, xmax, ymin, ymax))
                 axs[l, k].scatter(input[k], input[l], marker="X", c="k", s=1200/n)
+                if abs(input[k]) < spread; axs[l, k].axvline(x=0, color="grey", linewidth=32/n) end
+                if abs(input[l]) < spread; axs[l, k].axhline(y=0, color="grey", linewidth=32/n) end
 
             # remove plots above the diagonal
             else

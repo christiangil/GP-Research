@@ -3,6 +3,9 @@ using SpecialFunctions
 using LinearAlgebra
 using Test
 using Memoize
+using SharedArrays
+using Distributed
+
 
 """
 A structure that holds all of the relevant information for doing the analysis in
@@ -101,24 +104,30 @@ kernel(prob_def::Jones_problem_definition, kernel_hyperparameters, t1, t2; dorde
 Creates the covariance matrix by evaluating the kernel function for each pair of passed inputs
 symmetric = a parameter stating whether the covariance is guarunteed to be symmetric about the diagonal
 """
-function covariance(kernel_func::Function, x1list::AbstractArray{T1,1}, x2list::AbstractArray{T2,1}, kernel_hyperparameters::AbstractArray{T3,1}; dorder::AbstractArray{T4,1}=[0, 0], symmetric::Bool=false, dKdθ_kernel::Integer=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+function covariance!(K::AbstractArray{T1,2}, kernel_func::Function, x1list::AbstractArray{T2,1}, x2list::AbstractArray{T3,1}, kernel_hyperparameters::AbstractArray{T4,1}; dorder::AbstractArray{T5,1}=[0, 0], symmetric::Bool=false, dKdθ_kernel::Integer=0) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+
+    @assert issorted(x1list)
 
     # are the list of x's passed identical
     same_x = (x1list == x2list)
 
     # are the x's passed identical and equally spaced
     if same_x
-        spacing = [x1list[i]-x1list[i-1] for i in 2:length(x1list)]
-        equal_spacing = all([abs(spacing[i] - spacing[1]) < 1e-8 for i in 2:length(spacing)])
+        spacing = x1list[2:end]-x1list[1:end-1]
+        equal_spacing = all((spacing .- spacing[1]) .< 1e-8)
     else
+        @assert issorted(x2list)
         equal_spacing = false
     end
 
-    x1_length = size(x1list, 1)
-    x2_length = size(x2list, 1)
-    K = zeros((x1_length, x2_length))
+    x1_length = length(x1list)
+    x2_length = length(x2list)
+
+    @assert size(K, 1) == x1_length
+    @assert size(K, 2) == x2_length
 
     if equal_spacing && symmetric
+        # this section is so fast, it isn't worth parallelizing
         kernline = zeros(x1_length)
         for i in 1:x1_length
             kernline[i] = kernel(kernel_func, kernel_hyperparameters, x1list[1], x1list[i], dorder=dorder, dKdθ_kernel=dKdθ_kernel)
@@ -126,22 +135,29 @@ function covariance(kernel_func::Function, x1list::AbstractArray{T1,1}, x2list::
         for i in 1:x1_length
             K[i, i:end] = kernline[1:(x1_length + 1 - i)]
         end
-        return Symmetric(K)
+        K = Symmetric(K)
     elseif same_x && symmetric
-        for i in 1:x1_length
-            for j in 1:x1_length
+        sendto(workers(), kernel_func=kernel_func, kernel_hyperparameters=kernel_hyperparameters, x1list=x1list, dorder=dorder, dKdθ_kernel=dKdθ_kernel)
+        @sync @distributed for i in 1:length(x1list)
+            for j in 1:length(x1list)
                 if i <= j; K[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x1list[j], dorder=dorder, dKdθ_kernel=dKdθ_kernel) end
             end
         end
-        return Symmetric(K)
+        K = Symmetric(K)
     else
-        for i in 1:x1_length
-            for j in 1:x2_length
+        sendto(workers(), kernel_func=kernel_func, kernel_hyperparameters=kernel_hyperparameters, x1list=x1list, x2list=x2list, dorder=dorder, dKdθ_kernel=dKdθ_kernel)
+        @sync @distributed for i in 1:length(x1list)
+            for j in 1:length(x2list)
                 K[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x2list[j], dorder=dorder, dKdθ_kernel=dKdθ_kernel)
             end
         end
         return K
     end
+end
+
+function covariance(kernel_func::Function, x1list::AbstractArray{T2,1}, x2list::AbstractArray{T3,1}, kernel_hyperparameters::AbstractArray{T4,1}; dorder::AbstractArray{T5,1}=[0, 0], symmetric::Bool=false, dKdθ_kernel::Integer=0) where {T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+    K_share = SharedArray{Float64}(length(x1list), length(x2list))
+    return covariance!(K_share, kernel_func, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=symmetric, dKdθ_kernel=dKdθ_kernel)
 end
 
 
@@ -162,8 +178,9 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
     # println(length(kernel_hyperparameters))
 
     # calculating the total size of the multi-output covariance matrix
-    point_amount = [size(x1list, 1), size(x2list, 1)]
-    K = zeros((n_out * point_amount[1], n_out * point_amount[2]))
+    x1_length = length(x1list)
+    x2_length = length(x2list)
+    K = zeros((n_out * x1_length, n_out * x2_length))
 
     # non_coefficient_hyperparameters = length(total_hyperparameters) - num_coefficients
 
@@ -213,8 +230,8 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
                         # if false  # (i == j) & isodd(k + l)
                         #     # the cross terms (of odd differentiation orders) cancel each other out in matrices on diagonal
                         # else
-                        K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
-                            ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=
+                        K[((i - 1) * x1_length + 1):(i * x1_length),
+                            ((j - 1) * x2_length + 1):(j * x2_length)] +=
                             # a[i, k] * a[j, l] * A[k, l]
                             (a[i, k] * a[j, l]) *  A_mat(k, l, A_list)
                         # end
@@ -237,8 +254,8 @@ function covariance(prob_def::Jones_problem_definition, x1list::AbstractArray{T1
                         for m in 1:n_out
                             for n in 1:n_dif
                                 if coeff[i, j, k, l, m, n] != 0
-                                    K[((i - 1) * point_amount[1] + 1):(i * point_amount[1]),
-                                        ((j - 1) * point_amount[2] + 1):(j * point_amount[2])] +=
+                                    K[((i - 1) * x1_length + 1):(i * x1_length),
+                                        ((j - 1) * x2_length + 1):(j * x2_length)] +=
                                         # coeff[i, j, k, l, m, n] * a[m, n] * A[k, l]
                                         (coeff[i, j, k, l, m, n] * a[m, n]) * A_mat(k, l, A_list)
                                 end
@@ -569,4 +586,47 @@ function include_kernel(kernel_name::AbstractString)
     catch
         return include("../src/kernels/$kernel_name.jl")
     end
+end
+
+
+"""
+Make it easy to run the covariance calculations on many processors
+Automatically adds as many workers as there are CPU threads minus 2 if none are
+active and no number of procs to add is given
+"""
+function prep_parallel_covariance(kernel_name::AbstractString; add_procs::Integer=0)
+    # only add as any processors as possible if we are on a consumer chip
+    if (add_procs==0) & (nworkers()==1) & (length(Sys.cpu_info())<=16)
+        add_procs = length(Sys.cpu_info()) - 2
+    end
+    addprocs(add_procs)
+    println("added $add_procs workers")
+    @everywhere include("src/base_functions.jl")
+    sendto(workers(), kernel_name=kernel_name)
+    @everywhere include_kernel(kernel_name)
+end
+
+
+"Iitialize an optimize_Jones_model_jld2"
+function initialize_optimize_Jones_model_jld2!(kernel_name::AbstractString, current_params::AbstractArray{T,1}) where {T<:Real}
+    current_fit_time = now()
+    if isfile("jld2_files/optimize_Jones_model_$kernel_name.jld2")
+        @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_params
+        @save "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_fit_time
+    else
+        initial_time = now()
+        total_fit_time = Millisecond(0)
+        @save "jld2_files/optimize_Jones_model_$kernel_name.jld2" initial_time current_fit_time total_fit_time
+    end
+    return current_params
+end
+
+
+"Update an optimize_Jones_model_jld2 with the fit status"
+function update_optimize_Jones_model_jld2!(kernel_name::AbstractString, non_zero_hyper_param)
+    @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_fit_time total_fit_time
+    total_fit_time += current_fit_time - now()
+    current_fit_time = now()
+    current_params = data(non_zero_hyper_param)
+    @save "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_fit_time current_params total_fit_time
 end
