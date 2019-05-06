@@ -343,7 +343,7 @@ function kepler_rv_linear_e_orbit_params(coefficients::AbstractArray{T,1}) where
     @assert length(coefficients) == 5 "wrong number of coefficients"
     K = sqrt(coefficients[1]^2 + coefficients[2]^2)
     e = sqrt(coefficients[3]^2 + coefficients[4]^2) / K
-    if e > 0.35; @warn "an orbit with this eccentricity would be very different from the output of kepler_rv_linear_e"
+    if e > 0.35; @warn "an orbit with this eccentricity would be very different from the output of kepler_rv_linear_e" end
     M0 = atan(coefficients[4], coefficients[3]) - atan(coefficients[2], coefficients[1])
     ω = atan(coefficients[4], coefficients[3]) - 2 * atan(coefficients[2], coefficients[1])
     println("K: $K, e: $e, M0: $M0, ω: $ω")
@@ -468,7 +468,7 @@ function add_kepler_to_Jones_problem_definition(
     γ::Real=0.)
 
     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
-    return add_kepler_to_Jones_problem_definition(prob_def, P, e, M0, K, ω; normalization=normalization, i=i, γ=γ)
+    return add_kepler_to_Jones_problem_definition(prob_def, P, e, M0, K, ω; normalization=normalization, γ=γ)
 end
 
 """

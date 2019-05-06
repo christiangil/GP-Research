@@ -3,14 +3,6 @@
 # include("test/runtests.jl")
 include("src/all_functions.jl")
 
-using Distributed
-if (nworkers()==1) & (length(Sys.cpu_info())<18)  # only add processors if we are on a consumer chip
-    addprocs(length(Sys.cpu_info()) - 2)
-end
-
-#adding custom functions to all processes
-@everywhere include("src/base_functions.jl")
-
 if length(ARGS)>0
     amount_of_periods = parse(Int, ARGS[1])
 else
@@ -23,9 +15,10 @@ using JLD2, FileIO
 kernel_names = ["quasi_periodic_kernel", "se_kernel", "rq_kernel", "matern52_kernel", "periodic_kernel"]
 
 kernel_name = kernel_names[2]
-@load "jld2_files/problem_def_full_base.jld2" problem_def_full_base normals
+prep_parallel_covariance(kernel_name)
+@load "jld2_files/problem_def_full_base.jld2" problem_def_base normals
 kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-problem_def_528 = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_full_base)
+problem_def_528 = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
 
 # best-fit se_kernel hyper parameters on original data
 total_hyperparameters = [0.234374, 0.97434, 0.0, 0.501636, 0.0, 0.510968, 0.0, -0.000116937, 0.0, 0.540127]
@@ -33,13 +26,13 @@ total_hyperparameters = [0.234374, 0.97434, 0.0, 0.501636, 0.0, 0.510968, 0.0, -
 amount_of_samp_points = length(problem_def_528.x_obs)
 amount_of_total_samp_points = amount_of_samp_points * problem_def_528.n_out
 
-P = 30u"d"
-m_star = 1u"Msun"
-m_planet = 1u"Mearth"
+P = (30)u"d"
+m_star = (1)u"Msun"
+m_planet = (1)u"Mearth"
 times_obs = convert_and_strip_units.(u"yr", (problem_def_528.x_obs)u"d")
-planet_rvs = kepler_rv.(times_obs, P, m_star, m_planet)
-fake_data = copy(problem_def_528.y_obs)
-fake_data[1:amount_of_samp_points] += planet_rvs/normals[1]
+e = 0.1
+M0 = ω = 0
+fake_data = add_kepler_to_Jones_problem_definition(problem_def_528, P, e, M0, m_star, m_planet, ω; normalization=normals[1])
 
 # sample linearly in frequency space so that we get periods from the 1 / uneven Nyquist
 # frequency to 4 times the total timespan of the data
@@ -52,7 +45,7 @@ if length(ARGS)>1
     parallelize = parse(Int, ARGS[2])
     @assert parallelize >= 0
 else
-    parallelize = 4
+    parallelize = 2
 end
 
 if parallelize == 0
@@ -62,15 +55,11 @@ if parallelize == 0
     serial_time = @elapsed likelihoods = kep_signal_likelihoods(likelihood_func, period_grid, times_obs, fake_data, K_obs)
     println("Serial likelihood calculation took $(serial_time)s")
 
-elseif parallelize>3
-
-
-
 else
 
     # making necessary variables local to all workers
-    sendto(workers(), kernel_name=kernel_name)
-    @everywhere include_kernel(kernel_name)
+    # sendto(workers(), kernel_name=kernel_name)
+    # @everywhere include_kernel(kernel_name)
     sendto(workers(), times_obs=times_obs, fake_data=fake_data, problem_def_528=problem_def_528, total_hyperparameters=total_hyperparameters, K_obs=K_obs)
     @everywhere likelihood_func(new_data::AbstractArray{T,1}) where{T<:Real} = nlogL_Jones(problem_def_528, total_hyperparameters, y_obs=new_data, K_obs=K_obs)
     @everywhere kep_signal_likelihood_distributed(period::Real) = kep_signal_likelihood(likelihood_func, period, times_obs, fake_data, K_obs)
@@ -113,16 +102,15 @@ end
 # begin
 #     ax = init_plot()
 #     ticklabel_format(style="sci", axis="y", scilimits=(0,0))
-#     fig = semilogx(period_grid .* convert_and_strip_units(u"d", 1u"yr"), -likelihoods, color="black")
+#     fig = semilogx(period_grid .* convert_and_strip_units(u"d", (1)u"yr"), -likelihoods, color="black")
 #     xlabel("Periods (days)")
-#     ylabel("GP likelihoods")
+#     ylabel("negative GP likelihoods")
 #     axvline(x=convert_and_strip_units(u"d", P))
 #     title_string = @sprintf "%.0f day, %.2f Earth masses" convert_and_strip_units(u"d",P) convert_and_strip_units(u"Mearth",m_planet)
 #     title(title_string, fontsize=30)
 #     save_PyPlot_fig("figs/rv/test$amount_of_periods.png")
 #     PyPlot.close_figs()
 # end
-
 
 # # three best periods
 # best_period_grid = period_grid[find_modes(-likelihoods)]

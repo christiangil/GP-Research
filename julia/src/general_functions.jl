@@ -253,3 +253,17 @@ function sendto(workers::Union{T,Array{T,1}}; args...) where {T<:Integer}
         end
     end
 end
+
+
+"""
+Automatically adds as many workers as there are CPU threads minus 2 if none are
+active and no number of procs to add is given
+"""
+function auto_addprocs(;add_procs::Integer=0)
+    # only add as any processors as possible if we are on a consumer chip
+    if (add_procs==0) & (nworkers()==1) & (length(Sys.cpu_info())<=16)
+        add_procs = length(Sys.cpu_info()) - 2
+    end
+    addprocs(add_procs)
+    println("added $add_procs workers")
+end

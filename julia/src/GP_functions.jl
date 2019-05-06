@@ -595,8 +595,9 @@ end
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
 
-    # remove the best fit planet with the periodicity given
-    y_obs = remove_kepler!(y_obs, prob_def.x_obs, P, K_obs)
+    # remove the best fit planet with the period given
+    # only changes things for a non-zero period
+    remove_kepler!(y_obs, prob_def.x_obs, P, K_obs)
 
     α = K_obs \ y_obs
 
@@ -809,12 +810,7 @@ function prep_parallel_covariance(
     kernel_name::AbstractString;
     add_procs::Integer=0)
 
-    # only add as any processors as possible if we are on a consumer chip
-    if (add_procs==0) & (nworkers()==1) & (length(Sys.cpu_info())<=16)
-        add_procs = length(Sys.cpu_info()) - 2
-    end
-    addprocs(add_procs)
-    println("added $add_procs workers")
+    auto_addprocs(;add_procs=add_procs)
     @everywhere include("src/base_functions.jl")
     sendto(workers(), kernel_name=kernel_name)
     @everywhere include_kernel(kernel_name)

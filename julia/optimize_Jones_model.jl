@@ -1,5 +1,5 @@
 #adding in custom functions
-include("src/setup.jl")
+# include("src/setup.jl")
 # include("test/runtests.jl")
 include("src/all_functions.jl")
 
@@ -19,15 +19,15 @@ if length(ARGS)>0
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
     flux_cb_delay = 3600 / 2
-    grad_norm_thres = 1e1
+    grad_norm_thres = 5e0
     opt = ADAM(0.1)
 else
-    kernel_name = kernel_names[1]
+    kernel_name = kernel_names[4]
     @load "jld2_files/problem_def_sample_base.jld2" problem_def_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
     flux_cb_delay = 3600 / 500
-    grad_norm_thres = 1e0
+    grad_norm_thres = 5e-1
     opt = ADAM(0.2)
 end
 
@@ -48,8 +48,8 @@ amount_of_samp_points = convert(Int, max(500, round(2 * sqrt(2) * length(problem
 # total amount of output points
 amount_of_total_samp_points = amount_of_samp_points * problem_definition.n_out
 
-# Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/initial_gp", find_post=false, plot_K=true, plot_K_profile=true)
-# Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/post_gp", plot_K=true, plot_K_profile=true)
+Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/initial_gp", find_post=false, plot_K=true, plot_K_profile=true)
+Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/post_gp", plot_K=true, plot_K_profile=true)
 
 # Allowing Flux to use the analytical gradients we have calculated
 f_custom(non_zero_hyper) = nlogL_Jones(problem_definition, non_zero_hyper)
@@ -68,13 +68,13 @@ ps = Flux.params(non_zero_hyper_param)
 f_custom() = f_custom(non_zero_hyper_param)
 
 # setting things for Flux to use
-flux_data = Iterators.repeated((), 500)  # use at most 500 iterations
+flux_data = Iterators.repeated((), 2000)  # use at most 500 iterations
 
 # save plots as we are training every flux_cb_delay seconds
 # stop training if our gradient norm gets small enough
 flux_cb = function ()
     training_time_str = Dates.format(now(),"yyyy_mm_dd_HH_MM_SS")
-    # Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)); file="figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp", plot_K_profile=true)
+    Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)); file="figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp", plot_K_profile=true)
     grad_norm = norm(g_custom())
     println("Current time: " * training_time_str * " score: ", data(f_custom()), " with gradient norm ", grad_norm)
     println("Current hyperparameters: " * string(data(non_zero_hyper_param)))
@@ -91,7 +91,6 @@ end
 
 update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
 
-# flux_train_to_target!(nLogL_custom, custom_g, ps)
 final_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))
 
 println("starting hyperparameters")
@@ -106,3 +105,17 @@ Jones_line_plots(amount_of_samp_points, problem_definition, final_total_hyperpar
 
 coeffs = final_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
 coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)
+
+# ################
+# # Corner plots #
+# ################
+#
+# possible_labels = [L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{SE}" L"\lambda_{P}" L"\tau_P";
+#     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{SE}" L" " L" ";
+#     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\alpha" L"\lambda_{RQ}" L" ";
+#     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{M52}" L" " L" "]
+#
+# @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_params
+# actual_labels = possible_labels[4, 1:length(current_params)]
+# f_corner(input) = nlogL_Jones(problem_definition, input)
+# @elapsed corner_plot(f_corner, data(current_params), "figs/gp/$kernel_name/corner_$kernel_name.png"; input_labels=actual_labels)
