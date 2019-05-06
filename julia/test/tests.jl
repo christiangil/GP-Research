@@ -33,12 +33,12 @@ end
 @testset "velocity semi-amplitudes" begin
     # testing Jupiter and Earth's radial velocity amplitudes
     # https://en.wikipedia.org/wiki/Doppler_spectroscopy
-    m_star = 1u"Msun"
-    P = 11.86u"yr"
-    m_planet = 1u"Mjup"
+    m_star = (1)u"Msun"
+    P = (11.86)u"yr"
+    m_planet = (1)u"Mjup"
     @test isapprox(velocity_semi_amplitude(P, m_star, m_planet), 12.4; rtol=1e-2)
-    P = 1u"yr"
-    m_planet = 1u"Mearth"
+    P = (1)u"yr"
+    m_planet = (1)u"Mearth"
     @test isapprox(velocity_semi_amplitude(P, m_star, m_planet), 0.09; rtol=1e-2)
     println()
 end
@@ -57,9 +57,9 @@ end
 
 @testset "radial velocities" begin
     # making sure RVs are being calculated sensibly
-    m_star = 1u"Msun"
-    P = 1u"yr"
-    m_planet = 1u"Mearth"
+    m_star = (1)u"Msun"
+    P = (1)u"yr"
+    m_planet = (1)u"Mearth"
     e = 0.
     ω = 0
     M0 = 0
@@ -102,7 +102,7 @@ end
     est_coeffs = general_lst_sq(A, fake_data; Σ=measurement_noise)
 
     @test isapprox(est_coeffs, true_coeffs, rtol=1e-2)
-    @test isapprox(std(noise_vect), std(remove_kepler(fake_data, x_samp, 2*pi, measurement_noise)); rtol=5e-1)
+    @test isapprox(std(noise_vect), std(remove_kepler(fake_data, x_samp, 2*pi, measurement_noise)); rtol=3e-1)
     println()
 end
 

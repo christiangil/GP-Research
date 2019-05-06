@@ -7,9 +7,7 @@ include("src/all_functions.jl")
 # srand(1234)
 
 # loading in data
-using JLD2, FileIO
 using Flux; using Flux.Tracker: track, @grad, data
-using Dates
 
 kernel_names = ["quasi_periodic_kernel", "se_kernel", "rq_kernel", "matern52_kernel"]
 
