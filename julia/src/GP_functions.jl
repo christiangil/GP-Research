@@ -610,7 +610,21 @@ end
 end
 
 
-"generic GP nLogL (see Algorithm 2.1 in Rasmussen and Williams 2006)"
+"""
+GP negative log marginal likelihood (see Algorithm 2.1 in Rasmussen and Williams 2006)
+
+Parameters:
+
+K_obs (Cholesky factorized object): The covariance matrix constructed by
+    evaulating the kernel at each pair of observations and adding measurement
+    noise.
+y_obs (vector): The observations at each time point
+α (vector): inv(K_obs) * y_obs
+
+Returns:
+float: the negative log marginal likelihood
+
+"""
 function nlogL(
     K_obs::Cholesky{T1,Array{T1,2}},
     y_obs::AbstractArray{T2,1},
@@ -619,19 +633,94 @@ function nlogL(
 
     n = length(y_obs)
 
-    # goodness of fit term
-    data_fit = -1 / 2 * (transpose(y_obs) * α)
-    # complexity penalization term
-    # complexity_penalty = -1 / 2 * log(det(K_obs))
-    complexity_penalty = -1 / 2 * logdet(K_obs)  # half memory but twice the time
-    # normalization term (functionally useless)
-    normalization = -n / 2 * log(2 * π)
+    # 2 times negative goodness of fit term
+    data_fit = transpose(y_obs) * α
+    # 2 times negative complexity penalization term
+    # complexity_penalty = log(det(K_obs))
+    complexity_penalty = logdet(K_obs)  # half memory but twice the time
+    # 2 times negative normalization term (doesn't affect fitting)
+    normalization = n * log(2 * π)
 
-    return -1 * (data_fit + complexity_penalty + normalization)
+    return 0.5 * (data_fit + complexity_penalty + normalization)
 
 end
 
 nlogL(K_obs, y_obs) = nlogL(K_obs, y_obs, K_obs \ y_obs)
+
+
+"""
+First partial derivative of the GP negative log marginal likelihood
+(see eq. 5.9 in Rasmussen and Williams 2006)
+
+Parameters:
+
+y_obs (vector): The observations at each time point
+α (vector): inv(K_obs) * y_obs
+β (matrix): inv(K_obs) * dK_dθ where dK_dθ is the partial derivative of the
+    covariance matrix K_obs w.r.t. a hyperparameter
+
+Returns:
+float: the partial derivative of the negative log marginal likelihood w.r.t. the
+    hyperparameter used in the calculation of β
+
+"""
+function dnlogLdθ(
+    y_obs::AbstractArray{T1,1},
+    α::AbstractArray{T2,1},
+    β::AbstractArray{T3,2}
+    ) where {T1<:Real, T2<:Real, T3<:Real}
+
+    # 2 times negative derivative of goodness of fit term
+    data_fit = -(transpose(y_obs) * β * α)
+    # 2 times negative derivative of complexity penalization term
+    complexity_penalty = tr(β)
+
+    # return -1 / 2 * tr((α * transpose(α) - inv(K_obs)) * dK_dθj)
+    return 0.5 * (data_fit + complexity_penalty)
+
+end
+
+
+"""
+Second partial derivative of the GP negative log marginal likelihood.
+Calculated with help from rules found on page 7 of the matrix cookbook
+(https://www.ics.uci.edu/~welling/teaching/KernelsICS273B/MatrixCookBook.pdf)
+
+Parameters:
+
+y_obs (vector): The observations at each time point
+α (vector): inv(K_obs) * y_obs
+β1 (matrix): inv(K_obs) * dK_dθ1 where dK_dθ1 is the partial derivative of the
+    covariance matrix K_obs w.r.t. a hyperparameter
+β2 (matrix): inv(K_obs) * dK_dθ2 where dK_dθ2 is the partial derivative of the
+    covariance matrix K_obs w.r.t. another hyperparameter
+β12 (matrix): inv(K_obs) * d2K_dθ1dθ2 where d2K_dθ1dθ2 is the partial
+    derivative of the covariance matrix K_obs w.r.t. both of the hyperparameters
+    being considered
+
+Returns:
+float: the partial derivative of the negative log marginal likelihood w.r.t. the
+    hyperparameter used in the calculation of β
+
+"""
+function d2nlogLdθ2(
+    y_obs::AbstractArray{T1,1},
+    α::AbstractArray{T2,1},
+    β1::AbstractArray{T3,2},
+    β2::AbstractArray{T4,2},
+    β12::AbstractArray{T5,2}
+    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+
+    β12m2β1 = β12 - β2 * β1
+
+    # 2 times negative second derivative of goodness of fit term
+    data_fit = -(transpose(y_obs) * (β12m2β1 - β1 * β2) * α)
+    # 2 times negative derivative of complexity penalization term
+    complexity_penalty = tr(β12m2β1)
+
+    return 0.5 * (data_fit + complexity_penalty)
+
+end
 
 
 "nlogL for Jones GP"
@@ -673,25 +762,6 @@ function nlogL_Jones(
 end
 
 
-"Partial derivative of GP nLogL w.r.t. a given hyperparameter"
-function dnlogLdθ(
-    dK_dθj::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}},
-    K_obs::Cholesky{T3,Array{T3,2}},
-    y_obs::AbstractArray{T4,1},
-    α::AbstractArray{T5,1}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
-
-    # derivative of goodness of fit term
-    data_fit = 1 / 2 * (transpose(y_obs) * (K_obs \ (dK_dθj * (α))))
-    # derivative of complexity penalization term
-    complexity_penalty = -1 / 2 * tr(K_obs \ dK_dθj)
-
-    # return -1 / 2 * tr((α * transpose(α) - inv(K_obs)) * dK_dθj)
-    return -1 * (data_fit + complexity_penalty)
-
-end
-
-
 "Replaces G with gradient of nLogL for non-zero hyperparameters"
 function ∇nlogL_Jones!(
     G::AbstractArray{T1,1},
@@ -706,7 +776,7 @@ function ∇nlogL_Jones!(
     j = 1
     for i in 1:(length(total_hyperparameters))
         if total_hyperparameters[i]!=0
-            G[j] = dnlogLdθ(covariance(prob_def, total_hyperparameters; dKdθ_total=i), K_obs, y_obs, α)
+            G[j] = dnlogLdθ(y_obs, α, K_obs \ covariance(prob_def, total_hyperparameters; dKdθ_total=i))
             j += 1
         end
     end

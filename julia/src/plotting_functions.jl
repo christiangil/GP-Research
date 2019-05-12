@@ -124,9 +124,11 @@ function corner_plot(f::Function, input::AbstractArray{T1,1}, filename::Abstract
         end
     end
 
-    # remove plot labels for everything that isn't on the outside
-    for ax in axs
-        ax.label_outer()
+    # remove plot labels for everything that isn't on the outside or diagonal
+    for i in 1:n
+        for j in 1:n
+            if i!=j; axs[j,i].label_outer(); end
+        end
     end
 
     save_PyPlot_fig(filename)

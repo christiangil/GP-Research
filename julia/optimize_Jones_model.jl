@@ -68,7 +68,7 @@ ps = Flux.params(non_zero_hyper_param)
 f_custom() = f_custom(non_zero_hyper_param)
 
 # setting things for Flux to use
-flux_data = Iterators.repeated((), 2000)  # use at most 500 iterations
+flux_data = Iterators.repeated((), 100)  # use at most 500 iterations
 
 # save plots as we are training every flux_cb_delay seconds
 # stop training if our gradient norm gets small enough

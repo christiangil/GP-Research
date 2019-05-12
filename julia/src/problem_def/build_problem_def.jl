@@ -2,7 +2,7 @@ include("../all_functions.jl")
 
 using JLD2, FileIO
 
-use_sample=true
+use_sample = true
 
 use_sample ? save_str = "sample" : save_str = "full"
 

@@ -2,18 +2,18 @@
 include("../setup.jl")
 include("../all_functions.jl")
 
-using JLD2, FileIO
-using MultivariateStats
+# using MultivariateStats
 using HDF5
 
-hdf5_locs = ["D:/Christian/Downloads/lambda-3923-6664-1years_1574spots_diffrot_id6.h5",
+hdf5_locs = ["C:/Users/chris/Downloads/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.h5",
+    "C:/Users/chris/Downloads/res-300-lambda-3923-6664-1years_1584spots_diffrot_id11.h5",
+    "C:/Users/chris/Downloads/res-100-lambda-3923-6664-1years_1581spots_diffrot_id11.h5",
+    "D:/Christian/Downloads/lambda-3923-6664-1years_1574spots_diffrot_id6.h5",
     "D:/Christian/Downloads/lambda-3923-6664-0years_1spots_diffrot_id123.h5",
     "D:/Christian/Downloads/lambda-3923-6664-0years_1spots_diffrot_id1.h5"]
-file_addns = ["", "_singles", "_const"]
-
-file_choice = 2
-hdf5_loc = hdf5_locs[file_choice]
-file_str =  file_addns[file_choice]
+hdf5_loc = hdf5_locs[2]
+file_addns = ["_test_300", "", "_singles", "_const"]
+file_str =  file_addns[1]
 
 begin
     fid = h5open(hdf5_loc, "r")
