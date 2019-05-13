@@ -63,10 +63,9 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     end
 
     # calculate all of the necessary derivations we need for the Jones model
-    # for four symbols, dorders is of the form: [2.0 2.0 1.0 1.0; 1.0 2.0 1.0 1.0; 0.0 2.0 1.0 1.0; 2.0 1.0 1.0 1.0; ... ]
-    # where the dorders[n, :]==[dorder of t1 (0-2), dorder of t2 (0-2), dorder of symbol 3 (0-1), dorder of symbol 4 (0-1)]
+    # for four symbols, dorders is of the form: [2.0 1.0 1.0 1.0; 1.0 1.0 1.0 1.0; 0.0 1.0 1.0 1.0; 2.0 0.0 1.0 1.0; ... ]
+    # where the dorders[n, :]==[dorder of dif (0-2), dorder of symbol 2 (0-1), dorder of symbol 3 (0-1), dorder of symbol 4 (0-1)]
     # can be made for any number of symbols
-    # this could be optimized to remove the instances where differentiations of multiple, non-time symbols are asked for
     dorders = zeros(5 * (2 ^ (sym_amount - 1)), sym_amount)
     amount_of_dorders = size(dorders,1)
     for i in 1:amount_of_dorders

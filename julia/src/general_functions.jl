@@ -136,7 +136,7 @@ n is the order of derivative
 h is the step size
 """
 function finite_differences(f, x::Real, n::Integer, h::Real)
-    return sum([(2 * iseven(i) - 1) * binomial(n, i) * f(x + (n / 2 - i) * h) for i in 0:n] / h ^ n)
+    return sum([powers_of_negative_one(i) * binomial(n, i) * f(x + (n / 2 - i) * h) for i in 0:n] / h ^ n)
 end
 
 
@@ -267,3 +267,7 @@ function auto_addprocs(;add_procs::Integer=0)
     addprocs(add_procs)
     println("added $add_procs workers")
 end
+
+
+"finds -1 ^ power without calling ^"
+powers_of_negative_one(power::Integer) = 2 * iseven(power) - 1

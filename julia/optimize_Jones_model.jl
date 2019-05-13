@@ -22,7 +22,7 @@ if length(ARGS)>0
     grad_norm_thres = 5e0
     opt = ADAM(0.1)
 else
-    kernel_name = kernel_names[4]
+    kernel_name = kernel_names[1]
     @load "jld2_files/problem_def_sample_base.jld2" problem_def_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
@@ -68,7 +68,7 @@ ps = Flux.params(non_zero_hyper_param)
 f_custom() = f_custom(non_zero_hyper_param)
 
 # setting things for Flux to use
-flux_data = Iterators.repeated((), 100)  # use at most 500 iterations
+flux_data = Iterators.repeated((), 2000)  # use at most 500 iterations
 
 # save plots as we are training every flux_cb_delay seconds
 # stop training if our gradient norm gets small enough
@@ -116,6 +116,6 @@ coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_defini
 #     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{M52}" L" " L" "]
 #
 # @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_params
-# actual_labels = possible_labels[4, 1:length(current_params)]
+# actual_labels = possible_labels[1, 1:length(current_params)]
 # f_corner(input) = nlogL_Jones(problem_definition, input)
 # @elapsed corner_plot(f_corner, data(current_params), "figs/gp/$kernel_name/corner_$kernel_name.png"; input_labels=actual_labels)

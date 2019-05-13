@@ -10,8 +10,8 @@ using Dates
 
 
 """
-A structure that holds all of the relevant information for doing the analysis in
-the Jones et al. 2017+ paper (https://arxiv.org/pdf/1711.01318.pdf).
+A structure that holds all of the relevant information for constructing the
+model used in the Jones et al. 2017+ paper (https://arxiv.org/pdf/1711.01318.pdf).
 """
 struct Jones_problem_definition{T<:Real}
     kernel::Function  # kernel function
@@ -236,18 +236,15 @@ function covariance(
 end
 
 
-"""
-Calculating the covariance between all outputs for a combination of dependent GPs
-written so that the intermediate K's don't have to be calculated over and over again
-"""
-function covariance(
+# Calculating the covariance between all outputs for a combination of dependent GPs
+# written so that the intermediate K's don't have to be calculated over and over again
+@memoize function covariance(
     prob_def::Jones_problem_definition,
-    x1list::AbstractArray{T1,1},
-    x2list::AbstractArray{T2,1},
-    total_hyperparameters::AbstractArray{T3,1};
+    x1list::AbstractArray{T1,1} where T1<:Real,
+    x2list::AbstractArray{T2,1} where T2<:Real,
+    total_hyperparameters::AbstractArray{T3,1} where T3<:Real;
     dKdθ_total::Integer=0,
-    chol::Bool=false
-    ) where {T1<:Real, T2<:Real, T3<:Real}
+    chol::Bool=false)
 
     @assert dKdθ_total >= 0
     @assert length(total_hyperparameters) == prob_def.n_kern_hyper + length(prob_def.a0)
@@ -298,7 +295,7 @@ function covariance(
 
     # return the properly negative differentiated A matrix from the list
     # make it negative or not based on how many times it has been differentiated in the x1 direction
-    A_mat(k::Integer, l::Integer, A_list) = (2 * isodd(l) - 1) * A_list[k + l - 1]
+    A_mat(k::Integer, l::Integer, A_list) = powers_of_negative_one(l + 1) * A_list[k + l - 1]
 
     # assembling the total covariance matrix
     a = reshape(total_hyperparameters[1:num_coefficients], (n_out, n_dif))
@@ -309,13 +306,14 @@ function covariance(
             for j in 1:n_out
                 for k in 1:n_dif
                     for l in 1:n_dif
-                        # if false  # (i == j) & isodd(k + l)
+                        # if (i == j) & isodd(k + l)
                         #     # the cross terms (of odd differentiation orders) cancel each other out in matrices on diagonal
                         # else
-                        K[((i - 1) * x1_length + 1):(i * x1_length),
-                            ((j - 1) * x2_length + 1):(j * x2_length)] +=
-                            # a[i, k] * a[j, l] * A[k, l]
-                            (a[i, k] * a[j, l]) *  A_mat(k, l, A_list)
+                        if a[i, k]!=0 & a[j, l]!=0
+                            K[((i - 1) * x1_length + 1):(i * x1_length),
+                                ((j - 1) * x2_length + 1):(j * x2_length)] +=
+                                (a[i, k] * a[j, l]) *  A_mat(k, l, A_list)
+                        end
                         # end
                     end
                 end
@@ -505,8 +503,24 @@ end
 
 
 """
-find the powers that each Jones coefficient is taken to for each part of the
-matrix construction. Used for constructing differentiated versions of the kernel
+Find the powers that each Jones coefficient is taken to for each part of the
+matrix construction before differentiating by any hyperparameters.
+
+Parameters:
+
+n_out (int): Amount of dimensions being fit
+n_dif (int): Amount of GP time derivatives are in the Jones model being used
+a (matrix): The coefficients for the Jones model
+
+Returns:
+6D matrix: Filled with integers for what power each coefficient is taken to in
+    the construction of a given block of the total covariance matrix.
+    For example, coeff_orders[1,1,2,3,:,:] would tell you the powers of each
+    coefficient (:,:) that are multiplied by the covariance matrix constructed
+    by evaluating the partial derivative of the kernel (once by t1 and twice by
+    t2) at every pair of time points (2,3) in the construction of the first
+    block of the total covariance matrix (1,1)
+
 """
 function coefficient_orders(
     n_out::Integer,
@@ -516,7 +530,8 @@ function coefficient_orders(
 
     @assert size(a) == (n_out, n_dif)
 
-    coeff_orders = zeros(n_out, n_out, n_dif, n_dif, n_out, n_dif)
+    # ((output pair), (which A matrix to use), (which a coefficent to use))
+    coeff_orders = zeros(Int32, n_out, n_out, n_dif, n_dif, n_out, n_dif)
     for i in 1:n_out
         for j in 1:n_out
             for k in 1:n_dif
@@ -542,43 +557,101 @@ end
 
 
 """
+Sets the initial coefficients multiplying the Jones coefficients and
+time-derived covariances to one
+
+Parameters:
+
+n_out (int): Amount of dimensions being fit
+n_dif (int): Amount of GP time derivatives are in the Jones model being used
+coeff_orders (6D matrix): Filled with integers for what power each coefficient
+    is taken to in the construction of a given block of the total covariance
+    matrix. See coefficient_orders()
+
+Returns:
+4D matrix: Filled with ones anywhere that coeff_orders indicates that at least
+    coefficient exists to multiply a given covariance matrix for a given block
+
+"""
+function init_coeff_coeffs(
+    n_out::Integer,
+    n_dif::Integer,
+    coeff_orders::AbstractArray{T,6}
+    ) where {T<:Integer}
+
+    coeff_coeffs = zeros(Int32, n_out, n_out, n_dif, n_dif)
+    for i in 1:n_out
+        for j in 1:n_out
+            for k in 1:n_dif
+                for l in 1:n_dif
+                    if any(coeff_orders[i, j, k, l, :, :] .!= 0)
+                        coeff_coeffs[i, j, k, l] = 1
+                    end
+                end
+            end
+        end
+    end
+    return coeff_coeffs
+end
+
+
+"""
 Getting the coefficients for constructing differentiated versions of the kernel
-using the powers that each coefficient is taken to for each part of the matrix construction
+using the powers that each coefficient is taken to for each part of the matrix
+construction
+
+Parameters:
+
+n_out (int): Amount of dimensions being fit
+n_dif (int): Amount of GP time derivatives are in the Jones model being used
+dKdθ_total (matrix): The coefficients for the Jones model
+coeff_orders (6D matrix): Filled with integers for what power each coefficient
+    is taken to in the construction of a given block of the total covariance
+    matrix. See coefficient_orders()
+
+Returns:
+6D matrix: Filled with integers for what power each coefficient is taken to in
+    the construction of a given block of the total covariance matrix.
+    For example, coeff_orders[1,1,2,3,:,:] would tell you the powers of each
+    coefficient (:,:) that are multiplied by the covariance matrix constructed
+    by evaluating the partial derivative of the kernel (once by t1 and twice by
+    t2) at every pair of time points (2,3) in the construction of the first
+    block of the total covariance matrix (1,1)
+
 """
 function dif_coefficients(
     n_out::Integer,
     n_dif::Integer,
     dKdθ_total::Integer,
-    coeff_orders::AbstractArray{T,6}) where {T<:Real}
+    coeff_orders::AbstractArray{T1,6};
+    coeff_coeffs::AbstractArray{T2,4} = init_coeff_coeffs(n_out, n_dif, coeff_orders)
+    ) where {T1<:Integer, T2<:Integer}
 
     @assert dKdθ_total>0 "Can't get differential coefficients when you aren't differentiating "
-    @assert dKdθ_total<=(n_out*n_dif) "Can't get differential coefficients fpr non-coefficient hyperparameters"
+    @assert dKdθ_total<=(n_out*n_dif) "Can't get differential coefficients for non-coefficient hyperparameters"
     @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)
 
-    # ((output pair), (which A matrix to use), (which a coefficent to use))
-    coeff = zeros(n_out, n_out, n_dif, n_dif, n_out, n_dif)
-
-    # "a small function to get indices that make sense from Julia's reshaping routine"
-    # proper_index(i::Integer) = [convert(Int64, rem(i - 1, n_out)) + 1, convert(Int64, floor((i -1) / n_out)) + 1]
-    # proper_index(i::Integer) = [((dKdθ_total - 1) % n_out) + 1, div(dKdθ_total - 1, n_out) + 1]
+    coeff_coeffs_new = copy(coeff_coeffs)
+    coeff_orders_new = copy(coeff_orders)
 
     proper_indices = [((dKdθ_total - 1) % n_out) + 1, div(dKdθ_total - 1, n_out) + 1]
     for i in 1:n_out
         for j in 1:n_out
             for k in 1:n_dif
                 for l in 1:n_dif
-                    if coeff_orders[i, j, k, l, proper_indices[1], proper_indices[2]] == 1
-                        coeff[i, j, k, l, :, :] = coeff_orders[i, j, k, l, :, :]
-                        coeff[i, j, k, l, proper_indices[1], proper_indices[2]] = 0
-                    elseif coeff_orders[i, j, k, l, proper_indices[1], proper_indices[2]] == 2
-                        coeff[i, j, k, l, :, :] = coeff_orders[i, j, k, l, :, :]
+                    if coeff_orders[i, j, k, l, proper_indices[1], proper_indices[2]] != 0
+                        coeff_coeffs_new[i, j, k, l] *= coeff_orders[i, j, k, l, proper_indices[1], proper_indices[2]]
+                        coeff_orders_new[i, j, k, l, proper_indices[1], proper_indices[2]] -= 1
+                    else
+                        coeff_coeffs_new[i, j, k, l] = 0
+                        coeff_orders_new[i, j, k, l, :, :] .= 0
                     end
                 end
             end
         end
     end
 
-    return coeff
+    return coeff_coeffs_new, coeff_orders_new
 end
 
 
@@ -700,7 +773,7 @@ y_obs (vector): The observations at each time point
 
 Returns:
 float: the partial derivative of the negative log marginal likelihood w.r.t. the
-    hyperparameter used in the calculation of β
+    hyperparameters used in the calculation of β1, β2, and β12
 
 """
 function d2nlogLdθ2(
@@ -735,16 +808,16 @@ function nlogL_Jones(
 
     nLogL_val = nlogL(K_obs, y_obs, α)
 
-    prior_alpha, prior_beta = prior_params
+    # prior_alpha, prior_beta = prior_params
+    #
+    # # adding prior for physical length scales
+    # prior_term = 0
+    # for i in 1:prob_def.n_kern_hyper
+    #     kernel_length = total_hyperparameters[end + 1 - i]
+    #     prior_term += log_inverse_gamma(kernel_length, prior_alpha, prior_beta)
+    # end
 
-    # adding prior for physical length scales
-    prior_term = 0
-    for i in 1:prob_def.n_kern_hyper
-        kernel_length = total_hyperparameters[end + 1 - i]
-        prior_term += log_inverse_gamma(kernel_length, prior_alpha, prior_beta)
-    end
-
-    return nLogL_val - prior_term
+    return nLogL_val  # - prior_term
 
 end
 
@@ -781,14 +854,14 @@ function ∇nlogL_Jones!(
         end
     end
 
-    prior_alpha, prior_beta = prior_params
-
-    # adding prior for physical length scales
-    for i in 1:prob_def.n_kern_hyper
-        kernel_length = total_hyperparameters[end + 1 - i]
-        prior_term = dlog_inverse_gamma(kernel_length, prior_alpha, prior_beta)
-        G[end + 1 - i] -= prior_term
-    end
+    # prior_alpha, prior_beta = prior_params
+    #
+    # # adding prior for physical length scales
+    # for i in 1:prob_def.n_kern_hyper
+    #     kernel_length = total_hyperparameters[end + 1 - i]
+    #     prior_term = dlog_inverse_gamma(kernel_length, prior_alpha, prior_beta)
+    #     G[end + 1 - i] -= prior_term
+    # end
 
 end
 

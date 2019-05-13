@@ -1,8 +1,23 @@
 # these are all custom diagnostic functions. May help with debugging
 using Statistics
 
-"estimate the gradient of nlogL with forward differences"
-function est_grad(prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T,1}; dif::Real=0.0001) where {T<:Real}
+
+"""
+Estimate the gradient of nlogL_Jones() with forward differences
+
+Parameters:
+
+prob_def (Jones_problem_definition): A structure that holds all of the relevant
+    information for constructing the model used in the Jones et al. 2017+ paper
+total_hyperparameters (vector): The hyperparameters for the GP model, including
+    both the coefficient hyperparameters and the kernel hyperparameters
+dif (float): How much to perturb the hyperparameters
+
+Returns:
+vector: An estimate of the gradient
+
+"""
+function est_grad(prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T,1}; dif::Real=1e-7) where {T<:Real}
 
     # original value
     val = nlogL_Jones(prob_def, total_hyperparameters)
@@ -22,7 +37,21 @@ function est_grad(prob_def::Jones_problem_definition, total_hyperparameters::Abs
 end
 
 
-"test that the analytical and numerically estimated ∇nlogL are approximately the same"
+"""
+Test that the analytical and numerically estimated ∇nlogL are approximately the same
+
+Parameters:
+
+prob_def (Jones_problem_definition): A structure that holds all of the relevant
+    information for constructing the model used in the Jones et al. 2017+ paper
+kernel_hyperparameters (vector): The kernel hyperparameters for the GP model
+dif (float): How much to perturb the hyperparameters
+print_stuff (bool): if true, prints extra information about the output
+
+Returns:
+vector: An estimate of the gradient
+
+"""
 function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::AbstractArray{T,1}; dif::Real=1e-7, print_stuff::Bool=true) where {T<:Real}
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
@@ -50,7 +79,9 @@ function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::A
 end
 
 
-"estimate the covariance derivatives with forward differences"
+"""
+Estimate the covariance derivatives with forward differences
+"""
 function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::AbstractArray{T,1}; return_est::Bool=true, return_anal::Bool=false, return_dif::Bool=false, return_bool::Bool=false, dif::Real=1e-6, print_stuff::Bool=true) where {T<:Real}
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
