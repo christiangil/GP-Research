@@ -273,7 +273,7 @@ function kepler_rv_hk(
     cosE = cos(E)
     j = sqrt(1 - e_sq)
 
-    return K * j / (e - e_sq * cosE) * (j * k * cosE - h * sin(E))
+    return K * j / (e - e_sq * cosE) * (j * k * cosE - h * sin(E)) + γ
 end
 
 

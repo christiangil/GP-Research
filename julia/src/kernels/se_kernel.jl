@@ -5,17 +5,40 @@ se_kernel function created by kernel_coder(). Requires 1 hyperparameters. Likely
 Use with include("src/kernels/se_kernel.jl").
 hyperparameters == ["kernel_length"]
 """
-function se_kernel(hyperparameters::AbstractArray{T1,1}, dif::Real; dorder::AbstractArray{T2,1}=zeros(length(hyperparameters) + 2)) where {T1<:Real, T2<:Real}
+function se_kernel(
+    hyperparameters::AbstractArray{T1,1}, 
+    dif::Real; 
+    dorder::AbstractArray{T2,1}=zeros(Int64, length(hyperparameters) + 2) 
+    ) where {T1<:Real, T2<:Integer}
 
     @assert length(hyperparameters)==1 "hyperparameters is the wrong length"
     @assert length(dorder)==(length(hyperparameters) + 2) "dorder is the wrong length"
-    dorder = convert(Array{Int64,1}, dorder)
     even_time_derivative = 2 * iseven(dorder[2]) - 1
     @assert maximum(dorder) < 3 "No more than two time derivatives for either t1 or t2 can be calculated"
 
     dorder = append!([sum(dorder[1:2])], dorder[3:end])
 
     kernel_length = hyperparameters[1]
+
+    if dorder==[4, 2]
+        func = 60*exp((-1/2)*dif^2/kernel_length^2)/kernel_length^6 - 285*exp((-1/2)*dif^2/kernel_length^2)*dif^2/kernel_length^8 + 165*exp((-1/2)*dif^2/kernel_length^2)*dif^4/kernel_length^10 - 25*exp((-1/2)*dif^2/kernel_length^2)*dif^6/kernel_length^12 + exp((-1/2)*dif^2/kernel_length^2)*dif^8/kernel_length^14
+    end
+
+    if dorder==[3, 2]
+        func = 60*exp((-1/2)*dif^2/kernel_length^2)*dif/kernel_length^6 - 75*exp((-1/2)*dif^2/kernel_length^2)*dif^3/kernel_length^8 + 18*exp((-1/2)*dif^2/kernel_length^2)*dif^5/kernel_length^10 - exp((-1/2)*dif^2/kernel_length^2)*dif^7/kernel_length^12
+    end
+
+    if dorder==[2, 2]
+        func = -6*exp((-1/2)*dif^2/kernel_length^2)/kernel_length^4 + 27*exp((-1/2)*dif^2/kernel_length^2)*dif^2/kernel_length^6 - 12*exp((-1/2)*dif^2/kernel_length^2)*dif^4/kernel_length^8 + exp((-1/2)*dif^2/kernel_length^2)*dif^6/kernel_length^10
+    end
+
+    if dorder==[1, 2]
+        func = -6*exp((-1/2)*dif^2/kernel_length^2)*dif/kernel_length^4 + 7*exp((-1/2)*dif^2/kernel_length^2)*dif^3/kernel_length^6 - exp((-1/2)*dif^2/kernel_length^2)*dif^5/kernel_length^8
+    end
+
+    if dorder==[0, 2]
+        func = -3*exp((-1/2)*dif^2/kernel_length^2)*dif^2/kernel_length^4 + exp((-1/2)*dif^2/kernel_length^2)*dif^4/kernel_length^6
+    end
 
     if dorder==[4, 1]
         func = -12*exp((-1/2)*dif^2/kernel_length^2)/kernel_length^5 + 39*exp((-1/2)*dif^2/kernel_length^2)*dif^2/kernel_length^7 - 14*exp((-1/2)*dif^2/kernel_length^2)*dif^4/kernel_length^9 + exp((-1/2)*dif^2/kernel_length^2)*dif^6/kernel_length^11

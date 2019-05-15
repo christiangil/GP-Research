@@ -39,10 +39,9 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     num_kernel_hyperparameters = sym_amount - 1
     # begin to write the function including assertions that the amount of hyperparameters are correct
     write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"src/kernels/$kernel_name.jl\").\nhyperparameters == $(symbols_str[2:end])\n\"\"\"\n")
-    write(io, "function " * kernel_name * "(hyperparameters::AbstractArray{T1,1}, dif::Real; dorder::AbstractArray{T2,1}=zeros(length(hyperparameters) + 2)) where {T1<:Real, T2<:Real}\n\n")
+    write(io, "function " * kernel_name * "(\n    hyperparameters::AbstractArray{T1,1}, \n    dif::Real; \n    dorder::AbstractArray{T2,1}=zeros(Int64, length(hyperparameters) + 2) \n    ) where {T1<:Real, T2<:Integer}\n\n")
     write(io, "    @assert length(hyperparameters)==$num_kernel_hyperparameters \"hyperparameters is the wrong length\"\n")
     write(io, "    @assert length(dorder)==(length(hyperparameters) + 2) \"dorder is the wrong length\"\n")
-    write(io, "    dorder = convert(Array{Int64,1}, dorder)\n")
     write(io, "    even_time_derivative = 2 * iseven(dorder[2]) - 1\n")
     write(io, "    @assert maximum(dorder) < 3 \"No more than two time derivatives for either t1 or t2 can be calculated\"\n\n")
     write(io, "    dorder = append!([sum(dorder[1:2])], dorder[3:end])\n\n")
@@ -62,19 +61,24 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
         symbols = free_symbols(symbolic_kernel_original)
     end
 
+    # diff has 5 derivatives (0-4) and the other symbols have 3 (0-2)
+    max_diff_derivs = 5  # (0-4)
+    max_hyper_derivs = 3  # (0-2)
     # calculate all of the necessary derivations we need for the Jones model
-    # for four symbols, dorders is of the form: [2.0 1.0 1.0 1.0; 1.0 1.0 1.0 1.0; 0.0 1.0 1.0 1.0; 2.0 0.0 1.0 1.0; ... ]
-    # where the dorders[n, :]==[dorder of dif (0-2), dorder of symbol 2 (0-1), dorder of symbol 3 (0-1), dorder of symbol 4 (0-1)]
+    # for two symbols (dif and a hyperparameter), dorders is of the form:
+    # [4 2; 3 2; 2 2; 1 2; 0 2; ... ]
+    # where the dorders[n, :]==[dorder of dif, dorder of symbol 2]
     # can be made for any number of symbols
-    dorders = zeros(5 * (2 ^ (sym_amount - 1)), sym_amount)
+
+    dorders = zeros(Int64, max_diff_derivs * (max_hyper_derivs ^ (sym_amount - 1)), sym_amount)
     amount_of_dorders = size(dorders,1)
     for i in 1:amount_of_dorders
           quant = amount_of_dorders - i
-          dorders[i, 1] = rem(quant, 5)
-          quant = div(quant, 5)
+          dorders[i, 1] = rem(quant, max_diff_derivs)
+          quant = div(quant, max_diff_derivs)
           for j in 1:(sym_amount - 1)
-                dorders[i, j+1] = rem(quant, 2)
-                quant = div(quant, 2)
+                dorders[i, j+1] = rem(quant, max_hyper_derivs)
+                quant = div(quant, max_hyper_derivs)
           end
     end
 
@@ -85,7 +89,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
 
         # only record another differentiated version of the function if we will actually use it
         # i.e. no instances where differentiations of multiple, non-time symbols are asked for
-        if sum(dorder[2:end]) < 2
+        if sum(dorder[2:end]) < max_hyper_derivs
             symbolic_kernel = copy(symbolic_kernel_original)
 
             write(io, "    if dorder==" * string(dorder) * "\n")
@@ -116,7 +120,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     # write(io, string("    if isnan(func)\n"))
     # write(io, string("        func = 0\n"))
     # write(io, string("    end\n\n"))
-    uses_abs_dif ? write(io, "    return (2 * (dif_positive | iseven(dorder[1])) - 1) * even_time_derivative * float(func)  # correcting for use of abs_dif and amount of t2 derivatives\n\n") : write(io, "    return even_time_derivative * float(func)  # correcting for amount of t2 derivatives\n\n")
+    uses_abs_dif ? write(io, "    return (2 * (dif_positive || iseven(dorder[1])) - 1) * even_time_derivative * float(func)  # correcting for use of abs_dif and amount of t2 derivatives\n\n") : write(io, "    return even_time_derivative * float(func)  # correcting for amount of t2 derivatives\n\n")
     write(io, "end\n\n\n")
     write(io, "return $kernel_name, $num_kernel_hyperparameters  # the function handle and the number of kernel hyperparameters\n")
     close(io)

@@ -23,7 +23,7 @@ function symmetric_A(A::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}}; ig
         if max_dif == zero(max_dif)
             A = Symmetric(A)
         # an arbitrary threshold that is meant to catch numerical errors
-        elseif (max_dif < maximum([1e-6 * maximum(abs.(A)), 1e-8])) | ignore_asymmetry
+        elseif (max_dif < maximum([1e-6 * maximum(abs.(A)), 1e-8])) || ignore_asymmetry
             # return the symmetrized version of the matrix
             A = Symmetric((A + transpose(A)) / 2)
         else
@@ -155,11 +155,13 @@ end
 
 
 "Log of the InverseGamma pdf. Equivalent to using Distributions; logpdf(InverseGamma(α, β), x)"
-log_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = -(β / x) - ((1 + α) * log(x)) + (α * log(β)) - log(gamma(α))
+log_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = -(β / x) - (1 + α) * log(x) + α * log(β) - log(gamma(α))
 
+"First derivative of the Log of the InverseGamma pdf"
+dlog_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = (β / x - (1 + α)) / x
 
-"derivative of the Log of the InverseGamma pdf"
-dlog_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = (β - x * (1 + α)) / (x * x)
+"Second derivative of the Log of the InverseGamma pdf"
+d2log_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = (-2 * β / x + (1 + α)) / (x * x)
 
 
 """
@@ -261,7 +263,7 @@ active and no number of procs to add is given
 """
 function auto_addprocs(;add_procs::Integer=0)
     # only add as any processors as possible if we are on a consumer chip
-    if (add_procs==0) & (nworkers()==1) & (length(Sys.cpu_info())<=16)
+    if (add_procs==0) && (nworkers()==1) && (length(Sys.cpu_info())<=16)
         add_procs = length(Sys.cpu_info()) - 2
     end
     addprocs(add_procs)
@@ -271,3 +273,7 @@ end
 
 "finds -1 ^ power without calling ^"
 powers_of_negative_one(power::Integer) = 2 * iseven(power) - 1
+
+
+"Return the passed vector, removing all zero entries"
+remove_zeros(V::AbstractArray{T,1} where T<:Real) = V[findall(!iszero, V)]

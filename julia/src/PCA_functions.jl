@@ -40,7 +40,7 @@ end
 """
 modified code shamelessly stolen from RvSpectraKitLearn.jl/src/generalized_pca.jl
 Compute the PCA component with the largest eigenvalue
-X is data, r is vector of random numbers, s is preallocated memory; r & s  are of same length as each data point
+X is data, r is vector of random numbers, s is preallocated memory; r && s  are of same length as each data point
 """
 function compute_pca_component_RVSKL!(X::AbstractArray{T,2}, r::AbstractArray{T,1}, s::AbstractArray{T,1}; tol::Float64=1e-8, max_it::Int64=20) where {T<:Real}
 	num_lambda = size(X, 1)

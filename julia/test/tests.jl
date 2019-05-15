@@ -22,11 +22,11 @@ end
     old_dir = pwd()
     cd(@__DIR__)
     include_kernel("quasi_periodic_kernel")
-    @load "../jld2_files/problem_def_sample.jld2" problem_def_sample
+    @load "../jld2_files/problem_def_sample.jld2" problem_def
     cd(old_dir)
 
-    @test est_dKdθ(problem_def_sample, 1 .+ rand(3); return_bool=true, print_stuff=false)
-    @test test_grad(problem_def_sample, 1 .+ rand(3), print_stuff=false)
+    @test est_dKdθ(problem_def, 1 .+ rand(3); return_bool=true, print_stuff=false)
+    @test test_grad(problem_def, 1 .+ rand(3), print_stuff=false)
     println()
 end
 
@@ -146,7 +146,7 @@ end
     @test isapprox(sol_inv, sol_cg)
 
     # y_samp should be recoverable
-    @test isapprox(K_samp * sol_inv, y_samp; rtol=1e-5)
+    @test isapprox(K_samp * sol_inv, y_samp; rtol=1e-4)
     @test isapprox(K_samp * sol_chol, y_samp)
     @test isapprox(K_samp * sol_lmd, y_samp)
     @test isapprox(K_samp * sol_cg, y_samp)

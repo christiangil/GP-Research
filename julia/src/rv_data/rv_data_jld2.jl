@@ -10,10 +10,11 @@ hdf5_locs = ["C:/Users/chris/Downloads/res-1000-lambda-3923-6664-1years_1579spot
     "C:/Users/chris/Downloads/res-100-lambda-3923-6664-1years_1581spots_diffrot_id11.h5",
     "D:/Christian/Downloads/lambda-3923-6664-1years_1574spots_diffrot_id6.h5",
     "D:/Christian/Downloads/lambda-3923-6664-0years_1spots_diffrot_id123.h5",
-    "D:/Christian/Downloads/lambda-3923-6664-0years_1spots_diffrot_id1.h5"]
-hdf5_loc = hdf5_locs[2]
-file_addns = ["_test_300", "", "_singles", "_const"]
-file_str =  file_addns[1]
+    "D:/Christian/Downloads/res-1000-lambda-3923-6664-0years_1spots_diffrot_id1.h5",
+    "D:/Christian/Downloads/res-100-lambda-3923-6664-0years_1spots_diffrot_id1.h5"]
+hdf5_loc = hdf5_locs[6]
+file_addns = ["_test_300", "", "_singles", "_const_1000"]
+file_str =  file_addns[4]
 
 begin
     fid = h5open(hdf5_loc, "r")
