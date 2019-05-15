@@ -277,3 +277,41 @@ powers_of_negative_one(power::Integer) = 2 * iseven(power) - 1
 
 "Return the passed vector, removing all zero entries"
 remove_zeros(V::AbstractArray{T,1} where T<:Real) = V[findall(!iszero, V)]
+
+
+"""
+Compute the logarithm of the Laplace approxmation for the integral of a function
+of the following form
+∫ exp(-λ g(y)) h(y) dy ≈ exp(-λ g(y*)) h(y*) (2π/λ)^(d/2) |H(y*)|^(-1/2)
+where y* is the value of y at the global mode and H is the (Hessian) matrix of
+second order partial derivatives of g(y) (see slide 10 of
+http://www.stats.ox.ac.uk/~steffen/teaching/bs2HT9/laplace.pdf). When used to
+calculate evidences, one can set λ = 1, g(y) = -log-likelihood,
+h(y) = model prior, and H(y) = the Fisher information matrix (FIM) or the
+Hessian matrix of the negative log-likelihood. Possible to improve with methods
+from Ruli et al. 2016 (https://arxiv.org/pdf/1502.06440.pdf)?
+
+Parameters:
+
+H (matrix): Hessian matrix of second order partial derivatives of g(y) at y*
+g (float): g(y*) in above formula
+logh (float): log(h(y*)) in above formula
+λ (float): λ in above formula
+
+Returns:
+float: An estimate of log(∫ exp(-λ g(y)) h(y) dy)
+
+"""
+function log_laplace_approximation(
+    H::AbstractArray{T,2},
+    g::Real,
+    logh::Real;
+    λ = 1
+    ) where {T<:Real}
+
+    @assert size(H, 1) == size(H, 2)
+    n = size(H, 1)
+
+    return logh - λ * g + 0.5 * (n * log(2 * π / λ) - logdet(H))
+
+end

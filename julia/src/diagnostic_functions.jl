@@ -129,7 +129,7 @@ function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::A
 
     if print_stuff
         println()
-        println("test_grad: Check that our analytical ∇nLogL_Jones() is close to numerical estimates")
+        println("test_grad: Check that our analytical ∇nlogL_Jones() is close to numerical estimates")
         println("only values for non-zero hyperparameters are shown!")
         println("hyperparameters: ", total_hyperparameters)
         println("analytical: ", G)
@@ -206,7 +206,7 @@ function test_hess(prob_def::Jones_problem_definition, kernel_hyperparameters::A
 
     if print_stuff
         println()
-        println("test_hess: Check that our analytical ∇∇nLogL_Jones() is close to numerical estimates")
+        println("test_hess: Check that our analytical ∇∇nlogL_Jones() is close to numerical estimates")
         println("only values for non-zero hyperparameters are shown!")
         println("hyperparameters: ", total_hyperparameters)
         println("analytical: ", H)

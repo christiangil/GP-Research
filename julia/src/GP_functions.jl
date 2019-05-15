@@ -601,13 +601,13 @@ end
 # "Calculates the quantities shared by the LogL and ∇LogL calculations"
 # can't use docstrings with @memoize macro :(
 # TODO rework this
-@memoize function calculate_shared_nLogL_Jones(
+@memoize function calculate_shared_nlogL_Jones(
     prob_def::Jones_problem_definition,
     non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real;
     y_obs::AbstractArray{T2,1} where T2<:Real=prob_def.y_obs,
     K_obs::Cholesky{T3,Array{T3,2}} where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
     P::Real=0)
-# function calculate_shared_nLogL_Jones(prob_def::Jones_problem_definition, non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real; y_obs::AbstractArray{T2,1}  where T2<:Real=prob_def.y_obs, K_obs::Cholesky{T3,Array{T3,2}}  where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters); ignore_asymmetry=true))
+# function calculate_shared_nlogL_Jones(prob_def::Jones_problem_definition, non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real; y_obs::AbstractArray{T2,1}  where T2<:Real=prob_def.y_obs, K_obs::Cholesky{T3,Array{T3,2}}  where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters); ignore_asymmetry=true))
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
@@ -618,11 +618,7 @@ end
 
     α = K_obs \ y_obs
 
-    prior_alpha = 1  # used to be 10.
-    prior_beta = 1  # used to be 10.
-    prior_params = (prior_alpha, prior_beta)
-
-    return total_hyperparameters, K_obs, y_obs, α, prior_params
+    return total_hyperparameters, K_obs, y_obs, α
 
 end
 
@@ -746,22 +742,12 @@ function nlogL_Jones(
     total_hyperparameters::AbstractArray{T1,1},
     K_obs::Cholesky{T2,Array{T2,2}},
     y_obs::AbstractArray{T3,1},
-    α::AbstractArray{T4,1},
-    prior_params::Tuple
+    α::AbstractArray{T4,1}
     ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
 
-    nLogL_val = nlogL(K_obs, y_obs, α)
+    nlogL_val = nlogL(K_obs, y_obs, α)
 
-    # prior_alpha, prior_beta = prior_params
-    #
-    # # adding prior for physical length scales
-    # prior_term = 0
-    # for i in 1:prob_def.n_kern_hyper
-    #     kernel_length = total_hyperparameters[end + 1 - i]
-    #     prior_term += log_inverse_gamma(kernel_length, prior_alpha, prior_beta)
-    # end
-
-    return nLogL_val  # - prior_term
+    return nlogL_val
 
 end
 
@@ -774,20 +760,19 @@ function nlogL_Jones(
     ) where {T1<:Real, T2<:Real, T3<:Real}
 
     non_zero_hyperparameters = remove_zeros(total_hyperparameters)
-    total_hyperparameters, K_obs, y_obs, α, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters, y_obs=y_obs, K_obs=K_obs, P=P)
-    return nlogL_Jones(prob_def, total_hyperparameters, K_obs, y_obs, α, prior_params)
+    total_hyperparameters, K_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters, y_obs=y_obs, K_obs=K_obs, P=P)
+    return nlogL_Jones(prob_def, total_hyperparameters, K_obs, y_obs, α)
 end
 
 
-"Replaces G with gradient of nLogL for non-zero hyperparameters"
+"Replaces G with gradient of nlogL for non-zero hyperparameters"
 function ∇nlogL_Jones!(
     G::AbstractArray{T1,1},
     prob_def::Jones_problem_definition,
     total_hyperparameters::AbstractArray{T2,1},
     K_obs::Cholesky{T3,Array{T3,2}},
     y_obs::AbstractArray{T4,1},
-    α::AbstractArray{T5,1},
-    prior_params::Tuple
+    α::AbstractArray{T5,1}
     ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
 
     j = 1
@@ -798,35 +783,25 @@ function ∇nlogL_Jones!(
         end
     end
 
-    # prior_alpha, prior_beta = prior_params
-    #
-    # # adding prior for physical length scales
-    # for i in 1:prob_def.n_kern_hyper
-    #     kernel_length = total_hyperparameters[end + 1 - i]
-    #     prior_term = dlog_inverse_gamma(kernel_length, prior_alpha, prior_beta)
-    #     G[end + 1 - i] -= prior_term
-    # end
-
 end
 
 
-"Returns gradient of nLogL for non-zero hyperparameters"
+"Returns gradient of nlogL for non-zero hyperparameters"
 function ∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::AbstractArray{T1,1},
     K_obs::Cholesky{T2,Array{T2,2}},
     y_obs::AbstractArray{T3,1},
-    α::AbstractArray{T4,1},
-    prior_params::Tuple
+    α::AbstractArray{T4,1}
     ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
 
     G = zeros(length(findall(!iszero, total_hyperparameters)))
-    ∇nlogL_Jones!(G, prob_def, total_hyperparameters, K_obs, y_obs, α, prior_params)
+    ∇nlogL_Jones!(G, prob_def, total_hyperparameters, K_obs, y_obs, α)
     return G
 end
 
 
-"Replaces G with gradient of nLogL for non-zero hyperparameters"
+"Replaces G with gradient of nlogL for non-zero hyperparameters"
 function ∇nlogL_Jones!(
     G::AbstractArray{T1,1},
     prob_def::Jones_problem_definition,
@@ -836,12 +811,12 @@ function ∇nlogL_Jones!(
     ) where {T1<:Real, T2<:Real, T3<:Real}
 
     non_zero_hyperparameters = remove_zeros(total_hyperparameters)
-    total_hyperparameters, K_obs, y_obs, α, prior_params = calculate_shared_nLogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs, P=P)
-    ∇nlogL_Jones!(G, prob_def, total_hyperparameters, K_obs, y_obs, α, prior_params)
+    total_hyperparameters, K_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs, P=P)
+    ∇nlogL_Jones!(G, prob_def, total_hyperparameters, K_obs, y_obs, α)
 end
 
 
-"Returns gradient of nLogL for non-zero hyperparameters"
+"Returns gradient of nlogL for non-zero hyperparameters"
 function ∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::AbstractArray{T1,1};
@@ -854,15 +829,14 @@ function ∇nlogL_Jones(
 end
 
 
-"Replaces H with Hessian of nLogL for non-zero hyperparameters"
+"Replaces H with Hessian of nlogL for non-zero hyperparameters"
 function ∇∇nlogL_Jones!(
     H::AbstractArray{T1,2},
     prob_def::Jones_problem_definition,
     total_hyperparameters::AbstractArray{T2,1},
     K_obs::Cholesky{T3,Array{T3,2}},
     y_obs::AbstractArray{T4,1},
-    α::AbstractArray{T5,1},
-    prior_params::Tuple
+    α::AbstractArray{T5,1}
     ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
 
     k = 1
@@ -879,10 +853,6 @@ function ∇∇nlogL_Jones!(
             k += 1
         end
     end
-
-    # prior_alpha, prior_beta = prior_params
-    #
-    # TODO adding prior for physical length scales
 
 end
 
@@ -945,8 +915,8 @@ function initialize_optimize_Jones_model_jld2!(
 
     current_fit_time = now()
     if isfile("jld2_files/optimize_Jones_model_$kernel_name.jld2")
-        @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_params
-        @save "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_fit_time
+        @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" initial_time total_fit_time current_params
+        @save "jld2_files/optimize_Jones_model_$kernel_name.jld2" initial_time current_fit_time total_fit_time current_params
     else
         initial_time = now()
         total_fit_time = Millisecond(0)
@@ -961,9 +931,47 @@ function update_optimize_Jones_model_jld2!(
     kernel_name::AbstractString,
     non_zero_hyper_param)
 
-    @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_fit_time total_fit_time
+    @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" initial_time current_fit_time total_fit_time
     total_fit_time += current_fit_time - now()
     current_fit_time = now()
     current_params = data(non_zero_hyper_param)
-    @save "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_fit_time current_params total_fit_time
+    @save "jld2_files/optimize_Jones_model_$kernel_name.jld2" initial_time current_fit_time total_fit_time current_params
+end
+
+
+function logGP_prior(
+    total_hyperparameters::AbstractArray{T,1};
+    alpha::Real=1,
+    beta::Real=1
+    ) where {T<:Real}
+
+    logprior = 0
+
+    # adding prior for physical length scales
+    for i in 1:prob_def.n_kern_hyper
+        kernel_length = total_hyperparameters[end + 1 - i]
+        logprior += log_inverse_gamma(kernel_length, alpha, beta)
+    end
+
+    return logprior
+
+end
+
+
+function ∇logGP_prior(
+    total_hyperparameters::AbstractArray{T,1};
+    alpha::Real=1,
+    beta::Real=1
+    ) where {T<:Real}
+
+    ∇logprior = zero(total_hyperparameters)
+
+    # adding prior for physical length scales
+    for i in 1:prob_def.n_kern_hyper
+        kernel_length = total_hyperparameters[end + 1 - i]
+        ∇logprior[end + 1 - i] -= dlog_inverse_gamma(kernel_length, alpha, beta)
+    end
+
+    return ∇logprior
+
 end

@@ -1,6 +1,6 @@
-#adding in custom functions
-# include("src/setup.jl")
-# include("test/runtests.jl")
+# adding in custom functions
+include("src/setup.jl")
+include("test/runtests.jl")
 include("src/all_functions.jl")
 
 # can use this if you want to replicate results
@@ -22,7 +22,7 @@ if length(ARGS)>0
     grad_norm_thres = 5e0
     opt = ADAM(0.1)
 else
-    kernel_name = kernel_names[1]
+    kernel_name = kernel_names[4]
     @load "jld2_files/problem_def_sample_base.jld2" problem_def_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
@@ -103,8 +103,8 @@ println(nlogL_Jones(problem_definition, final_total_hyperparameters), "\n")
 
 Jones_line_plots(amount_of_samp_points, problem_definition, final_total_hyperparameters; file="figs/gp/$kernel_name/fit_gp", plot_K=true, plot_K_profile=true)
 
-coeffs = final_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
-coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)
+# coeffs = final_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
+# coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)
 
 # ################
 # # Corner plots #
@@ -118,4 +118,15 @@ coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_defini
 # @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_params
 # actual_labels = possible_labels[1, 1:length(current_params)]
 # f_corner(input) = nlogL_Jones(problem_definition, input)
-# @elapsed corner_plot(f_corner, data(current_params), "figs/gp/$kernel_name/corner_$kernel_name.png"; input_labels=actual_labels)
+# @elapsed corner_plot(f_corner, current_params, "figs/gp/$kernel_name/corner_$kernel_name.png"; input_labels=actual_labels)
+#
+# ##########################
+# # Evidence approximation #
+# ##########################
+#
+# H = zeros(length(current_params), length(current_params))
+# y_obs = problem_definition.y_obs
+#
+# K_obs = K_observations(problem_definition, final_total_hyperparameters)
+# ∇∇nlogL_Jones!(H, problem_definition, final_total_hyperparameters, K_obs, y_obs, K_obs \ y_obs)
+# log_laplace_approximation(H, nlogL_Jones(problem_definition, current_params), 0)

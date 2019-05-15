@@ -130,16 +130,16 @@ end
 #     new_y_obs = remove_kepler(fake_data, times_obs, period, K_obs)
 #
 #     # Allowing Flux to use the analytical gradients we have calculated
-#     nLogL_custom(non_zero_hyper) = nlogL_Jones(problem_def_528, non_zero_hyper; y_obs=new_y_obs)
-#     nLogL_custom(non_zero_hyper::TrackedArray) = track(nLogL_custom, non_zero_hyper)
-#     @grad nLogL_custom(non_zero_hyper) = nLogL_custom(data(non_zero_hyper)), Δ -> tuple(Δ .* ∇nlogL_Jones(problem_def_528, data(non_zero_hyper); y_obs=new_y_obs))
+#     nlogL_custom(non_zero_hyper) = nlogL_Jones(problem_def_528, non_zero_hyper; y_obs=new_y_obs)
+#     nlogL_custom(non_zero_hyper::TrackedArray) = track(nlogL_custom, non_zero_hyper)
+#     @grad nlogL_custom(non_zero_hyper) = nlogL_custom(data(non_zero_hyper)), Δ -> tuple(Δ .* ∇nlogL_Jones(problem_def_528, data(non_zero_hyper); y_obs=new_y_obs))
 #
 #     # Setting model parameters for Flux
 #     non_zero_hyper_param = param(total_hyperparameters[findall(!iszero, total_hyperparameters)])
 #     ps = Flux.params(non_zero_hyper_param)
 #
 #     # Final function wrapper for Flux
-#     nLogL_custom() = nLogL_custom(non_zero_hyper_param)
+#     nlogL_custom() = nlogL_custom(non_zero_hyper_param)
 #
 #     # Initializing other training things
 #     iteration_amount = 10
@@ -150,7 +150,7 @@ end
 #     global epoch_num = 0
 #     while grad_norm>1e2
 #         global epoch_num += 10
-#         Flux.train!(nLogL_custom, ps, flux_data, opt)
+#         Flux.train!(nlogL_custom, ps, flux_data, opt)
 #         global grad_norm = norm(∇nlogL_Jones(problem_def_528, data(non_zero_hyper_param); y_obs=new_y_obs))
 #         println("Epoch $epoch_num gradient norm: ", grad_norm)
 #     end
