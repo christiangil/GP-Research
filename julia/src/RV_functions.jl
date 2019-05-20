@@ -250,15 +250,17 @@ end
 """
 This differs from usual expressions so as to be differentiable, even at zero eccentricity.
 Done by replacing e and ω, with h and k
-h = e * sin(ω)
-k = e * cos(ω)
+A uniform prior on h and k (on the unit circle) leads to a uniform prior on ω
+and a linearly increasing prior on e
+he = e * sin(ω)
+ke = e * cos(ω)
 so
 e = sqrt(h^2 + k^2)
 ω = atan(h, k)
 sin(ω) = h / e
 cos(ω) = k / e
 """
-function kepler_rv_hk(
+function kepler_rv_hk1(
     t::Real,
     P::Real,
     M0::Real,
@@ -274,6 +276,37 @@ function kepler_rv_hk(
     j = sqrt(1 - e_sq)
 
     return K * j / (e - e_sq * cosE) * (j * k * cosE - h * sin(E)) + γ
+end
+
+
+"""
+This differs from usual expressions so as to be differentiable, even at zero eccentricity.
+Done by replacing e and ω, with h and k
+A uniform prior on h and k (on the unit circle) leads to a uniform prior on e
+and ω
+h = sqrt(e) * sin(ω)
+k = sqrt(e) * cos(ω)
+so
+e = h^2 + k^2
+ω = atan(h, k)
+sin(ω) = h / sqrt(e)
+cos(ω) = k / sqrt(e)
+"""
+function kepler_rv_hk2(
+    t::Real,
+    P::Real,
+    M0::Real,
+    K::Real,
+    h::Real,
+    k::Real;
+    γ::Real=0.)
+
+    e = h * h + k * k
+    E = ecc_anomaly(t, P, e, M0)
+    cosE = cos(E)
+    j = sqrt(1 - e * e)
+
+    return K * j / (sqrt(e) * (1 - e * cosE)) * (j * k * cosE - h * sin(E)) + γ
 end
 
 

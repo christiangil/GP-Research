@@ -72,15 +72,18 @@ end
     # making sure our two RV equations produce the same results
     K = 1.
     times = linspace(0,1,10)
-    h = 0.0
-    k = 0.99
+    h1 = 0.0
+    k1 = 0.99
     P = 1.
     M0 = pi / 2
     γ = 0.1
-    e = sqrt(h * h + k * k)
-    ω = atan(h, k)
+    e = sqrt(h1 * h1 + k1 * k1)
+    ω = atan(h1, k1)
+    h2 = sqrt(e) * sin(ω)
+    k2 = sqrt(e) * cos(ω)
 
-    @test isapprox(kepler_rv.(times, P, e, M0, K, ω; γ=γ), kepler_rv_hk.(times, P, M0, K, h, k; γ=γ))
+    @test isapprox(kepler_rv.(times, P, e, M0, K, ω; γ=γ), kepler_rv_hk1.(times, P, M0, K, h1, k1; γ=γ))
+    @test isapprox(kepler_rv.(times, P, e, M0, K, ω; γ=γ), kepler_rv_hk2.(times, P, M0, K, h2, k2; γ=γ))
     @test isapprox(kepler_rv.(times, P, e, M0, K, ω; γ=γ), kepler_rv_true_anomaly.(times, P, e, M0, K, ω; γ=γ))
 
     println()
