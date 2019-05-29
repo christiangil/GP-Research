@@ -18,7 +18,7 @@ cd(old_dir)
     println()
 end
 
-@testset "hyperparameter gradients" begin
+@testset "nlogL derivatives" begin
     old_dir = pwd()
     cd(@__DIR__)
     include_kernel("quasi_periodic_kernel")
@@ -27,6 +27,7 @@ end
 
     @test est_dKdθ(problem_def, 1 .+ rand(3); return_bool=true, print_stuff=false)
     @test test_grad(problem_def, 1 .+ rand(3), print_stuff=false)
+    @test test_hess(problem_def, 1 .+ rand(3), print_stuff=false)
     println()
 end
 

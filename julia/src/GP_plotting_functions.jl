@@ -5,7 +5,7 @@ using PyPlot
 
 
 # quick and dirty function for creating plots that show what I want
-function custom_GP_plot(x_samp::AbstractArray{T1,1}, show_curves::AbstractArray{T2,2}, x_obs::AbstractArray{T3,1}, y_obs::AbstractArray{T4,1}, σ::AbstractArray{T5,1}, mean::AbstractArray{T6,1}; errors::AbstractArray{T7,1}=zeros(length(x_obs))) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real, T7<:Real}
+function custom_GP_plot(x_samp::AbstractArray{T1,1}, show_curves::AbstractArray{T2,2}, x_obs::AbstractArray{T3,1}, y_obs::AbstractArray{T4,1}, σ::AbstractArray{T5,1}, mean::AbstractArray{T6,1}; errors::AbstractArray{T7,1}=zero(x_obs)) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real, T7<:Real}
 
     @assert size(show_curves, 2)==length(x_samp)==length(mean)==length(σ)
     @assert length(x_obs)==length(y_obs)==length(errors)

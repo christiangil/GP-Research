@@ -272,7 +272,7 @@ end
 
 
 "finds -1 ^ power without calling ^"
-powers_of_negative_one(power::Integer) = 2 * iseven(power) - 1
+powers_of_negative_one(power::Integer) = iseven(power) ? 1 : -1
 
 
 "Return the passed vector, removing all zero entries"

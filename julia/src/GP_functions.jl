@@ -274,7 +274,8 @@ end
 
     # only calculating each sub-matrix once and using the fact that they should
     # be basically the same if the kernel has been differentiated the same amount of times
-    A_list = Array{Any}(nothing, 2 * n_dif - 1)
+    # A_list = Array{Any}(nothing, 2 * n_dif - 1)
+    A_list = Array{AbstractArray{T,2} where {T<:Real},1}(undef, 2 * n_dif - 1)
     for i in 0:(2 * n_dif - 2)
 
         # CHANGE THIS TO MAKE MORE SENSE WITH NEW KERNEL SCHEME
@@ -598,31 +599,6 @@ function dif_coefficients!(
 end
 
 
-# "Calculates the quantities shared by the LogL and ∇LogL calculations"
-# can't use docstrings with @memoize macro :(
-# TODO rework this
-@memoize function calculate_shared_nlogL_Jones(
-    prob_def::Jones_problem_definition,
-    non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real;
-    y_obs::AbstractArray{T2,1} where T2<:Real=prob_def.y_obs,
-    K_obs::Cholesky{T3,Array{T3,2}} where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
-    P::Real=0)
-# function calculate_shared_nlogL_Jones(prob_def::Jones_problem_definition, non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real; y_obs::AbstractArray{T2,1}  where T2<:Real=prob_def.y_obs, K_obs::Cholesky{T3,Array{T3,2}}  where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters); ignore_asymmetry=true))
-
-    # this allows us to prevent the optimizer from seeing the constant zero coefficients
-    total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
-
-    # remove the best fit planet with the period given
-    # only changes things for a non-zero period
-    remove_kepler!(y_obs, prob_def.x_obs, P, K_obs)
-
-    α = K_obs \ y_obs
-
-    return total_hyperparameters, K_obs, y_obs, α
-
-end
-
-
 """
 GP negative log marginal likelihood (see Algorithm 2.1 in Rasmussen and Williams 2006)
 
@@ -716,7 +692,7 @@ float: the partial derivative of the negative log marginal likelihood w.r.t. the
     hyperparameters used in the calculation of β1, β2, and β12
 
 """
-function d2nlogLdθ2(
+function d2nlogLdθ(
     y_obs::AbstractArray{T1,1},
     α::AbstractArray{T2,1},
     β1::AbstractArray{T3,2},
@@ -732,6 +708,48 @@ function d2nlogLdθ2(
     complexity_penalty = tr(β12mβ2β1)
 
     return 0.5 * (data_fit + complexity_penalty)
+
+end
+
+
+# "Calculates the quantities shared by the nlogL and ∇nlogL calculations"
+# can't use docstrings with @memoize macro :(
+# TODO add model parameter priors (GP and Keplerian)
+@memoize function calculate_shared_nlogL_Jones(
+    prob_def::Jones_problem_definition,
+    non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real;
+    y_obs::AbstractArray{T2,1} where T2<:Real=prob_def.y_obs,
+    K_obs::Cholesky{T3,Array{T3,2}} where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
+    P::Real=0)
+
+    # this allows us to prevent the optimizer from seeing the constant zero coefficients
+    total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
+
+    # remove the best fit planet with the period given
+    # only changes things for a non-zero period
+    remove_kepler!(y_obs, prob_def.x_obs, P, K_obs)
+
+    α = K_obs \ y_obs
+
+    return total_hyperparameters, K_obs, y_obs, α
+
+end
+
+
+# "Calculates the quantities shared by the ∇nlogL and ∇∇nlogL calculations"
+# can't use docstrings with @memoize macro :(
+@memoize function calculate_shared_∇nlogL_Jones(
+    prob_def::Jones_problem_definition,
+    non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real;
+    y_obs::AbstractArray{T2,1} where T2<:Real=prob_def.y_obs,
+    K_obs::Cholesky{T3,Array{T3,2}} where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
+    P::Real=0)
+
+    total_hyperparameters, K_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs, K_obs=K_obs, P=P)
+
+    βs = [K_obs \ covariance(prob_def, total_hyperparameters; dKdθs_total=[i]) for i in findall(!iszero, total_hyperparameters)]
+
+    return total_hyperparameters, K_obs, y_obs, α, βs
 
 end
 
@@ -759,30 +777,8 @@ function nlogL_Jones(
     P::Real=0
     ) where {T1<:Real, T2<:Real, T3<:Real}
 
-    non_zero_hyperparameters = remove_zeros(total_hyperparameters)
-    total_hyperparameters, K_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters, y_obs=y_obs, K_obs=K_obs, P=P)
+    total_hyperparameters, K_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, remove_zeros(total_hyperparameters), y_obs=y_obs, K_obs=K_obs, P=P)
     return nlogL_Jones(prob_def, total_hyperparameters, K_obs, y_obs, α)
-end
-
-
-"Replaces G with gradient of nlogL for non-zero hyperparameters"
-function ∇nlogL_Jones!(
-    G::AbstractArray{T1,1},
-    prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T2,1},
-    K_obs::Cholesky{T3,Array{T3,2}},
-    y_obs::AbstractArray{T4,1},
-    α::AbstractArray{T5,1}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
-
-    j = 1
-    for i in 1:(length(total_hyperparameters))
-        if total_hyperparameters[i]!=0
-            G[j] = dnlogLdθ(y_obs, α, K_obs \ covariance(prob_def, total_hyperparameters; dKdθs_total=[i]))
-            j += 1
-        end
-    end
-
 end
 
 
@@ -790,29 +786,13 @@ end
 function ∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::AbstractArray{T1,1},
-    K_obs::Cholesky{T2,Array{T2,2}},
-    y_obs::AbstractArray{T3,1},
-    α::AbstractArray{T4,1}
+    y_obs::AbstractArray{T2,1},
+    α::AbstractArray{T3,1},
+    βs::Array{Array{T4,2},1}
     ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
 
-    G = zeros(length(findall(!iszero, total_hyperparameters)))
-    ∇nlogL_Jones!(G, prob_def, total_hyperparameters, K_obs, y_obs, α)
-    return G
-end
+    return [dnlogLdθ(y_obs, α, β) for β in βs]
 
-
-"Replaces G with gradient of nlogL for non-zero hyperparameters"
-function ∇nlogL_Jones!(
-    G::AbstractArray{T1,1},
-    prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T2,1};
-    y_obs::AbstractArray{T3,1}=prob_def.y_obs,
-    P::Real=0
-    ) where {T1<:Real, T2<:Real, T3<:Real}
-
-    non_zero_hyperparameters = remove_zeros(total_hyperparameters)
-    total_hyperparameters, K_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs, P=P)
-    ∇nlogL_Jones!(G, prob_def, total_hyperparameters, K_obs, y_obs, α)
 end
 
 
@@ -820,39 +800,58 @@ end
 function ∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::AbstractArray{T1,1};
-    y_obs::AbstractArray{T2,1}=prob_def.y_obs
-    ) where {T1<:Real, T2<:Real}
+    y_obs::AbstractArray{T2,1}=prob_def.y_obs,
+    K_obs::Cholesky{T3,Array{T3,2}}=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
+    P::Real=0
+    ) where {T1<:Real, T2<:Real, T3<:Real}
 
-    G = zeros(length(findall(!iszero, total_hyperparameters)))
-    ∇nlogL_Jones!(G, prob_def, total_hyperparameters; y_obs=y_obs)
-    return G
+    total_hyperparameters, K_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
+        prob_def, remove_zeros(total_hyperparameters); y_obs=y_obs, K_obs=K_obs, P=P)
+
+    return ∇nlogL_Jones(prob_def, total_hyperparameters, y_obs, α, βs)
+
 end
 
 
 "Replaces H with Hessian of nlogL for non-zero hyperparameters"
-function ∇∇nlogL_Jones!(
-    H::AbstractArray{T1,2},
+function ∇∇nlogL_Jones(
     prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T2,1},
-    K_obs::Cholesky{T3,Array{T3,2}},
-    y_obs::AbstractArray{T4,1},
-    α::AbstractArray{T5,1}
+    total_hyperparameters::AbstractArray{T1,1},
+    K_obs::Cholesky{T3,Array{T2,2}},
+    y_obs::AbstractArray{T3,1},
+    α::AbstractArray{T4,1},
+    βs::Array{Array{T5,2},1}
     ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
 
-    k = 1
-    l = 1
-    for i in 1:length(total_hyperparameters)
-        if total_hyperparameters[i]!=0
-            for j in 1:length(total_hyperparameters)
-                if total_hyperparameters[j]!=0
-                    H[k, l] = d2nlogLdθ2(y_obs, α, K_obs \ covariance(prob_def, total_hyperparameters; dKdθs_total=[i]), K_obs \ covariance(prob_def, total_hyperparameters; dKdθs_total=[j]), K_obs \ covariance(prob_def, total_hyperparameters; dKdθs_total=[i, j]))
-                    l += 1
-                end
+    non_zero_inds = findall(!iszero, total_hyperparameters)
+    H = zeros(length(non_zero_inds), length(non_zero_inds))
+
+    for (k, i) in enumerate(non_zero_inds)
+        for (l, j) in enumerate(non_zero_inds)
+            if k <= l
+                H[k, l] = d2nlogLdθ(y_obs, α, βs[k], βs[l], K_obs \ covariance(prob_def, total_hyperparameters; dKdθs_total=[i, j]))
             end
-            l = 1
-            k += 1
         end
     end
+
+    H = Symmetric(H)
+
+end
+
+
+"Replaces H with Hessian of nlogL for non-zero hyperparameters"
+function ∇∇nlogL_Jones(
+    prob_def::Jones_problem_definition,
+    total_hyperparameters::AbstractArray{T1,1},
+    y_obs::AbstractArray{T2,1}=prob_def.y_obs,
+    K_obs::Cholesky{T3,Array{T3,2}}=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
+    P::Real=0
+    ) where {T1<:Real, T2<:Real, T3<:Real}
+
+    total_hyperparameters, K_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
+        prob_def, remove_zeros(total_hyperparameters); y_obs=y_obs, K_obs=K_obs, P=P)
+
+    return ∇∇nlogL_Jones(prob_def, total_hyperparameters, K_obs, y_obs, α, βs)
 
 end
 

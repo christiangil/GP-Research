@@ -284,29 +284,29 @@ This differs from usual expressions so as to be differentiable, even at zero ecc
 Done by replacing e and ω, with h and k
 A uniform prior on h and k (on the unit circle) leads to a uniform prior on e
 and ω
-h = sqrt(e) * sin(ω)
-k = sqrt(e) * cos(ω)
+hp = sqrt(e) * sin(ω)
+kp = sqrt(e) * cos(ω)
 so
-e = h^2 + k^2
+e = hp/^2 + kp^2
 ω = atan(h, k)
-sin(ω) = h / sqrt(e)
-cos(ω) = k / sqrt(e)
+sin(ω) = hp / sqrt(e)
+cos(ω) = kp / sqrt(e)
 """
 function kepler_rv_hk2(
     t::Real,
     P::Real,
     M0::Real,
     K::Real,
-    h::Real,
-    k::Real;
+    hp::Real,
+    kp::Real;
     γ::Real=0.)
 
-    e = h * h + k * k
+    e = hp * hp + kp * kp
     E = ecc_anomaly(t, P, e, M0)
     cosE = cos(E)
     j = sqrt(1 - e * e)
 
-    return K * j / (sqrt(e) * (1 - e * cosE)) * (j * k * cosE - h * sin(E)) + γ
+    return K * j / (sqrt(e) * (1 - e * cosE)) * (j * kp * cosE - hp * sin(E)) + γ
 end
 
 
@@ -540,8 +540,8 @@ function kep_signal_likelihoods(
     ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
 
     # @warn "make sure that period_grid and time_obs are in the same units!"
-    likelihoods = zeros(length(period_grid))
-    new_data = zeros(length(signal_data))
+    likelihoods = zero(period_grid)
+    new_data = zero(signal_data)
     for i in 1:length(period_grid)
         new_data .= signal_data
         remove_kepler!(new_data, times_obs, period_grid[i], covariance)

@@ -138,7 +138,7 @@ function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::A
 
     no_mismatch = true
     for i in 1:length(G)
-        if (!(isapprox(G[i], est_G[i], rtol=2e-1))) && (G[i] != 0)
+        if !isapprox(G[i], est_G[i], rtol=5e-2)
             println("mismatch dnlogL/dθ" * string(i))
             no_mismatch = false
         end
@@ -202,24 +202,39 @@ function test_hess(prob_def::Jones_problem_definition, kernel_hyperparameters::A
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
     H = ∇∇nlogL_Jones(prob_def, total_hyperparameters)
-    est_H = est_grad(prob_def, total_hyperparameters; dif=dif)
+    est_H = est_hess(prob_def, total_hyperparameters; dif=dif)
 
     if print_stuff
         println()
         println("test_hess: Check that our analytical ∇∇nlogL_Jones() is close to numerical estimates")
         println("only values for non-zero hyperparameters are shown!")
         println("hyperparameters: ", total_hyperparameters)
-        println("analytical: ", H)
-        println("numerical : ", est_H)
+        println("analytical:")
+        for i in 1:size(H, 1)
+            println(H[i, :])
+        end
+        println("numerical:")
+        for i in 1:size(est_H, 1)
+            println(est_H[i, :])
+        end
     end
 
     no_mismatch = true
+    matches = fill(1, size(H))
     for i in 1:size(H, 1)
         for j in 1:size(H, 2)
-            if (!(isapprox(H[i, j], est_H[i, j], rtol=2e-1))) && (H[i, j] != 0)
-                println("mismatch d2nlogL/dθ" * string(i) * "dθ" * string(j))
+            if !(isapprox(H[i, j], est_H[i, j], rtol=5e-2))
+                # println("mismatch d2nlogL/dθ" * string(i) * "dθ" * string(j))
+                matches[i, j] = 0
                 no_mismatch = false
             end
+        end
+    end
+
+    if !no_mismatch
+        println("mismatches at 0s")
+        for i in 1:size(H, 1)
+            println(matches[i, :])
         end
     end
 
