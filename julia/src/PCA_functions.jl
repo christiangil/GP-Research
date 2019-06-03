@@ -136,9 +136,9 @@ end
 
 
 "bootstrapping for errors in PCA scores. Takes ~28s per bootstrap on my computer"
-function bootstrap_errors(time_series_spectra::AbstractArray{T,2}, hdf5_filename::AbstractString; boot_amount::Integer=10, save_filename::AbstractString="jld2_files/bootstrap.jld2") where {T<:Real}
+function bootstrap_errors(time_series_spectra::AbstractArray{T,2}, hdf5_filename::AbstractString; boot_amount::Integer=10) where {T<:Real}
 
-    @load "jld2_files/rv_data.jld2" M scores
+    @load hdf5_filename * "_rv_data.jld2" M scores
 
 	scores_mean = copy(scores)  # saved to ensure that the scores are paired with the proper rv_data
 
@@ -154,10 +154,10 @@ function bootstrap_errors(time_series_spectra::AbstractArray{T,2}, hdf5_filename
         scores_tot_new[k, :, :] = scores
     end
 
+	save_filename = hdf5_filename * "_bootstrap.jld2"
+
     if isfile(save_filename)
-		hdf5_filename_new = hdf5_filename
-        @load save_filename scores_tot hdf5_filename
-		@assert hdf5_filename_new==hdf5_filename  # ensure that we are combining scores from different SOAP runs
+        @load save_filename scores_tot
         scores_tot = vcat(scores_tot, scores_tot_new)
     else
         scores_tot = scores_tot_new
@@ -176,7 +176,7 @@ function bootstrap_errors(time_series_spectra::AbstractArray{T,2}, hdf5_filename
         error_ests[i,:] = mapslices(std, scores_tot[:, i, :]; dims=1)
     end
 
-    @save save_filename scores_mean scores_tot error_ests hdf5_filename
+    @save save_filename scores_mean scores_tot error_ests
 end
 
 

@@ -1,6 +1,6 @@
 # adding in custom functions
 include("src/setup.jl")
-include("test/runtests.jl")
+# include("test/runtests.jl")
 include("src/all_functions.jl")
 
 # can use this if you want to replicate results
@@ -15,7 +15,7 @@ kernel_names = ["quasi_periodic_kernel", "se_kernel", "rq_kernel", "matern52_ker
 if length(ARGS)>0
     kernel_name = kernel_names[parse(Int, ARGS[1])]
     println("optimizing the full problem using the $kernel_name")
-    @load "jld2_files/problem_def_full_base.jld2" problem_def_base normals
+    @load "jld2_files/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11_problem_def_full_base.jld2" problem_def_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
     flux_cb_delay = 3600 / 2
@@ -23,7 +23,7 @@ if length(ARGS)>0
     opt = ADAM(0.1)
 else
     kernel_name = kernel_names[4]
-    @load "jld2_files/problem_def_sample_base.jld2" problem_def_base normals
+    @load "jld2_files/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11_problem_def_sample_base.jld2" problem_def_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
     flux_cb_delay = 3600 / 500
@@ -68,7 +68,7 @@ ps = Flux.params(non_zero_hyper_param)
 f_custom() = f_custom(non_zero_hyper_param)
 
 # setting things for Flux to use
-flux_data = Iterators.repeated((), 2000)  # use at most 500 iterations
+flux_data = Iterators.repeated((), 500)  # use at most 500 iterations
 
 # save plots as we are training every flux_cb_delay seconds
 # stop training if our gradient norm gets small enough
@@ -124,9 +124,5 @@ Jones_line_plots(amount_of_samp_points, problem_definition, final_total_hyperpar
 # # Evidence approximation #
 # ##########################
 #
-# H = zeros(length(current_params), length(current_params))
-# y_obs = problem_definition.y_obs
-#
-# K_obs = K_observations(problem_definition, final_total_hyperparameters)
-# ∇∇nlogL_Jones!(H, problem_definition, final_total_hyperparameters, K_obs, y_obs, K_obs \ y_obs)
+# H = ∇∇nlogL_Jones(problem_definition, final_total_hyperparameters)
 # log_laplace_approximation(H, nlogL_Jones(problem_definition, current_params), 0)

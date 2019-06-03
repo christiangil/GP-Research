@@ -154,16 +154,6 @@ function reconstruct_array(non_zero_entries, template_array::AbstractArray{T,2})
 end
 
 
-"Log of the InverseGamma pdf. Equivalent to using Distributions; logpdf(InverseGamma(α, β), x)"
-log_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = -(β / x) - (1 + α) * log(x) + α * log(β) - log(gamma(α))
-
-"First derivative of the Log of the InverseGamma pdf"
-dlog_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = (β / x - (1 + α)) / x
-
-"Second derivative of the Log of the InverseGamma pdf"
-d2log_inverse_gamma(x::Real, α::Real=1., β::Real=1.) = (-2 * β / x + (1 + α)) / (x * x)
-
-
 """
 Solve a linear system of equations (optionally with variance values at each point or covariance array)
 see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
