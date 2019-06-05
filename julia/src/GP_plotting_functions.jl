@@ -28,17 +28,17 @@ function custom_GP_plot(x_samp::AbstractArray{T1,1}, show_curves::AbstractArray{
 end
 
 
-function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T,1}; show::Integer=3, file::AbstractString="", find_post::Bool=true, plot_K::Bool=false, plot_K_profile::Bool=false, filetype::AbstractString="png") where {T<:Real}
+function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T1,1}; show::Integer=3, file::AbstractString="", find_post::Bool=true, plot_K::Bool=false, plot_K_profile::Bool=false, filetype::AbstractString="png", y_obs::AbstractArray{T2,1}=prob_def.y_obs) where {T1<:Real, T2<:Real}
 
     x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points))
     amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out
-    amount_of_measurements = length(prob_def.x_obs)
+    amount_of_obs = length(prob_def.x_obs)
 
     show_curves = zeros(show, amount_of_total_samp_points)
 
     # calculate mean, σ, and show_curves
     if find_post
-        mean, σ, K = GP_posteriors(prob_def, x_samp, total_hyperparameters)
+        mean, σ, K = GP_posteriors(prob_def, x_samp, total_hyperparameters; y_obs=y_obs)
         if plot_K; plot_im(K, file = file * "_K_post." * filetype) end
         L = ridge_chol(K).L
         for i in 1:show
@@ -78,25 +78,31 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
 
         # the indices corresponding to the proper output
         sample_output_indices = (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)
-        obs_output_indices = (amount_of_measurements * (output - 1) + 1):(amount_of_measurements * output)
+        obs_output_indices = (amount_of_obs * (output - 1) + 1):(amount_of_obs * output)
 
         # geting the y values for the proper output
-        y_o = prob_def.y_obs[obs_output_indices]
+        y_o = y_obs[obs_output_indices]
         show_curves_o = show_curves[:, sample_output_indices]
         σ_o = σ[sample_output_indices]
         mean_o = mean[sample_output_indices]
-        measurement_noise_o = prob_def.noise[obs_output_indices]
+        obs_noise_o = prob_def.noise[obs_output_indices]
 
-        custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=measurement_noise_o)
+        custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o)
 
-        xlabel(prob_def.x_obs_units)
-        ylabel(prob_def.y_obs_units)
-        output==1 ? title_string = "Apparent RVs" : title_string = "DCPCA Component " * string(output-1)
+        xlabel("Time (" * string(prob_def.x_obs_units) * ")")
+        if output==1
+            y_str = "RVs (" * string(prob_def.y_obs_units) * ")"
+            title_string = "Apparent RVs"
+        else
+            y_str = "Scores"
+            title_string = "DCPCA Component " * string(output-1)
+        end
+        ylabel(y_str)
         title(title_string, fontsize=45)
 
         if find_post
             # put log likelihood on plot
-            LogL = -nlogL_Jones(prob_def, total_hyperparameters)
+            LogL = -nlogL_Jones(prob_def, total_hyperparameters; y_obs=y_obs)
             text(minimum(prob_def.x_obs), 0.9 * maximum([maximum(y_o), maximum(show_curves_o)]), L"l_{act}(\theta|t,s): " * string(round(LogL)), fontsize=30)
         end
 

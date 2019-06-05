@@ -7,6 +7,8 @@ using SharedArrays
 using Distributed
 using JLD2, FileIO
 using Dates
+using Unitful
+using UnitfulAstro
 
 
 """
@@ -15,14 +17,15 @@ model used in the Jones et al. 2017+ paper (https://arxiv.org/pdf/1711.01318.pdf
 """
 struct Jones_problem_definition{T1<:Real, T2<:Integer}
     kernel::Function  # kernel function
-    n_kern_hyper::Integer  # amount of hyperparameters for the kernel function
-    n_dif::Integer  # amount of times you are differenting the base kernel
-    n_out::Integer  # amount of scores you are jointly modelling
+    n_kern_hyper::T2  # amount of hyperparameters for the kernel function
+    n_dif::T2  # amount of times you are differenting the base kernel
+    n_out::T2  # amount of scores you are jointly modelling
     x_obs::AbstractArray{T1,1} # the observation times/phases
-    x_obs_units::AbstractString  # the units of x_bs
+    x_obs_units::Unitful.FreeUnits  # the units of x_obs
     y_obs::AbstractArray{T1,1}  # the flattened, observed data
-    y_obs_units::AbstractString  # the units of y_obs
+    y_obs_units::Unitful.FreeUnits  # the units of the RV section ogy_obs
     noise::AbstractArray{T1,1}  # the measurement noise at all observations
+    normals::AbstractArray{T1,1}  # the normalization of each section of y_obs
     a0::AbstractArray{T1,2}  # the meta kernel coefficients
     # The powers that each a0 coefficient
     # is taken to for each part of the matrix construction
@@ -37,10 +40,11 @@ struct Jones_problem_definition_base{T1<:Real, T2<:Integer}
     n_dif::Integer  # amount of times you are differenting the base kernel
     n_out::Integer  # amount of scores you are jointly modelling
     x_obs::AbstractArray{T1,1} # the observation times/phases
-    x_obs_units::AbstractString  # the units of x_bs
+    x_obs_units::Unitful.FreeUnits  # the units of x_bs
     y_obs::AbstractArray{T1,1}  # the flattened, observed data
-    y_obs_units::AbstractString  # the units of y_obs
+    y_obs_units::Unitful.FreeUnits  # the units of y_obs
     noise::AbstractArray{T1,1}  # the measurement noise at all observations
+    normals::AbstractArray{T1,1}  # the normalization of each section of y_obs
     a0::AbstractArray{T1,2}  # the meta kernel coefficients
     # The powers that each a0 coefficient
     # is taken to for each part of the matrix construction
@@ -55,19 +59,23 @@ function check_problem_definition(
     n_dif::Integer,
     n_out::Integer,
     x_obs::AbstractArray{T1,1},
-    x_obs_units::AbstractString,
-    y_obs::AbstractArray{T2,1},
-    y_obs_units::AbstractString,
-    noise::AbstractArray{T3,1},
-    a0::AbstractArray{T4,2},
-    coeff_orders::AbstractArray{T5,6},
-    coeff_coeffs::AbstractArray{T5,4}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Integer}
+    x_obs_units::Unitful.FreeUnits,
+    y_obs::AbstractArray{T1,1},
+    y_obs_units::Unitful.FreeUnits,
+    noise::AbstractArray{T1,1},
+    normals::AbstractArray{T1,1},
+    a0::AbstractArray{T1,2},
+    coeff_orders::AbstractArray{T2,6},
+    coeff_coeffs::AbstractArray{T2,4}
+    ) where {T1<:Real, T2<:Integer}
 
     @assert n_dif>0
     @assert n_out>0
+    @assert dimension(x_obs_units) == dimension(u"s")
+    @assert dimension(y_obs_units) == dimension(u"m / s")
     @assert (length(x_obs) * n_out) == length(y_obs)
     @assert length(y_obs) == length(noise)
+    @assert length(normals) == n_out
     @assert size(a0) == (n_out, n_dif)
     @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)  # maybe unnecessary due to the fact that we construct it
     @assert size(coeff_coeffs) == (n_out, n_out, n_dif, n_dif)  # maybe unnecessary due to the fact that we construct it
@@ -79,43 +87,36 @@ function build_problem_definition(
     n_dif::Integer,
     n_out::Integer,
     x_obs::AbstractArray{T1,1},
-    x_obs_units::AbstractString,
-    y_obs::AbstractArray{T2,1},
-    y_obs_units::AbstractString,
-    noise::AbstractArray{T3,1},
-    a0::AbstractArray{T4,2},
-    coeff_orders::AbstractArray{T5,6},
-    coeff_coeffs::AbstractArray{T5,4},
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Integer}
+    x_obs_units::Unitful.FreeUnits,
+    y_obs::AbstractArray{T1,1},
+    y_obs_units::Unitful.FreeUnits,
+    noise::AbstractArray{T1,1},
+    normals::AbstractArray{T1,1},
+    a0::AbstractArray{T1,2},
+    coeff_orders::AbstractArray{T2,6},
+    coeff_coeffs::AbstractArray{T2,4},
+    ) where {T1<:Real, T2<:Integer}
 
-    check_problem_definition(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, a0, coeff_orders, coeff_coeffs)
-    return Jones_problem_definition_base(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, a0, coeff_orders, coeff_coeffs)
+    check_problem_definition(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, normals, a0, coeff_orders, coeff_coeffs)
+    return Jones_problem_definition_base(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, normals, a0, coeff_orders, coeff_coeffs)
 end
 
 "Calculate the coeffficient orders for Jones_problem_definition_base construction if they weren't passed"
 function build_problem_definition(
     n_dif::Integer,
     n_out::Integer,
-    x_obs::AbstractArray{T1,1},
-    x_obs_units::AbstractString,
-    y_obs::AbstractArray{T2,1},
-    y_obs_units::AbstractString,
-    noise::AbstractArray{T3,1},
-    a0::AbstractArray{T4,2}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+    x_obs::AbstractArray{T,1},
+    x_obs_units::Unitful.FreeUnits,
+    a0::AbstractArray{T,2};
+    y_obs::AbstractArray{T,1}=zeros(length(x_obs) * n_out),
+    y_obs_units::Unitful.FreeUnits=u"m / s",
+    noise::AbstractArray{T,1}=zeros(length(x_obs) * n_out),
+    normals::AbstractArray{T,1}=ones(n_out)
+    ) where {T<:Real}
 
     coeff_orders, coeff_coeffs = coefficient_orders(n_out, n_dif, a=a0)
-    return build_problem_definition(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, a0, coeff_orders, coeff_coeffs)
+    return build_problem_definition(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, normals, a0, coeff_orders, coeff_coeffs)
 end
-
-"build_problem_definition setting empty values for y_obs and measurement noise"
-build_problem_definition(
-    n_dif::Integer,
-    n_out::Integer,
-    x_obs::AbstractArray{T1,1},
-    x_obs_units::AbstractString,
-    a0::AbstractArray{T2,2}
-    ) where {T1<:Real, T2<:Real} = build_problem_definition(n_dif, n_out, x_obs, x_obs_units, zeros(length(x_obs) * n_out), "", zeros(length(x_obs) * n_out), a0)
 
 "Construct Jones_problem_definition by adding kernel information to Jones_problem_definition_base"
 function build_problem_definition(
@@ -124,8 +125,8 @@ function build_problem_definition(
     prob_def_base::Jones_problem_definition_base)
 
     @assert isfinite(kernel_func(ones(num_kernel_hyperparameters), randn(); dorder=zeros(Int64, 2 + num_kernel_hyperparameters)))  # make sure the kernel is valid by testing a sample input
-    check_problem_definition(prob_def_base.n_dif, prob_def_base.n_out, prob_def_base.x_obs, prob_def_base.x_obs_units, prob_def_base.y_obs, prob_def_base.y_obs_units, prob_def_base.noise, prob_def_base.a0, prob_def_base.coeff_orders, prob_def_base.coeff_coeffs)  # might be unnecessary
-    return Jones_problem_definition(kernel_func, num_kernel_hyperparameters, prob_def_base.n_dif, prob_def_base.n_out, prob_def_base.x_obs, prob_def_base.x_obs_units, prob_def_base.y_obs, prob_def_base.y_obs_units, prob_def_base.noise, prob_def_base.a0, prob_def_base.coeff_orders, prob_def_base.coeff_coeffs)
+    check_problem_definition(prob_def_base.n_dif, prob_def_base.n_out, prob_def_base.x_obs, prob_def_base.x_obs_units, prob_def_base.y_obs, prob_def_base.y_obs_units, prob_def_base.noise, prob_def_base.normals, prob_def_base.a0, prob_def_base.coeff_orders, prob_def_base.coeff_coeffs)  # might be unnecessary
+    return Jones_problem_definition(kernel_func, num_kernel_hyperparameters, prob_def_base.n_dif, prob_def_base.n_out, prob_def_base.x_obs, prob_def_base.x_obs_units, prob_def_base.y_obs, prob_def_base.y_obs_units, prob_def_base.noise, prob_def_base.normals, prob_def_base.a0, prob_def_base.coeff_orders, prob_def_base.coeff_coeffs)
 end
 
 
@@ -462,10 +463,12 @@ function GP_posteriors(
     x_samp::AbstractArray{T1,1},
     total_hyperparameters::AbstractArray{T2,1};
     return_K::Bool=true,
-    chol::Bool=false) where {T1<:Real, T2<:Real}
+    chol::Bool=false,
+    y_obs::AbstractArray{T3,1}=prob_def.y_obs
+    ) where {T1<:Real, T2<:Real, T3<:Real}
 
     (K_samp, K_obs, K_samp_obs, K_obs_samp) = covariance_permutations(prob_def, x_samp, total_hyperparameters)
-    return GP_posteriors_from_covariances(prob_def.y_obs, K_samp, K_obs, K_samp_obs, K_obs_samp; return_K=return_K, chol=chol)
+    return GP_posteriors_from_covariances(y_obs, K_samp, K_obs, K_samp_obs, K_obs_samp; return_K=return_K, chol=chol)
 end
 
 
@@ -714,20 +717,19 @@ end
 
 # "Calculates the quantities shared by the nlogL and ∇nlogL calculations"
 # can't use docstrings with @memoize macro :(
-# TODO add model parameter priors (GP and Keplerian)
 @memoize function calculate_shared_nlogL_Jones(
     prob_def::Jones_problem_definition,
     non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real;
     y_obs::AbstractArray{T2,1} where T2<:Real=prob_def.y_obs,
     K_obs::Cholesky{T3,Array{T3,2}} where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
-    P::Real=0)
+    P::Union{Real, Quantity}=0)
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
 
-    # remove the best fit planet with the period given
-    # only changes things for a non-zero period
-    remove_kepler!(y_obs, prob_def.x_obs, P, K_obs)
+    if P!=0
+        y_obs = remove_kepler(y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), K_obs)
+    end
 
     α = K_obs \ y_obs
 
@@ -743,7 +745,7 @@ end
     non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real;
     y_obs::AbstractArray{T2,1} where T2<:Real=prob_def.y_obs,
     K_obs::Cholesky{T3,Array{T3,2}} where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
-    P::Real=0)
+    P::Union{Real, Quantity}=0)
 
     total_hyperparameters, K_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs, K_obs=K_obs, P=P)
 
@@ -774,7 +776,7 @@ function nlogL_Jones(
     total_hyperparameters::AbstractArray{T1,1};
     y_obs::AbstractArray{T2,1}=prob_def.y_obs,
     K_obs::Cholesky{T3,Array{T3,2}}=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
-    P::Real=0
+    P::Union{Real, Quantity}=0
     ) where {T1<:Real, T2<:Real, T3<:Real}
 
     total_hyperparameters, K_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, remove_zeros(total_hyperparameters), y_obs=y_obs, K_obs=K_obs, P=P)
@@ -802,7 +804,7 @@ function ∇nlogL_Jones(
     total_hyperparameters::AbstractArray{T1,1};
     y_obs::AbstractArray{T2,1}=prob_def.y_obs,
     K_obs::Cholesky{T3,Array{T3,2}}=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
-    P::Real=0
+    P::Union{Real, Quantity}=0
     ) where {T1<:Real, T2<:Real, T3<:Real}
 
     total_hyperparameters, K_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
@@ -845,7 +847,7 @@ function ∇∇nlogL_Jones(
     total_hyperparameters::AbstractArray{T1,1},
     y_obs::AbstractArray{T2,1}=prob_def.y_obs,
     K_obs::Cholesky{T3,Array{T3,2}}=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
-    P::Real=0
+    P::Union{Real, Quantity}=0
     ) where {T1<:Real, T2<:Real, T3<:Real}
 
     total_hyperparameters, K_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
@@ -944,18 +946,17 @@ function logGP_prior(
     beta::Real=1
     ) where {T<:Real}
 
-    logprior = 0
+    logP = 0
 
     # adding prior for physical length scales
     for i in 1:prob_def.n_kern_hyper
         kernel_length = total_hyperparameters[end + 1 - i]
-        logprior += log_inverse_gamma(kernel_length, alpha, beta)
+        logP += log_inverse_gamma(kernel_length, alpha, beta)
     end
 
-    return logprior
+    return logP
 
 end
-
 
 function ∇logGP_prior(
     total_hyperparameters::AbstractArray{T,1};
@@ -963,14 +964,32 @@ function ∇logGP_prior(
     beta::Real=1
     ) where {T<:Real}
 
-    ∇logprior = zero(total_hyperparameters)
+    ∇logP = zero(total_hyperparameters)
 
     # adding prior for physical length scales
     for i in 1:prob_def.n_kern_hyper
         kernel_length = total_hyperparameters[end + 1 - i]
-        ∇logprior[end + 1 - i] -= dlog_inverse_gamma(kernel_length, alpha, beta)
+        ∇logP[end + 1 - i] -= log_inverse_gamma(kernel_length, alpha, beta; d=1)
     end
 
-    return ∇logprior
+    return ∇logP
+
+end
+
+function ∇∇logGP_prior(
+    total_hyperparameters::AbstractArray{T,1};
+    alpha::Real=1,
+    beta::Real=1
+    ) where {T<:Real}
+
+    ∇∇logP = zeros(length(total_hyperparameters), length(total_hyperparameters))
+
+    # adding prior for physical length scales
+    for i in 1:prob_def.n_kern_hyper
+        kernel_length = total_hyperparameters[end + 1 - i]
+        ∇∇logP[end + 1 - i, end + 1 - i] -= log_inverse_gamma(kernel_length, alpha, beta; d=2)
+    end
+
+    return ∇∇logP
 
 end

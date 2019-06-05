@@ -527,7 +527,7 @@ uuid = "c17dfb99-b4f7-5aad-8812-456da1ad7187"
 version = "0.4.2"
 
 [[ZipFile]]
-deps = ["BinaryProvider", "Libdl", "Printf", "Test"]
-git-tree-sha1 = "5f6f663890dfb9bad6af75a86a43f67904e5050e"
+deps = ["BinaryProvider", "Libdl", "Printf"]
+git-tree-sha1 = "580ce62b6c14244916cc28ad54f8a2e2886f843d"
 uuid = "a5390f91-8eb1-5f08-bee0-b1d1ffed6cea"
-version = "0.8.1"
+version = "0.8.3"

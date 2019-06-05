@@ -18,19 +18,6 @@ Calculate velocity semi-amplitude for RV signal of planets in m/s
 adapted from eq. 12 of (http://exoplanets.astro.yale.edu/workshop/EPRV/Bibliography_files/Radial_Velocity.pdf)
 """
 function velocity_semi_amplitude(
-    P::Real,
-    m_star::Real,
-    m_planet::Real;
-    e::Real=0.,
-    i::Real=π/2)
-
-    assert_positive(P, m_star, m_planet)
-    comb_mass = m_star + m_planet
-    K_au_yr = 2 * π * sin(i) * m_planet / (sqrt(1 - (e * e)) * cbrt(comb_mass * comb_mass * P))
-    return K_au_yr * convert_and_strip_units(u"m", (1)u"AU") / convert_and_strip_units(u"s", (1)u"yr")
-end
-
-function velocity_semi_amplitude(
     P::Union{Real, Quantity},
     m_star::Union{Real, Quantity},
     m_planet::Union{Real, Quantity};
@@ -40,7 +27,10 @@ function velocity_semi_amplitude(
     m_star = convert_and_strip_units(u"Msun", m_star)
     m_planet = convert_and_strip_units(u"Msun", m_planet)
     P = convert_and_strip_units(u"yr", P)
-    return velocity_semi_amplitude(P, m_star, m_planet; e=e, i=i)
+    assert_positive(P, m_star, m_planet)
+    comb_mass = m_star + m_planet
+    K_au_yr = 2 * π * sin(i) * m_planet / (sqrt(1 - (e * e)) * cbrt(comb_mass * comb_mass * P))
+    return K_au_yr * convert_and_strip_units(u"m", (1)u"AU") / convert_and_strip_units(u"s", (1)u"yr")
 end
 
 
@@ -480,8 +470,7 @@ function add_kepler_to_Jones_problem_definition(
     γ::Real=0.)
 
     amount_of_samp_points = length(prob_def.x_obs)
-    @assert occursin("days", lowercase(prob_def.x_obs_units))
-    times_obs = convert_and_strip_units.(u"yr", (prob_def.x_obs)u"d")
+    times_obs = convert_and_strip_units.(u"yr", (prob_def.x_obs)prob_def.x_obs_units)
     planet_rvs = kepler_rv.(times_obs, P, e, M0, K, ω; γ=γ)
     y_obs_w_planet = copy(prob_def.y_obs)
     y_obs_w_planet[1:amount_of_samp_points] += planet_rvs / normalization
@@ -502,50 +491,4 @@ function add_kepler_to_Jones_problem_definition(
 
     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
     return add_kepler_to_Jones_problem_definition(prob_def, P, e, M0, K, ω; normalization=normalization, γ=γ)
-end
-
-"""
-Evaluate the likelihood function with data after removing the best-fit circular
-Keplerian orbit for given period.
-
-    kep_signal_likelihood(likelihood_func::Function, period::Real, times_obs::AbstractArray{T2,1}, signal_data::AbstractArray{T3,1}, covariance::Union{Cholesky{T4,Array{T4,2}},Symmetric{T5,Array{T5,2}},AbstractArray{T6}})
-
-likelihood_func is a wrapper function handle that returns the likelihood given a single input of the data without the best-fit Kperleian signal
-period is the orbital period that you want to attempt to remove
-times_obs are the times of the measurements
-signal_data is your data including the planetary signal
-covariance is either the covariance matrix relating all of your data points, or a vector of noise measuremnets
-"""
-function kep_signal_likelihood(
-    likelihood_func::Function,
-    period::Real,
-    times_obs::AbstractArray{T2,1},
-    signal_data::AbstractArray{T3,1},
-    covariance::Union{Cholesky{T4,Array{T4,2}},Symmetric{T5,Array{T5,2}},AbstractArray{T6}}
-    ) where {T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
-
-    return likelihood_func(remove_kepler(signal_data, times_obs, period, covariance))
-end
-
-"""
-Evaluate the likelihood function with data after removing the best-fit circular
-Keplerian orbit for many periods without unnecessary memory reallocations
-"""
-function kep_signal_likelihoods(
-    likelihood_func::Function,
-    period_grid::AbstractArray{T1,1},
-    times_obs::AbstractArray{T2,1},
-    signal_data::AbstractArray{T3,1},
-    covariance::Union{Cholesky{T4,Array{T4,2}},Symmetric{T5,Array{T5,2}},AbstractArray{T6}}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
-
-    # @warn "make sure that period_grid and time_obs are in the same units!"
-    likelihoods = zero(period_grid)
-    new_data = zero(signal_data)
-    for i in 1:length(period_grid)
-        new_data .= signal_data
-        remove_kepler!(new_data, times_obs, period_grid[i], covariance)
-        likelihoods[i] = likelihood_func(new_data)
-    end
-    return likelihoods
 end

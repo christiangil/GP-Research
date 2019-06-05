@@ -136,9 +136,9 @@ function nlogprior_kernel_hyperparameters!(
     total_hyperparameters::AbstractArray{T,1}
     ) where {T<:Real}
 
-    G *.= -1
+    G .*= -1
     logprior_kernel_hyperparameters!(G, total_hyperparameters)
-    G *.= -1
+    G .*= -1
 end
 
 function logprior_kernel_hyperparameters!(
@@ -157,7 +157,7 @@ function nlogprior_kernel_hyperparameters!(
     total_hyperparameters::AbstractArray{T,1}
     ) where {T<:Real}
 
-    H *.= -1
+    H .*= -1
     logprior_kernel_hyperparameters!(G, total_hyperparameters)
-    H *.= -1
+    H .*= -1
 end

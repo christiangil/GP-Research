@@ -41,7 +41,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"src/kernels/$kernel_name.jl\").\nhyperparameters == $(symbols_str[2:end])\n\"\"\"\n")
     write(io, "function " * kernel_name * "(\n    hyperparameters::AbstractArray{T1,1}, \n    dif::Real; \n    dorder::AbstractArray{T2,1}=zeros(Int64, length(hyperparameters) + 2) \n    ) where {T1<:Real, T2<:Integer}\n\n")
     write(io, "    @assert length(hyperparameters)==$num_kernel_hyperparameters \"hyperparameters is the wrong length\"\n")
-    write(io, "    @assert length(dorder)==(length(hyperparameters) + 2) \"dorder is the wrong length\"\n")
+    write(io, "    @assert length(dorder)==($num_kernel_hyperparameters + 2) \"dorder is the wrong length\"\n")
     write(io, "    even_time_derivative = 2 * iseven(dorder[2]) - 1\n")
     write(io, "    @assert maximum(dorder) < 3 \"No more than two time derivatives for either t1 or t2 can be calculated\"\n\n")
     write(io, "    dorder = append!([sum(dorder[1:2])], dorder[3:end])\n\n")
