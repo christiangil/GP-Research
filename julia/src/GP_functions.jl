@@ -844,7 +844,7 @@ end
 "Replaces H with Hessian of nlogL for non-zero hyperparameters"
 function ∇∇nlogL_Jones(
     prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T1,1},
+    total_hyperparameters::AbstractArray{T1,1};
     y_obs::AbstractArray{T2,1}=prob_def.y_obs,
     K_obs::Cholesky{T3,Array{T3,2}}=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
     P::Union{Real, Quantity}=0

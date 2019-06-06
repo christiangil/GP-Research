@@ -109,55 +109,68 @@ const prior_α = 1
 const prior_β = 5
 
 function logprior_kernel_hyperparameters(
+    n_kern_hyper::Integer,
     total_hyperparameters::AbstractArray{T,1}
     ) where {T<:Real}
 
     logP = 0
-    for i in 1:prob_def.n_kern_hyper
+    for i in 1:n_kern_hyper
         logP += log_inverse_gamma(total_hyperparameters[end + 1 - i], prior_α, prior_β)
     end
     return logP
 end
 
-function logprior_kernel_hyperparameters!(
-    G::AbstractArray{T,1},
+function nlogprior_kernel_hyperparameters(
+    n_kern_hyper::Integer,
     total_hyperparameters::AbstractArray{T,1}
     ) where {T<:Real}
 
-    @assert length(total_hyperparameters) == length(G)
-    for i in 1:prob_def.n_kern_hyper
+    return -logprior_kernel_hyperparameters(n_kern_hyper, total_hyperparameters)
+end
+
+function logprior_kernel_hyperparameters!(
+    G::AbstractArray{T,1},
+    n_kern_hyper::Integer,
+    total_hyperparameters::AbstractArray{T,1}
+    ) where {T<:Real}
+
+    @assert length(findall(!iszero, total_hyperparameters)) == length(G)
+    for i in 1:n_kern_hyper
         kernel_length = total_hyperparameters[end + 1 - i]
-        G[end + 1 - i] += dlog_inverse_gamma(kernel_length, prior_α, prior_β)
+        G[end + 1 - i] += log_inverse_gamma(kernel_length, prior_α, prior_β; d=1)
     end
 end
 
 function nlogprior_kernel_hyperparameters!(
     G::AbstractArray{T,1},
+    n_kern_hyper::Integer,
     total_hyperparameters::AbstractArray{T,1}
     ) where {T<:Real}
 
-    G .*= -1
-    logprior_kernel_hyperparameters!(G, total_hyperparameters)
-    G .*= -1
+    G = -G
+    logprior_kernel_hyperparameters!(G, n_kern_hyper,total_hyperparameters)
+    G = -G
 end
 
 function logprior_kernel_hyperparameters!(
     H::AbstractArray{T,2},
+    n_kern_hyper::Integer,
     total_hyperparameters::AbstractArray{T,1}
     ) where {T<:Real}
 
-    @assert length(total_hyperparameters) == size(H, 1) == size(H, 2)
-    for i in 1:prob_def.n_kern_hyper
-        H[end + 1 - i, end + 1 - i] -= d2log_inverse_gamma(total_hyperparameters[end + 1 - i], prior_α, prior_β)
+    @assert length(findall(!iszero, total_hyperparameters)) == size(H, 1) == size(H, 2)
+    for i in 1:n_kern_hyper
+        H[end + 1 - i, end + 1 - i] -= log_inverse_gamma(total_hyperparameters[end + 1 - i], prior_α, prior_β; d=2)
     end
 end
 
 function nlogprior_kernel_hyperparameters!(
     H::AbstractArray{T,2},
+    n_kern_hyper::Integer,
     total_hyperparameters::AbstractArray{T,1}
     ) where {T<:Real}
 
-    H .*= -1
-    logprior_kernel_hyperparameters!(G, total_hyperparameters)
-    H .*= -1
+    H = -H
+    logprior_kernel_hyperparameters!(H, n_kern_hyper, total_hyperparameters)
+    H = -H
 end

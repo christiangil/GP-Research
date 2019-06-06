@@ -324,12 +324,17 @@ function kepler_rv_circ(
     return (coefficients[1] .* cos.(phase)) + (coefficients[2] .* sin.(phase)) + (coefficients[3] .* ones(length(t)))
 end
 
-function kepler_rv_circ_orbit_params(coefficients::AbstractArray{T,1}) where {T<:Real}
+function kepler_rv_circ_orbit_params(
+    coefficients::AbstractArray{T,1};
+    print_params::Bool=false
+    ) where {T<:Real}
+
     @assert length(coefficients) == 3 "wrong number of coefficients"
     K = sqrt(coefficients[1]^2 + coefficients[2]^2)
-    M0minusω = atan(coefficients[2], coefficients[1])
-    println("K: $K, M0-ω: $M0minusω")
-    return (K, M0minusω)
+    M0minusω = mod2pi(atan(coefficients[2], coefficients[1]))
+    γ = coefficients[3]
+    if print_params; println("K: $K, M0-ω: $M0minusω, γ: $γ") end
+    return K, M0minusω, γ
 end
 
 
@@ -362,15 +367,20 @@ function kepler_rv_linear_e(
     return (coefficients[1] .* cos.(phase)) + (coefficients[2] .* sin.(phase)) + (coefficients[3] .* cos.(2 .* phase)) + (coefficients[4] .* sin.(2 .* phase)) + (coefficients[5] .* ones(length(t)))
 end
 
-function kepler_rv_linear_e_orbit_params(coefficients::AbstractArray{T,1}) where {T<:Real}
+function kepler_rv_linear_e_orbit_params(
+    coefficients::AbstractArray{T,1};
+    print_params::Bool=false
+    ) where {T<:Real}
+
     @assert length(coefficients) == 5 "wrong number of coefficients"
     K = sqrt(coefficients[1]^2 + coefficients[2]^2)
     e = sqrt(coefficients[3]^2 + coefficients[4]^2) / K
     if e > 0.35; @warn "an orbit with this eccentricity would be very different from the output of kepler_rv_linear_e" end
-    M0 = atan(coefficients[4], coefficients[3]) - atan(coefficients[2], coefficients[1])
-    ω = atan(coefficients[4], coefficients[3]) - 2 * atan(coefficients[2], coefficients[1])
-    println("K: $K, e: $e, M0: $M0, ω: $ω")
-    return (K, e, M0, ω)
+    M0 = mod2pi(atan(coefficients[4], coefficients[3]) - atan(coefficients[2], coefficients[1]))
+    ω = mod2pi(atan(coefficients[4], coefficients[3]) - 2 * atan(coefficients[2], coefficients[1]))
+    γ = coefficients[5]
+    if print_params; println("K: $K, e: $e, M0: $M0, ω: $ω, γ: $γ") end
+    return K, e, M0, ω, γ
 end
 
 
@@ -400,13 +410,17 @@ function kepler_rv_linear_gen(
     return (coefficients[1] .* cos.(ϕ_t)) + (coefficients[2] .* sin.(ϕ_t)) + (coefficients[3] .* ones(length(t)))
 end
 
-function kepler_rv_linear_gen_orbit_params(coefficients::AbstractArray{T,1}) where {T<:Real}
+function kepler_rv_linear_gen_orbit_params(
+    coefficients::AbstractArray{T,1};
+    print_params::Bool=false
+    ) where {T<:Real}
+
     @assert length(coefficients) == 3 "wrong number of coefficients"
     K = sqrt(coefficients[1]^2 + coefficients[2]^2)
-    ω = atan(-coefficients[2], coefficients[1])
+    ω = mod2pi(atan(-coefficients[2], coefficients[1]))
     γ = coefficients[3] - K * e * cos(ω)
-    println("K: $K, ω: $ω, γ: $γ")
-    return (K, ω, γ)
+    if print_params; println("K: $K, ω: $ω, γ: $γ") end
+    return K, ω, γ
 end
 
 
@@ -423,12 +437,13 @@ function convert_SOAP_phases_to_years(phase::Real; P_rot = 25.05)
 end
 
 
-"Remove the best-fit epicyclic (linearized in e) Keplerian signal from the data"
-function remove_kepler!(
+function fit_linear_kepler(
     data::AbstractArray{T1,1},
     times::AbstractArray{T2,1},
     P::Real,
-    covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},AbstractArray{T5}}
+    covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},AbstractArray{T5}};
+    return_params::Bool=false,
+    print_params::Bool=false
     ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
 
     if P==0; return data end
@@ -442,20 +457,49 @@ function remove_kepler!(
     kepler_rv_linear_terms = hcat(cos.(phases), sin.(phases), cos.(2 .* phases), sin.(2 .* phases), ones(length(times)))
     amount_of_total_samp_points > amount_of_samp_points ? kepler_linear_terms = vcat(kepler_rv_linear_terms, zeros(amount_of_total_samp_points - amount_of_samp_points, size(kepler_rv_linear_terms, 2))) : kepler_linear_terms = kepler_rv_linear_terms
     x = general_lst_sq(kepler_linear_terms, data; Σ=covariance)
-    # kepler_rv_linear_e_orbit_params(x)
-    data[1:amount_of_samp_points] -= kepler_rv_linear_e(times, P, x)
+    if return_params
+        K, e, M0, ω, γ = kepler_rv_linear_e_orbit_params(x; print_params=print_params)
+        return kepler_rv_linear_e(times, P, x), K, e, M0, ω, γ
+    else
+        return kepler_rv_linear_e(times, P, x)
+    end
+end
+
+
+"Remove the best-fit epicyclic (linearized in e) Keplerian signal from the data"
+function remove_kepler!(
+    data::AbstractArray{T1,1},
+    times::AbstractArray{T2,1},
+    P::Real,
+    covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},AbstractArray{T5}};
+    return_params::Bool=false
+    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+
+    if return_params
+        orbit_fit, K, e, M0, ω, γ = fit_linear_kepler(data, times, P, covariance; return_params=return_params)
+        data[1:length(times)] -= orbit_fit
+        return K, e, M0, ω, γ
+    else
+        data[1:length(times)] -= fit_linear_kepler(data, times, P, covariance; return_params=return_params)
+    end
 end
 
 function remove_kepler(
     y_obs_w_planet::AbstractArray{T1,1},
     times::AbstractArray{T2,1},
     P::Real,
-    covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},AbstractArray{T5}}
+    covariance::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},AbstractArray{T5}};
+    return_params::Bool=false
     ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
 
     y_obs_wo_planet = copy(y_obs_w_planet)
-    remove_kepler!(y_obs_wo_planet, times, P, covariance)
-    return y_obs_wo_planet
+    if return_params
+        K, e, M0, ω, γ = remove_kepler!(y_obs_wo_planet, times, P, covariance; return_params=return_params)
+        return y_obs_wo_planet, K, e, M0, ω, γ
+    else
+        remove_kepler!(y_obs_wo_planet, times, P, covariance; return_params=return_params)
+        return y_obs_wo_planet
+    end
 end
 
 

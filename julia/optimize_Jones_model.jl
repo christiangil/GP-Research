@@ -22,7 +22,7 @@ if length(ARGS)>0
     grad_norm_thres = 5e0
     opt = ADAM(0.1)
 else
-    kernel_name = kernel_names[1]
+    kernel_name = kernel_names[4]
     @load "jld2_files/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11_problem_def_sample_base.jld2" problem_def_base
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
@@ -44,10 +44,11 @@ prep_parallel_covariance(kernel_name)
 P = (30)u"d"
 e = 0.1
 M0 = 5.57  # 2 * π * rand()
-K = 2  # m/s
+K = 2.0  # m/s
 ω = 3.87  # 2 * π * rand()
+γ = 0
 problem_definition.y_obs[:] = add_kepler_to_Jones_problem_definition(
-    problem_definition, P, e, M0, K, ω;
+    problem_definition, P, e, M0, K, ω; γ = γ,
     normalization=problem_definition.normals[1])
 
 n_obs = length(problem_definition.x_obs)
@@ -117,25 +118,25 @@ end
 
 update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
 
-final_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))
+fit1_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))
 
 println("starting hyperparameters")
 println(total_hyperparameters)
 println(nlogL_Jones(problem_definition, total_hyperparameters), "\n")
 
 println("ending hyperparameters")
-println(final_total_hyperparameters)
-println(nlogL_Jones(problem_definition, final_total_hyperparameters), "\n")
+println(fit1_total_hyperparameters)
+println(nlogL_Jones(problem_definition, fit1_total_hyperparameters), "\n")
 
-Jones_line_plots(amount_of_samp_points, problem_definition, final_total_hyperparameters; file="figs/gp/$kernel_name/fit_gp", plot_K=true, plot_K_profile=true)
+Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters; file="figs/gp/$kernel_name/fit_gp", plot_K=true, plot_K_profile=true)
 
-# coeffs = final_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
+# coeffs = fit1_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
 # coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)
 
 # ################
 # # Corner plots #
 # ################
-#
+
 # possible_labels = [L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{SE}" L"\lambda_{P}" L"\tau_P";
 #     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{SE}" L" " L" ";
 #     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\alpha" L"\lambda_{RQ}" L" ";
@@ -157,13 +158,13 @@ amount_of_periods = 2048
 freq_grid = linspace(1 / (problem_definition.x_obs[end] - problem_definition.x_obs[1]) / 4, uneven_nyquist_frequency(problem_definition.x_obs), amount_of_periods)
 period_grid = 1 ./ reverse(freq_grid)
 
-K_obs = K_observations(problem_definition, final_total_hyperparameters)
+K_obs = K_observations(problem_definition, fit1_total_hyperparameters)
 
 # making necessary variables local to all workers
 # sendto(workers(), kernel_name=kernel_name)
 # @everywhere include_kernel(kernel_name)
-sendto(workers(), problem_definition=problem_definition, final_total_hyperparameters=final_total_hyperparameters, K_obs=K_obs)
-@everywhere kep_likelihood_distributed(period::Real) = nlogL_Jones(problem_definition, final_total_hyperparameters; K_obs=K_obs, P=period)
+sendto(workers(), problem_definition=problem_definition, fit1_total_hyperparameters=fit1_total_hyperparameters, K_obs=K_obs)
+@everywhere kep_likelihood_distributed(period::Real) = nlogL_Jones(problem_definition, fit1_total_hyperparameters; K_obs=K_obs, P=period)
 
 # parallelize with DistributedArrays
 @everywhere using DistributedArrays
@@ -177,7 +178,7 @@ begin
     xlabel("Periods (days)")
     ylabel("negative GP likelihoods")
     axvline(x=convert_and_strip_units(u"d", P))
-    axhline(y=-nlogL_Jones(problem_definition, final_total_hyperparameters), color="k")
+    axhline(y=-nlogL_Jones(problem_definition, fit1_total_hyperparameters), color="k")
     title_string = @sprintf "%.0f day, %.2f m/s" convert_and_strip_units(u"d",P) K
     title(title_string, fontsize=30)
     save_PyPlot_fig("figs/rv/$(kernel_name)_$(amount_of_periods).png")
@@ -185,67 +186,85 @@ begin
 end
 
 # three best periods
-best_period_grid = period_grid[find_modes(-likelihoods)]
+best_period_grid = period_grid[find_modes(-likelihoods; amount=10)]
+println(best_period_grid)
 
 # plot after subtracing best period signal
-Jones_line_plots(amount_of_samp_points, problem_definition, final_total_hyperparameters; file="figs/gp/$kernel_name/after", y_obs=remove_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period_grid[1], K_obs))
+Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters; file="figs/gp/$kernel_name/after", y_obs=remove_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period_grid[1], K_obs))
 
-# #################################################
-# # Refitting GP with best fit signals subtracted #
-# #################################################
-#
-# # Allowing Flux to use the analytical gradients we have calculated
-# f_custom2(non_zero_hyper) = nlogL_Jones(problem_definition, non_zero_hyper; P=best_period_grid[1])
-# f_custom2(non_zero_hyper::TrackedArray) = track(f_custom2, non_zero_hyper)
-# g_custom2() = ∇nlogL_Jones(problem_definition, data(non_zero_hyper_param); P=best_period_grid[1])
-# @grad f_custom2(non_zero_hyper) = f_custom2(data(non_zero_hyper)), Δ -> tuple(Δ .* g_custom2())
-#
-# # Setting model parameters for Flux
-# non_zero_hyper_param2 = param(copy(current_params))
-# ps2 = Flux.params(non_zero_hyper_param2)
-#
-# # Final function wrapper for Flux
-# f_custom2() = f_custom2(non_zero_hyper_param2)
-#
-# # setting things for Flux to use
-# flux_data = Iterators.repeated((), 100)  # use at most 500 iterations
-#
-# # save plots as we are training every flux_cb_delay seconds
-# # stop training if our gradient norm gets small enough
-# flux_cb2 = function ()
-#     training_time_str = Dates.format(now(),"yyyy_mm_dd_HH_MM_SS")
-#     # Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)); file="figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp", plot_K_profile=true)
-#     grad_norm = norm(g_custom2())
-#     println("Current time: " * training_time_str * " score: ", data(f_custom2()), " with gradient norm ", grad_norm)
-#     println("Current hyperparameters: " * string(data(non_zero_hyper_param)))
-#     if grad_norm < grad_norm_thres
-#         println("Gradient threshold of $grad_norm_thres reached!")
-#         Flux.stop()
-#     end
-#     # update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
-#     println()
-# end
-#
-# # @profiler
-# @elapsed Flux.train!(f_custom2, ps, flux_data, opt, cb=Flux.throttle(flux_cb2, flux_cb_delay))
-#
-# update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
-#
-# final_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param))
-#
-# println("starting hyperparameters")
-# println(total_hyperparameters)
-# println(nlogL_Jones(problem_definition, total_hyperparameters), "\n")
-#
-# println("ending hyperparameters")
-# println(final_total_hyperparameters)
-# println(nlogL_Jones(problem_definition, final_total_hyperparameters), "\n")
-#
-# Jones_line_plots(amount_of_samp_points, problem_definition, final_total_hyperparameters; file="figs/gp/$kernel_name/fit_gp", plot_K=true, plot_K_profile=true)
+################################################################
+# Refitting GP with planet signals at found periods subtracted #
+################################################################
 
-# ##########################
-# # Evidence approximation #
-# ##########################
-#
-# H = ∇∇nlogL_Jones(problem_definition, final_total_hyperparameters)
-# log_laplace_approximation(H, nlogL_Jones(problem_definition, current_params), 0)
+# find first period that uses a bound eccentricity
+best_period = best_period_grid[findfirst(y -> isless(y, 1), [fit_linear_kepler(problem_definition.y_obs, problem_definition.x_obs, period, K_obs; return_params=true)[3] for period in best_period_grid])]
+
+println("original period: $(strip_units(P)) days")
+println("found period:    $best_period days")
+
+# Allowing Flux to use the analytical gradients we have calculated
+f_custom2(non_zero_hyper) = nlogL_Jones(problem_definition, non_zero_hyper; P=best_period)
+f_custom2(non_zero_hyper::TrackedArray) = track(f_custom2, non_zero_hyper)
+g_custom2() = ∇nlogL_Jones(problem_definition, data(non_zero_hyper_param2); P=best_period)
+@grad f_custom2(non_zero_hyper) = f_custom2(data(non_zero_hyper)), Δ -> tuple(Δ .* g_custom2())
+
+# Setting model parameters for Flux
+non_zero_hyper_param2 = param(data(non_zero_hyper_param))
+ps2 = Flux.params(non_zero_hyper_param2)
+
+# Final function wrapper for Flux
+f_custom2() = f_custom2(non_zero_hyper_param2)
+
+# setting things for Flux to use
+flux_data = Iterators.repeated((), 500)  # use at most 500 iterations
+
+# save plots as we are training every flux_cb_delay seconds
+# stop training if our gradient norm gets small enough
+flux_cb2 = function ()
+    training_time_str = Dates.format(now(),"yyyy_mm_dd_HH_MM_SS")
+    # Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)); file="figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp", plot_K_profile=true)
+    grad_norm = norm(g_custom2())
+    println("Current time: " * training_time_str * " score: ", data(f_custom2()), " with gradient norm ", grad_norm)
+    println("Current hyperparameters: " * string(data(non_zero_hyper_param2)))
+    if grad_norm < grad_norm_thres
+        println("Gradient threshold of $grad_norm_thres reached!")
+        Flux.stop()
+    end
+    # update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
+    println()
+end
+
+# @profiler
+@elapsed Flux.train!(f_custom2, ps2, flux_data, opt, cb=Flux.throttle(flux_cb2, flux_cb_delay))
+
+fit2_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param2))
+
+println("starting hyperparameters")
+println(total_hyperparameters)
+println(nlogL_Jones(problem_definition, total_hyperparameters), "\n")
+
+println("fit hyperparameters")
+println(fit1_total_hyperparameters)
+println(nlogL_Jones(problem_definition, fit1_total_hyperparameters), "\n")
+
+println("refit hyperparameters")
+println(fit2_total_hyperparameters)
+println(nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_period), "\n")
+
+##########################
+# Evidence approximation #
+##########################
+
+H1 = nlogprior_kernel_hyperparameters!(∇∇nlogL_Jones(problem_definition, fit1_total_hyperparameters), problem_definition.n_kern_hyper, fit1_total_hyperparameters)
+nlogL_val1 = nlogL_Jones(problem_definition, fit1_total_hyperparameters) + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters)
+println("evidence for Jones model: " * string(log_laplace_approximation(H1, nlogL_val1, 0)))
+
+H2 = nlogprior_kernel_hyperparameters!(∇∇nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_period), problem_definition.n_kern_hyper, fit2_total_hyperparameters)
+nlogL_val2 = nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_period) + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit2_total_hyperparameters)
+K_obs1 = K_observations(problem_definition, fit2_total_hyperparameters)
+println("best fit keplerian")
+K1, e1, M01, ω1, γ1 = fit_linear_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, K_obs1; return_params=true, print_params=true)[2:end]
+println("\noriginial injected keplerian")
+println("K: $K, e: $e, M0: $M0, ω: $ω, γ: $γ")
+
+println("evidence for Jones + planet model: " * string(log_laplace_approximation(H2, nlogL_val2, logprior_kepler(best_period, e1, M01, K1, ω1, γ1))))
