@@ -25,7 +25,7 @@ end
     @load "../jld2_files/problem_def_sample.jld2" problem_def
     cd(old_dir)
 
-    @test est_dKdθ(problem_def, 1 .+ rand(3); return_bool=true, print_stuff=false)
+    @test est_dΣdθ(problem_def, 1 .+ rand(3); return_bool=true, print_stuff=false)
     @test test_grad(problem_def, 1 .+ rand(3), print_stuff=false)
     @test test_hess(problem_def, 1 .+ rand(3), print_stuff=false)
     println()
@@ -125,24 +125,24 @@ end
     x_length = length(x_samp)
 
     # calculating the covariance matrix
-    K_samp = zeros((x_length, x_length))
+    Σ_samp = zeros((x_length, x_length))
     for i in 1:x_length
         for j in 1:x_length
-            K_samp[i, j] = rbf(1, x_samp[i] - x_samp[j])
+            Σ_samp[i, j] = rbf(1, x_samp[i] - x_samp[j])
         end
     end
-    K_samp += Diagonal(1e-5 * ones(x_length))
+    Σ_samp += Diagonal(1e-5 * ones(x_length))
 
     y_samp = randn(length(x_samp))
 
     # make sure inv is working as intended
-    @test isapprox(K_samp * inv(K_samp), Matrix(I, x_length, x_length); rtol=1e-5)
-    @test isapprox(inv(K_samp) * K_samp, Matrix(I, x_length, x_length))
+    @test isapprox(Σ_samp * inv(Σ_samp), Matrix(I, x_length, x_length); rtol=1e-5)
+    @test isapprox(inv(Σ_samp) * Σ_samp, Matrix(I, x_length, x_length))
 
-    sol_inv = inv(K_samp) * y_samp
-    sol_chol = cholesky(K_samp) \ y_samp
-    sol_lmd = K_samp \ y_samp
-    sol_cg = IterativeSolvers.cg(K_samp, y_samp)
+    sol_inv = inv(Σ_samp) * y_samp
+    sol_chol = cholesky(Σ_samp) \ y_samp
+    sol_lmd = Σ_samp \ y_samp
+    sol_cg = IterativeSolvers.cg(Σ_samp, y_samp)
 
     # all methods should give the same results
     @test isapprox(sol_inv, sol_chol)
@@ -150,9 +150,9 @@ end
     @test isapprox(sol_inv, sol_cg)
 
     # y_samp should be recoverable
-    @test isapprox(K_samp * sol_inv, y_samp; rtol=1e-4)
-    @test isapprox(K_samp * sol_chol, y_samp)
-    @test isapprox(K_samp * sol_lmd, y_samp)
-    @test isapprox(K_samp * sol_cg, y_samp)
+    @test isapprox(Σ_samp * sol_inv, y_samp; rtol=1e-4)
+    @test isapprox(Σ_samp * sol_chol, y_samp)
+    @test isapprox(Σ_samp * sol_lmd, y_samp)
+    @test isapprox(Σ_samp * sol_cg, y_samp)
     println()
 end

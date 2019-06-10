@@ -68,7 +68,14 @@ end
 Create a corner plot by evaluating a function around its current input values
 should scale as steps^2*n(n-1)/2 in time
 """
-function corner_plot(f::Function, input::AbstractArray{T1,1}, filename::AbstractString; steps::Integer=15+1, spread::Real=1/2, input_labels::AbstractArray{T2,1}=repeat([L" "],length(input)), n::Integer=length(input)) where {T1<:Real, T2<:AbstractString}
+function corner_plot(
+    f::Function,
+    input::Vector{<:Real},
+    filename::AbstractString;
+    steps::Integer=15+1,
+    spread::Real=1/2,
+    input_labels::Vector{<:AbstractString}=repeat([L" "],length(input)),
+    n::Integer=length(input))
 
     assert_positive(spread, steps, n)
     @assert n <= length(input)

@@ -7,7 +7,7 @@ using Printf  # for formatting print statements
 
 
 "a generalized version of the built in append!() function"
-function multiple_append!(a::AbstractArray{T,1}, b...) where {T<:Real}
+function multiple_append!(a::Vector{T}, b...) where {T<:Real}
     for i in 1:length(b)
         append!(a, b[i])
     end
@@ -15,19 +15,22 @@ end
 
 
 "if array is symmetric, return the symmetric (and optionally cholesky factorized) version"
-function symmetric_A(A::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}}; ignore_asymmetry::Bool=false, chol::Bool=false) where {T1<:Real, T2<:Real}
+function symmetric_A(A::Union{Matrix{T},Symmetric{T,Matrix{T}}}; ignore_asymmetry::Bool=false, chol::Bool=false) where {T<:Real}
+
+    # an arbitrary threshold that is meant to catch numerical errors
+    thres = maximum([1e-6 * maximum(abs.(A)), 1e-8])
 
     if size(A, 1) == size(A, 2)
         max_dif = maximum(abs.(A - transpose(A)))
 
         if max_dif == zero(max_dif)
             A = Symmetric(A)
-        # an arbitrary threshold that is meant to catch numerical errors
-        elseif (max_dif < maximum([1e-6 * maximum(abs.(A)), 1e-8])) || ignore_asymmetry
+
+    elseif (max_dif < thres) || ignore_asymmetry
             # return the symmetrized version of the matrix
-            A = Symmetric((A + transpose(A)) / 2)
+            A = symmetrize_A(A)
         else
-            println("Array dimensions match, but it is not symmetric")
+            println("Array dimensions match, but the max dif ($max_dif) is greater than the threshold ($thres)")
             println(max_dif)
             chol = false
         end
@@ -36,17 +39,18 @@ function symmetric_A(A::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}}; ig
         chol = false
     end
 
-    if chol
-        return ridge_chol(A)
-    else
-        return A
-    end
+    return chol ? ridge_chol(A) : A
 
 end
 
 
+function symmetrize_A(A::Union{Matrix{T},Symmetric{T,Matrix{T}}}) where {T<:Real}
+    return Symmetric((A + transpose(A)) / 2)
+end
+
+
 "if needed, adds a ridge based on the smallest eignevalue to make a Cholesky factorization possible"
-function ridge_chol(A::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}}) where {T1<:Real, T2<:Real}
+function ridge_chol(A::Union{Matrix{T},Symmetric{T,Matrix{T}}}) where {T<:Real}
 
     # only add a small ridge (based on the smallest eigenvalue) if necessary
     try
@@ -63,14 +67,14 @@ function ridge_chol(A::Union{AbstractArray{T1,2},Symmetric{T2,Array{T2,2}}}) whe
 end
 
 "dont do anything if an array that is already factorized is passed"
-ridge_chol(A::Cholesky{T,Array{T,2}}) where {T<:Real} = A
+ridge_chol(A::Cholesky{T,Matrix{T}}) where {T<:Real} = A
 
 
 """
 gets the coefficients and differentiation orders necessary for two multiplied
 functions with an arbitrary amount of parameters
 """
-function product_rule(dorder::AbstractArray{T,1}) where {T<:Real}
+function product_rule(dorder::Vector{T}) where {T<:Real}
 
     # initializing the final matrix with a single combined function with no derivatives
     total = transpose(append!([1], zeros(2 * length(dorder))))
@@ -115,7 +119,7 @@ end
 find differences between two arrays and set values smaller than a threshold to be zero
 use isapprox instead if you care about boolean result
 """
-function signficant_difference(A1::AbstractArray{T1}, A2::AbstractArray{T2}, dif::Real) where {T1<:Real, T2<:Real}
+function signficant_difference(A1::AbstractArray{T}, A2::AbstractArray{T}, dif::Real) where {T<:Real}
     A1mA2 = abs.(A1 - A2);
     return chop_array!(A1mA2; dif=(maximum([maximum(A1), maximum(A2)]) * dif))
 end
@@ -146,7 +150,7 @@ log_linspace(start::Real, stop::Real, length) = exp.(linspace(log(start), log(st
 
 
 "Create a new array filling the non-zero entries of a template array with a vector of values"
-function reconstruct_array(non_zero_entries, template_array::AbstractArray{T,2}) where {T<:Real}
+function reconstruct_array(non_zero_entries, template_array::Matrix{T}) where {T<:Real}
     @assert length(findall(!iszero, template_array))==length(non_zero_entries)
     new_array = zeros(size(template_array))
     new_array[findall(!iszero, template_array)] = non_zero_entries
@@ -158,7 +162,7 @@ end
 Solve a linear system of equations (optionally with variance values at each point or covariance array)
 see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
 """
-function general_lst_sq(design_matrix::AbstractArray{T1,2}, data::AbstractArray{T2,1}; Σ::Union{Cholesky{T3,Array{T3,2}},Symmetric{T4,Array{T4,2}},AbstractArray{T5}}=ones(1)) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+function general_lst_sq(design_matrix::Matrix{T}, data::Vector{T}; Σ::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}}=ones(1)) where {T<:Real}
     @assert ndims(Σ) < 3 "the Σ variable needs to be a 1D or 2D array"
 
     if Σ == ones(1)
@@ -169,17 +173,13 @@ function general_lst_sq(design_matrix::AbstractArray{T1,2}, data::AbstractArray{
         else
             Σ = ridge_chol(Σ)
         end
-        # try
-        #     return ridge_chol(design_matrix' * (Σ \ design_matrix)) \ (design_matrix' * (Σ \ data))
-        # catch
         return (design_matrix' * (Σ \ design_matrix)) \ (design_matrix' * (Σ \ data))
-        # end
     end
 end
 
 
 "Return an amount of indices of local maxima of a data array"
-function find_modes(data::AbstractArray{T,1}; amount::Integer=3) where {T<:Real}
+function find_modes(data::Vector{T}; amount::Integer=3) where {T<:Real}
 
     # creating index list for inds at modes
     mode_inds = [i for i in 2:(length(data)-1) if (data[i]>=data[i-1]) && (data[i]>=data[i+1])]
@@ -205,7 +205,7 @@ Nyquist frequency is half of the sampling rate of a discrete signal processing s
 (https://en.wikipedia.org/wiki/Nyquist_frequency)
 divide by another factor of 4 for uneven spacing
 """
-function nyquist_frequency(times::AbstractArray{T,1}; scale::Real=1) where {T<:Real}
+function nyquist_frequency(times::Vector{T}; scale::Real=1) where {T<:Real}
     time_span = times[end] - times[1]
     return amount_of_samp_points / time_span / 2 / scale
 end
@@ -214,7 +214,7 @@ uneven_nyquist_frequency(times; scale=4) = nyquist_frequency(times; scale=scale)
 
 
 import Base.ndims
-ndims(A::Cholesky{T,Array{T,2}}) where {T<:Real} = 2
+ndims(A::Cholesky{T,Matrix{T}}) where {T<:Real} = 2
 
 
 "an empty function, so that a function that requires another function to be passed can use this as a default"
@@ -222,7 +222,7 @@ do_nothing() = nothing
 
 
 "evaluate a polynomial. Originally provided by Eric Ford"
-function eval_polynomial(x::Number, a::AbstractArray{T,1}) where T<:Number
+function eval_polynomial(x::Number, a::Vector{T}) where T<:Number
     sum = a[end]
     for i in (length(a)-1):-1:1
         sum = a[i]+x*sum
@@ -238,7 +238,7 @@ e.g.
 sendto([1, 2], x=100, y=rand(2, 3))
 z = randn(10, 10); sendto(workers(), z=z)
 """
-function sendto(workers::Union{T,Array{T,1}}; args...) where {T<:Integer}
+function sendto(workers::Union{T,Vector{T}}; args...) where {T<:Integer}
     for worker in workers
         for (var_name, var_value) in args
             @spawnat(worker, Core.eval(Main, Expr(:(=), var_name, var_value)))
@@ -266,7 +266,7 @@ powers_of_negative_one(power::Integer) = iseven(power) ? 1 : -1
 
 
 "Return the passed vector, removing all zero entries"
-remove_zeros(V::AbstractArray{T,1} where T<:Real) = V[findall(!iszero, V)]
+remove_zeros(V::Vector{T} where T<:Real) = V[findall(!iszero, V)]
 
 
 """
@@ -293,7 +293,7 @@ float: An estimate of log(∫ exp(-λ g(y)) h(y) dy)
 
 """
 function log_laplace_approximation(
-    H::AbstractArray{T,2},
+    H::Matrix{T},
     g::Real,
     logh::Real;
     λ = 1

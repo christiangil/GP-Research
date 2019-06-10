@@ -110,7 +110,7 @@ const prior_β = 5
 
 function logprior_kernel_hyperparameters(
     n_kern_hyper::Integer,
-    total_hyperparameters::AbstractArray{T,1}
+    total_hyperparameters::Vector{T}
     ) where {T<:Real}
 
     logP = 0
@@ -122,16 +122,16 @@ end
 
 function nlogprior_kernel_hyperparameters(
     n_kern_hyper::Integer,
-    total_hyperparameters::AbstractArray{T,1}
+    total_hyperparameters::Vector{T}
     ) where {T<:Real}
 
     return -logprior_kernel_hyperparameters(n_kern_hyper, total_hyperparameters)
 end
 
 function logprior_kernel_hyperparameters!(
-    G::AbstractArray{T,1},
+    G::Vector{T},
     n_kern_hyper::Integer,
-    total_hyperparameters::AbstractArray{T,1}
+    total_hyperparameters::Vector{T}
     ) where {T<:Real}
 
     @assert length(findall(!iszero, total_hyperparameters)) == length(G)
@@ -142,9 +142,9 @@ function logprior_kernel_hyperparameters!(
 end
 
 function nlogprior_kernel_hyperparameters!(
-    G::AbstractArray{T,1},
+    G::Vector{T},
     n_kern_hyper::Integer,
-    total_hyperparameters::AbstractArray{T,1}
+    total_hyperparameters::Vector{T}
     ) where {T<:Real}
 
     G = -G
@@ -153,9 +153,9 @@ function nlogprior_kernel_hyperparameters!(
 end
 
 function logprior_kernel_hyperparameters!(
-    H::AbstractArray{T,2},
+    H::Matrix{T},
     n_kern_hyper::Integer,
-    total_hyperparameters::AbstractArray{T,1}
+    total_hyperparameters::Vector{T}
     ) where {T<:Real}
 
     @assert length(findall(!iszero, total_hyperparameters)) == size(H, 1) == size(H, 2)
@@ -165,9 +165,9 @@ function logprior_kernel_hyperparameters!(
 end
 
 function nlogprior_kernel_hyperparameters!(
-    H::AbstractArray{T,2},
+    H::Matrix{T},
     n_kern_hyper::Integer,
-    total_hyperparameters::AbstractArray{T,1}
+    total_hyperparameters::Vector{T}
     ) where {T<:Real}
 
     H = -H

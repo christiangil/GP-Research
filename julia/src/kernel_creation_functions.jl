@@ -5,7 +5,7 @@ Creates the necessary differentiated versions of base kernels required by the Jo
 You must pass it a SymEngine Basic object with the variables already declared with the @vars command. dif or abs_dif must be the first declared variables.
 The created function will look like this
 
-    \$kernel_name(hyperparameters::AbstractArray{T1,1}, dif::Real; dorder::AbstractArray{T2,1}=zeros(1)) where {T1<:Real, T2<:Real}
+    \$kernel_name(hyperparameters::Vector{<:Real}, dif::Real; dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))
 
 For example, you could define a kernel like so:
 
@@ -39,7 +39,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     num_kernel_hyperparameters = sym_amount - 1
     # begin to write the function including assertions that the amount of hyperparameters are correct
     write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $num_kernel_hyperparameters hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"src/kernels/$kernel_name.jl\").\nhyperparameters == $(symbols_str[2:end])\n\"\"\"\n")
-    write(io, "function " * kernel_name * "(\n    hyperparameters::AbstractArray{T1,1}, \n    dif::Real; \n    dorder::AbstractArray{T2,1}=zeros(Int64, length(hyperparameters) + 2) \n    ) where {T1<:Real, T2<:Integer}\n\n")
+    write(io, "function " * kernel_name * "(\n    hyperparameters::Vector{<:Real}, \n    dif::Real; \n    dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))\n\n")
     write(io, "    @assert length(hyperparameters)==$num_kernel_hyperparameters \"hyperparameters is the wrong length\"\n")
     write(io, "    @assert length(dorder)==($num_kernel_hyperparameters + 2) \"dorder is the wrong length\"\n")
     write(io, "    even_time_derivative = 2 * iseven(dorder[2]) - 1\n")
@@ -85,7 +85,8 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     # for each differentiated version of the kernel
     for i in 1:amount_of_dorders
 
-        dorder = convert(AbstractArray{Int64,1}, dorders[i, :])
+        # dorder = convert(Vector{Int64}, dorders[i, :])
+        dorder = dorders[i, :]
 
         # only record another differentiated version of the function if we will actually use it
         # i.e. no instances where differentiations of multiple, non-time symbols are asked for

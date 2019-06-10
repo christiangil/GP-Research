@@ -8,7 +8,7 @@ using Distributions
 modified code shamelessly stolen from RvSpectraKitLearn.jl/src/deriv_spectra_simple.jl
 Estimate the derivatives of a vector
 """
-function calc_deriv_RVSKL(x::AbstractArray{T,1}) where {T<:Real}
+function calc_deriv_RVSKL(x::Vector{<:Real})
     @assert length(x)>=3
     dx = similar(x)
     dx[1] = x[2]-x[1]
@@ -25,14 +25,14 @@ modified code shamelessly stolen from RvSpectraKitLearn.jl/src/deriv_spectra_sim
 Function to estimate the derivative(s) of the mean spectrum
 doppler_comp = λ * dF/dλ -> units of flux
 """
-function calc_doppler_component_RVSKL(lambda::AbstractArray{T1,1}, flux::AbstractArray{T2,1}) where {T1<:Real, T2<:Real}
+function calc_doppler_component_RVSKL(lambda::Vector{T}, flux::Vector{T}) where {T<:Real}
     @assert length(lambda) == length(flux)
     dlambdadpix = calc_deriv_RVSKL(lambda);
     dfluxdpix = calc_deriv_RVSKL(flux);
     return dfluxdpix .* (lambda ./ dlambdadpix)  # doppler basis
 end
 
-function calc_doppler_component_RVSKL(lambda::AbstractArray{T1,1}, flux::AbstractArray{T2,2}) where {T1<:Real, T2<:Real}
+function calc_doppler_component_RVSKL(lambda::Vector{T}, flux::Matrix{T}) where {T<:Real}
     return calc_doppler_component_simple(lambda, vec(mean(flux, dims=2)))
 end
 
@@ -42,7 +42,7 @@ modified code shamelessly stolen from RvSpectraKitLearn.jl/src/generalized_pca.j
 Compute the PCA component with the largest eigenvalue
 X is data, r is vector of random numbers, s is preallocated memory; r && s  are of same length as each data point
 """
-function compute_pca_component_RVSKL!(X::AbstractArray{T,2}, r::AbstractArray{T,1}, s::AbstractArray{T,1}; tol::Float64=1e-8, max_it::Int64=20) where {T<:Real}
+function compute_pca_component_RVSKL!(X::Matrix{T}, r::Vector{T}, s::Vector{T}; tol::Float64=1e-8, max_it::Int64=20) where {T<:Real}
 	num_lambda = size(X, 1)
     num_spectra = size(X, 2)
     @assert length(r) == num_lambda
@@ -66,7 +66,7 @@ end
 modified code shamelessly stolen from RvSpectraKitLearn.jl/src/generalized_pca.jl
 Compute first num_components basis vectors for PCA, after subtracting projection onto fixed_comp
 """
-function fit_gen_pca_rv_RVSKL(X::AbstractArray{T,2}, fixed_comp::AbstractArray{T,1}; mu::AbstractArray{T,1}=vec(mean(X, dims=2)), num_components::Integer=4, tol::Float64=1e-12, max_it::Int64=20) where {T<:Real}
+function fit_gen_pca_rv_RVSKL(X::Matrix{T}, fixed_comp::Vector{T}; mu::Vector{T}=vec(mean(X, dims=2)), num_components::Integer=4, tol::Float64=1e-12, max_it::Int64=20) where {T<:Real}
 
 	# initializing relevant quantities
 	num_lambda = size(X, 1)
@@ -107,14 +107,14 @@ function fit_gen_pca_rv_RVSKL(X::AbstractArray{T,2}, fixed_comp::AbstractArray{T
 end
 
 
-make_noisy_spectra(time_series_spectra::AbstractArray{T,2}, NSR::Real) where {T<:Real} = time_series_spectra .* (1 .+ (NSR .* randn(size(time_series_spectra))))
+make_noisy_spectra(time_series_spectra::Matrix{T}, NSR::Real) where {T<:Real} = time_series_spectra .* (1 .+ (NSR .* randn(size(time_series_spectra))))
 
 
 """
 Generate a noisy permutation of the data by recalculating PCA components and scores
 after adding a noise-to-signal ratio amount of Gaussian noise to each flux bin
 """
-function noisy_scores_from_spectra(time_series_spectra::AbstractArray{T1,2}, NSR::Real, M::AbstractArray{T2,2}) where {T1<:Real, T2<:Real}
+function noisy_scores_from_spectra(time_series_spectra::Matrix{T}, NSR::Real, M::Matrix{T}) where {T<:Real}
 	num_components = size(M, 2)
 	num_spectra = size(time_series_spectra, 2)
 	noisy_scores = zeros(num_components, num_spectra)
@@ -136,7 +136,7 @@ end
 
 
 "bootstrapping for errors in PCA scores. Takes ~28s per bootstrap on my computer"
-function bootstrap_errors(time_series_spectra::AbstractArray{T,2}, hdf5_filename::AbstractString; boot_amount::Integer=10) where {T<:Real}
+function bootstrap_errors(time_series_spectra::Matrix{T}, hdf5_filename::AbstractString; boot_amount::Integer=10) where {T<:Real}
 
     @load hdf5_filename * "_rv_data.jld2" M scores
 
@@ -184,7 +184,7 @@ end
 Generate a noisy permutation of the data by drawing from a multivariate Gaussian
 based on the covariance of many data draws
 """
-function noisy_scores_from_covariance(mean_scores::AbstractArray{T,2}, many_scores::AbstractArray{T,3}) where {T<:Real}
+function noisy_scores_from_covariance(mean_scores::Matrix{T}, many_scores::AbstractArray{T,3}) where {T<:Real}
 	@assert size(mean_scores, 1) == size(many_scores, 2)  # amount of score dimensions
 	@assert size(mean_scores, 2) == size(many_scores, 3)  # amount of time points
 	noisy_scores = zeros(size(mean_scores))

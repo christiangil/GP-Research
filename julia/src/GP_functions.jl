@@ -20,13 +20,13 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
     n_kern_hyper::T2  # amount of hyperparameters for the kernel function
     n_dif::T2  # amount of times you are differenting the base kernel
     n_out::T2  # amount of scores you are jointly modelling
-    x_obs::AbstractArray{T1,1} # the observation times/phases
+    x_obs::Vector{T1} # the observation times/phases
     x_obs_units::Unitful.FreeUnits  # the units of x_obs
-    y_obs::AbstractArray{T1,1}  # the flattened, observed data
+    y_obs::Vector{T1}  # the flattened, observed data
     y_obs_units::Unitful.FreeUnits  # the units of the RV section ogy_obs
-    noise::AbstractArray{T1,1}  # the measurement noise at all observations
-    normals::AbstractArray{T1,1}  # the normalization of each section of y_obs
-    a0::AbstractArray{T1,2}  # the meta kernel coefficients
+    noise::Vector{T1}  # the measurement noise at all observations
+    normals::Vector{T1}  # the normalization of each section of y_obs
+    a0::Matrix{T1}  # the meta kernel coefficients
     # The powers that each a0 coefficient
     # is taken to for each part of the matrix construction
     # used for constructing differentiated versions of the kernel
@@ -39,13 +39,13 @@ end
 struct Jones_problem_definition_base{T1<:Real, T2<:Integer}
     n_dif::Integer  # amount of times you are differenting the base kernel
     n_out::Integer  # amount of scores you are jointly modelling
-    x_obs::AbstractArray{T1,1} # the observation times/phases
+    x_obs::Vector{T1} # the observation times/phases
     x_obs_units::Unitful.FreeUnits  # the units of x_bs
-    y_obs::AbstractArray{T1,1}  # the flattened, observed data
+    y_obs::Vector{T1}  # the flattened, observed data
     y_obs_units::Unitful.FreeUnits  # the units of y_obs
-    noise::AbstractArray{T1,1}  # the measurement noise at all observations
-    normals::AbstractArray{T1,1}  # the normalization of each section of y_obs
-    a0::AbstractArray{T1,2}  # the meta kernel coefficients
+    noise::Vector{T1}  # the measurement noise at all observations
+    normals::Vector{T1}  # the normalization of each section of y_obs
+    a0::Matrix{T1}  # the meta kernel coefficients
     # The powers that each a0 coefficient
     # is taken to for each part of the matrix construction
     # used for constructing differentiated versions of the kernel
@@ -58,13 +58,13 @@ end
 function check_problem_definition(
     n_dif::Integer,
     n_out::Integer,
-    x_obs::AbstractArray{T1,1},
+    x_obs::Vector{T1},
     x_obs_units::Unitful.FreeUnits,
-    y_obs::AbstractArray{T1,1},
+    y_obs::Vector{T1},
     y_obs_units::Unitful.FreeUnits,
-    noise::AbstractArray{T1,1},
-    normals::AbstractArray{T1,1},
-    a0::AbstractArray{T1,2},
+    noise::Vector{T1},
+    normals::Vector{T1},
+    a0::Matrix{T1},
     coeff_orders::AbstractArray{T2,6},
     coeff_coeffs::AbstractArray{T2,4}
     ) where {T1<:Real, T2<:Integer}
@@ -86,13 +86,13 @@ end
 function build_problem_definition(
     n_dif::Integer,
     n_out::Integer,
-    x_obs::AbstractArray{T1,1},
+    x_obs::Vector{T1},
     x_obs_units::Unitful.FreeUnits,
-    y_obs::AbstractArray{T1,1},
+    y_obs::Vector{T1},
     y_obs_units::Unitful.FreeUnits,
-    noise::AbstractArray{T1,1},
-    normals::AbstractArray{T1,1},
-    a0::AbstractArray{T1,2},
+    noise::Vector{T1},
+    normals::Vector{T1},
+    a0::Matrix{T1},
     coeff_orders::AbstractArray{T2,6},
     coeff_coeffs::AbstractArray{T2,4},
     ) where {T1<:Real, T2<:Integer}
@@ -105,13 +105,13 @@ end
 function build_problem_definition(
     n_dif::Integer,
     n_out::Integer,
-    x_obs::AbstractArray{T,1},
+    x_obs::Vector{T},
     x_obs_units::Unitful.FreeUnits,
-    a0::AbstractArray{T,2};
-    y_obs::AbstractArray{T,1}=zeros(length(x_obs) * n_out),
+    a0::Matrix{T};
+    y_obs::Vector{T}=zeros(length(x_obs) * n_out),
     y_obs_units::Unitful.FreeUnits=u"m / s",
-    noise::AbstractArray{T,1}=zeros(length(x_obs) * n_out),
-    normals::AbstractArray{T,1}=ones(n_out)
+    noise::Vector{T}=zeros(length(x_obs) * n_out),
+    normals::Vector{T}=ones(n_out)
     ) where {T<:Real}
 
     coeff_orders, coeff_coeffs = coefficient_orders(n_out, n_dif, a=a0)
@@ -135,25 +135,25 @@ The basic kernel function evaluator
 t1 and t2 are single time points
 kernel_hyperparameters = the hyperparameters for the base kernel (e.g. [kernel_period, kernel_length])
 dorder = the amount of derivatives to take wrt t1 and t2
-dKdθ_kernel = which hyperparameter to take a derivative wrt
+dΣdθ_kernel = which hyperparameter to take a derivative wrt
 """
 function kernel(
     kernel_func::Function,
-    kernel_hyperparameters::AbstractArray{T1,1},
+    kernel_hyperparameters::Vector{<:Real},
     t1::Real,
     t2::Real;
-    dorder::AbstractArray{T2,1}=zeros(Int64, 2),
-    dKdθs_kernel::AbstractArray{T3,1}=Int64[]
-    ) where {T1<:Real, T2<:Real, T3<:Integer}
+    dorder::Vector{T}=zeros(Int64, 2),
+    dΣdθs_kernel::Vector{T}=Int64[]
+    ) where {T<:Integer}
 
-    @assert all(dKdθs_kernel .<= length(kernel_hyperparameters)) "Asking to differentiate by hyperparameter that the kernel doesn't have"
-    @assert length(dKdθs_kernel) <= 2 "Only two kernel hyperparameter derivatives are currently supported"
+    @assert all(dΣdθs_kernel .<= length(kernel_hyperparameters)) "Asking to differentiate by hyperparameter that the kernel doesn't have"
+    @assert length(dΣdθs_kernel) <= 2 "Only two kernel hyperparameter derivatives are currently supported"
 
     dif = (t1 - t2)
     dorder_tot = append!(copy(dorder), zeros(Int64, length(kernel_hyperparameters)))
 
-    for dKdθ_kernel in dKdθs_kernel
-        if dKdθ_kernel > 0; dorder_tot[2 + dKdθ_kernel] += 1 end
+    for dΣdθ_kernel in dΣdθs_kernel
+        if dΣdθ_kernel > 0; dorder_tot[2 + dΣdθ_kernel] += 1 end
     end
 
     return kernel_func(kernel_hyperparameters, dif; dorder=dorder_tot)
@@ -166,8 +166,8 @@ kernel(
     t1,
     t2;
     dorder=zeros(Int64, 2),
-    dKdθs_kernel=Int64[]
-    ) = kernel(prob_def.kernel, kernel_hyperparameters, t1, t2; dorder=dorder, dKdθs_kernel=dKdθs_kernel)
+    dΣdθs_kernel=Int64[]
+    ) = kernel(prob_def.kernel, kernel_hyperparameters, t1, t2; dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
 
 
 """
@@ -175,15 +175,15 @@ Creates the covariance matrix by evaluating the kernel function for each pair of
 symmetric = a parameter stating whether the covariance is guarunteed to be symmetric about the diagonal
 """
 function covariance!(
-    K::AbstractArray{T1,2},
+    Σ::DenseArray{T1,2},
     kernel_func::Function,
-    x1list::AbstractArray{T2,1},
-    x2list::AbstractArray{T3,1},
-    kernel_hyperparameters::AbstractArray{T4,1};
-    dorder::AbstractArray{T5,1}=zeros(Int64, 2),
+    x1list::Vector{T1},
+    x2list::Vector{T1},
+    kernel_hyperparameters::Vector{T1};
+    dorder::Vector{T2}=zeros(Int64, 2),
     symmetric::Bool=false,
-    dKdθs_kernel::AbstractArray{T6,1}=Int64[]
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Integer, T6<:Integer}
+    dΣdθs_kernel::Vector{T2}=Int64[]
+    ) where {T1<:Real, T2<:Integer}
 
     @assert issorted(x1list)
 
@@ -193,90 +193,144 @@ function covariance!(
     # are the x's passed identical and equally spaced
     if same_x
         spacing = x1list[2:end]-x1list[1:end-1]
-        equal_spacing = all((spacing .- spacing[1]) .< 1e-8)
+        equal_spacing = all((spacing .- spacing[1]) .< (1e-6 * spacing[1]))
     else
         @assert issorted(x2list)
         equal_spacing = false
     end
 
-    x1_length = length(x1list)
-    x2_length = length(x2list)
-
-    @assert size(K, 1) == x1_length
-    @assert size(K, 2) == x2_length
+    @assert size(Σ, 1) == length(x1list)
+    @assert size(Σ, 2) == length(x2list)
 
     if equal_spacing && symmetric
         # this section is so fast, it isn't worth parallelizing
         kernline = zeros(x1_length)
         for i in 1:x1_length
-            kernline[i] = kernel(kernel_func, kernel_hyperparameters, x1list[1], x1list[i], dorder=dorder, dKdθs_kernel=dKdθs_kernel)
+            kernline[i] = kernel(kernel_func, kernel_hyperparameters, x1list[1], x1list[i], dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
         end
         for i in 1:x1_length
-            K[i, i:end] = kernline[1:(x1_length + 1 - i)]
+            Σ[i, i:end] = kernline[1:(x1_length + 1 - i)]
         end
-        K = Symmetric(K)
-    elseif same_x && symmetric
-        sendto(workers(), kernel_func=kernel_func, kernel_hyperparameters=kernel_hyperparameters, x1list=x1list, dorder=dorder, dKdθs_kernel=dKdθs_kernel)
-        @sync @distributed for i in 1:length(x1list)
-            for j in 1:length(x1list)
-                if i <= j; K[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x1list[j], dorder=dorder, dKdθs_kernel=dKdθs_kernel) end
-            end
-        end
-        K = Symmetric(K)
+        Σ = Symmetric(Σ)
+        return Σ
     else
-        sendto(workers(), kernel_func=kernel_func, kernel_hyperparameters=kernel_hyperparameters, x1list=x1list, x2list=x2list, dorder=dorder, dKdθs_kernel=dKdθs_kernel)
-        @sync @distributed for i in 1:length(x1list)
-            for j in 1:length(x2list)
-                K[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x2list[j], dorder=dorder, dKdθs_kernel=dKdθs_kernel)
-            end
-        end
-        return K
+        covariance!(Σ, kernel_func, x1list, x2list, kernel_hyperparameters, dorder, symmetric, dΣdθs_kernel, same_x, equal_spacing)
     end
 end
 
-function covariance(
+function covariance!(
+    Σ::SharedArray{T1,2},
     kernel_func::Function,
-    x1list::AbstractArray{T1,1},
-    x2list::AbstractArray{T2,1},
-    kernel_hyperparameters::AbstractArray{T3,1};
-    dorder::AbstractArray{T4,1}=zeros(Int64, 2),
-    symmetric::Bool=false,
-    dKdθs_kernel::AbstractArray{T5,1}=Int64[]
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Integer, T5<:Integer}
+    x1list::Vector{T1},
+    x2list::Vector{T1},
+    kernel_hyperparameters::Vector{T1},
+    dorder::Vector{T2},
+    symmetric::Bool,
+    dΣdθs_kernel::Vector{T2},
+    same_x::Bool,
+    equal_spacing::Bool
+    ) where {T1<:Real, T2<:Integer}
 
-    K_share = SharedArray{Float64}(length(x1list), length(x2list))
-    return covariance!(K_share, kernel_func, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=symmetric, dKdθs_kernel=dKdθs_kernel)
+    x1_length = length(x1list)
+    x2_length = length(x2list)
+
+    if same_x && symmetric
+        sendto(workers(), kernel_func=kernel_func, kernel_hyperparameters=kernel_hyperparameters, x1list=x1list, dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
+        @sync @distributed for i in 1:length(x1list)
+            for j in 1:length(x1list)
+                if i <= j; Σ[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x1list[j], dorder=dorder, dΣdθs_kernel=dΣdθs_kernel) end
+            end
+        end
+        Σ = Symmetric(Σ)
+    else
+        sendto(workers(), kernel_func=kernel_func, kernel_hyperparameters=kernel_hyperparameters, x1list=x1list, x2list=x2list, dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
+        @sync @distributed for i in 1:length(x1list)
+            for j in 1:length(x2list)
+                Σ[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x2list[j], dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
+            end
+        end
+    end
+    return Σ
 end
 
+function covariance!(
+    Σ::Matrix{T1},
+    kernel_func::Function,
+    x1list::Vector{T1},
+    x2list::Vector{T1},
+    kernel_hyperparameters::Vector{T1},
+    dorder::Vector{T2},
+    symmetric::Bool,
+    dΣdθs_kernel::Vector{T2},
+    same_x::Bool,
+    equal_spacing::Bool
+    ) where {T1<:Real, T2<:Integer}
+
+    x1_length = length(x1list)
+    x2_length = length(x2list)
+
+    if same_x && symmetric
+        for i in 1:length(x1list)
+            for j in 1:length(x1list)
+                if i <= j; Σ[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x1list[j], dorder=dorder, dΣdθs_kernel=dΣdθs_kernel) end
+            end
+        end
+        Σ = Symmetric(Σ)
+    else
+        for i in 1:length(x1list)
+            for j in 1:length(x2list)
+                Σ[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x2list[j], dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
+            end
+        end
+    end
+    return Σ
+end
+
+
+function covariance(
+    kernel_func::Function,
+    x1list::Vector{T1},
+    x2list::Vector{T1},
+    kernel_hyperparameters::Vector{T1};
+    dorder::Vector{T2}=zeros(Int64, 2),
+    symmetric::Bool=false,
+    dΣdθs_kernel::Vector{T2}=Int64[]
+    ) where {T1<:Real, T2<:Integer}
+
+    Σ_share = SharedArray{Float64}(length(x1list), length(x2list))
+    # Σ_share = zeros(length(x1list), length(x2list))
+    return covariance!(Σ_share, kernel_func, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=symmetric, dΣdθs_kernel=dΣdθs_kernel)
+end
+
+
 # Calculating the covariance between all outputs for a combination of dependent GPs
-# written so that the intermediate K's don't have to be calculated over and over again
+# written so that the intermediate Σ's don't have to be calculated over and over again
 @memoize function covariance(
     prob_def::Jones_problem_definition,
-    x1list::AbstractArray{T1,1} where T1<:Real,
-    x2list::AbstractArray{T2,1} where T2<:Real,
-    total_hyperparameters::AbstractArray{T3,1} where T3<:Real;
-    dKdθs_total::AbstractArray{T3,1} where T3<:Integer=Int64[],
+    x1list::Vector{<:Real},
+    x2list::Vector{<:Real},
+    total_hyperparameters::Vector{<:Real};
+    dΣdθs_total::Vector{<:Integer}=Int64[],
     chol::Bool=false)
 
-    @assert all(dKdθs_total .>= 0)
+    @assert all(dΣdθs_total .>= 0)
     @assert length(total_hyperparameters) == prob_def.n_kern_hyper + length(prob_def.a0)
 
     num_coefficients = length(total_hyperparameters) - prob_def.n_kern_hyper
     n_out = prob_def.n_out
     n_dif = prob_def.n_dif
-    dKdθs_kernel = dKdθs_total .- num_coefficients
+    dΣdθs_kernel = dΣdθs_total .- num_coefficients
     kernel_hyperparameters = total_hyperparameters[(num_coefficients + 1):end]
     # println(length(kernel_hyperparameters))
 
     # calculating the total size of the multi-output covariance matrix
     x1_length = length(x1list)
     x2_length = length(x2list)
-    K = zeros((n_out * x1_length, n_out * x2_length))
+    Σ = zeros((n_out * x1_length, n_out * x2_length))
 
     # only calculating each sub-matrix once and using the fact that they should
     # be basically the same if the kernel has been differentiated the same amount of times
-    # A_list = Array{Any}(nothing, 2 * n_dif - 1)
-    A_list = Array{AbstractArray{T,2} where {T<:Real},1}(undef, 2 * n_dif - 1)
+    A_list = Vector{AbstractArray{T,2} where {T<:Real}}(undef, 2 * n_dif - 1)
     for i in 0:(2 * n_dif - 2)
 
         # CHANGE THIS TO MAKE MORE SENSE WITH NEW KERNEL SCHEME
@@ -284,160 +338,169 @@ end
         dorder = [rem(i - 1, 2) + 1, 2 * div(i - 1, 2)]
 
         # things that have been differentiated an even amount of times are symmetric about t1-t2==0
-        iseven(i) ? A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dKdθs_kernel=dKdθs_kernel) : A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, dKdθs_kernel=dKdθs_kernel)
+        iseven(i) ? A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dΣdθs_kernel=dΣdθs_kernel) : A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
 
     end
-
-    # return the properly negative differentiated A matrix from the list
-    # make it negative or not based on how many times it has been differentiated in the x1 direction
-    A_mat(k::Integer, l::Integer, A_list) = powers_of_negative_one(l + 1) * A_list[k + l - 1]
 
     # assembling the coefficient matrix
     a = reshape(total_hyperparameters[1:num_coefficients], (n_out, n_dif))
 
     coeff_orders = copy(prob_def.coeff_orders)
     coeff_coeffs = copy(prob_def.coeff_coeffs)
-    dif_coefficients!(n_out, n_dif, dKdθs_total, coeff_orders, coeff_coeffs)
+    dif_coefficients!(n_out, n_dif, dΣdθs_total, coeff_orders, coeff_coeffs)
     for i in 1:n_out
         for j in 1:n_out
-            for k in 1:n_dif
-                for l in 1:n_dif
-                    # if the coefficient for the Jones coefficients is non-zero
-                    if coeff_coeffs[i, j, k, l] != 0
-                        A_mat_coeff = coeff_coeffs[i, j, k, l]
-                        for m in 1:n_out
-                            for n in 1:n_dif
-                                A_mat_coeff *= a[m, n] ^ coeff_orders[i, j, k, l, m, n]
+            # if i <= j  # only need to calculate one set of the off-diagonal blocks
+                for k in 1:n_dif
+                    for l in 1:n_dif
+                        # if the coefficient for the Jones coefficients is non-zero
+                        if coeff_coeffs[i, j, k, l] != 0
+                            A_mat_coeff = coeff_coeffs[i, j, k, l] * powers_of_negative_one(l + 1)
+                            for m in 1:n_out
+                                for n in 1:n_dif
+                                    A_mat_coeff *= a[m, n] ^ coeff_orders[i, j, k, l, m, n]
+                                end
                             end
+                            # add the properly negative differentiated A matrix from the list
+                            # make it negative or not based on how many times it has been differentiated in the x1 direction
+                            Σ[((i - 1) * x1_length + 1):(i * x1_length),
+                                ((j - 1) * x2_length + 1):(j * x2_length)] +=
+                                A_mat_coeff * A_list[k + l - 1]
                         end
-                        K[((i - 1) * x1_length + 1):(i * x1_length),
-                            ((j - 1) * x2_length + 1):(j * x2_length)] +=
-                            A_mat_coeff * A_mat(k, l, A_list)
                     end
                 end
-            end
+            # end
         end
     end
 
     # return the symmetrized version of the covariance matrix
     # function corrects for numerical errors and notifies us if our matrix isn't
     # symmetric like it should be
-    return symmetric_A(K; chol=chol)
+    return symmetric_A(Σ; chol=chol)
+    # if x1list == x2list
+    #     if chol
+    #         return ridge_chol(Symmetric(Σ))
+    #     else
+    #         return Symmetric(Σ)
+    #     end
+    # else
+    #     return Σ
+    # end
 
 end
 
 covariance(
     prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T1,1};
-    dKdθs_total::AbstractArray{T2,1}=Int64[],
-    ) where {T1<:Real, T2<:Integer} = covariance(prob_def, prob_def.x_obs, prob_def.x_obs, total_hyperparameters; dKdθs_total=dKdθs_total)
+    total_hyperparameters::Vector{<:Real};
+    dΣdθs_total::Vector{<:Integer}=Int64[]
+    ) = covariance(prob_def, prob_def.x_obs, prob_def.x_obs, total_hyperparameters; dΣdθs_total=dΣdθs_total)
 
 
-"adding measurement noise to K_obs"
-function K_observations(
+"adding measurement noise to Σ_obs"
+function Σ_observations(
     kernel_func::Function,
-    x_obs::AbstractArray{T1,1},
-    measurement_noise::AbstractArray{T2,1},
-    kernel_hyperparameters::AbstractArray{T3,1};
-    ignore_asymmetry::Bool=false
-    ) where {T1<:Real, T2<:Real, T3<:Real}
-
-    K_obs = covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters)
-    return symmetric_A(K_obs + Diagonal(measurement_noise); ignore_asymmetry=ignore_asymmetry, chol=true)
-end
-
-"adding measurement noise to K_obs"
-function K_observations(
-    prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T,1};
+    x_obs::Vector{T},
+    measurement_noise::Vector{T},
+    kernel_hyperparameters::Vector{T};
     ignore_asymmetry::Bool=false
     ) where {T<:Real}
 
-    K_obs = covariance(prob_def, total_hyperparameters)
-    return symmetric_A(K_obs + Diagonal(prob_def.noise); ignore_asymmetry=ignore_asymmetry, chol=true)
+    Σ_obs = covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters)
+    return symmetric_A(Σ_obs + Diagonal(measurement_noise); ignore_asymmetry=ignore_asymmetry, chol=true)
+end
+
+"adding measurement noise to Σ_obs"
+function Σ_observations(
+    prob_def::Jones_problem_definition,
+    total_hyperparameters::Vector{T};
+    ignore_asymmetry::Bool=false
+    ) where {T<:Real}
+
+    Σ_obs = covariance(prob_def, total_hyperparameters)
+    return symmetric_A(Σ_obs + Diagonal(prob_def.noise); ignore_asymmetry=ignore_asymmetry, chol=true)
 end
 
 
 "calculating the standard deviation at each GP posterior point. Algorithm from RW alg. 2.1"
 function get_σ(
-    L_obs::LowerTriangular{T1,Array{T1,2}},
-    K_obs_samp::Union{Transpose{T2,Array{T2,2}},Symmetric{T3,Array{T3,2}},AbstractArray{T4,2}},
-    diag_K_samp::AbstractArray{T5,1}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+    L_obs::LowerTriangular{T,Matrix{T}},
+    Σ_obs_samp::Union{Transpose{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T}},
+    diag_Σ_samp::Vector{T}
+    ) where {T<:Real}
 
-    v = L_obs \ K_obs_samp
-    return sqrt.(diag_K_samp - [dot(v[:, i], v[:, i]) for i in 1:length(diag_K_samp)])  # σ
+    v = L_obs \ Σ_obs_samp
+    return sqrt.(diag_Σ_samp - [dot(v[:, i], v[:, i]) for i in 1:length(diag_Σ_samp)])  # σ
 end
 
 function get_σ(
     prob_def::Jones_problem_definition,
-    x_samp::AbstractArray{T1,1},
-    total_hyperparameters::AbstractArray{T2,1}
-    ) where {T1<:Real, T2<:Real}
+    x_samp::Vector{T},
+    total_hyperparameters::Vector{T}
+    ) where {T<:Real}
 
-    (K_samp, K_obs, K_samp_obs, K_obs_samp) = covariance_permutations(prob_def, x_samp, total_hyperparameters)
-    return get_σ(ridge_chol(K_obs).L, K_obs_samp, diag(K_samp))
+    (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp) = covariance_permutations(prob_def, x_samp, total_hyperparameters)
+    return get_σ(ridge_chol(Σ_obs).L, Σ_obs_samp, diag(Σ_samp))
 end
 
 
 "calcuate all of the different versions of the covariance matrices for measured and sampled points"
 function covariance_permutations(
-    x_obs::AbstractArray{T1,1},
-    x_samp::AbstractArray{T2,1},
-    measurement_noise::AbstractArray{T3,1},
-    kernel_hyperparameters::AbstractArray{T4,1}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+    x_obs::Vector{T},
+    x_samp::Vector{T},
+    measurement_noise::Vector{T},
+    kernel_hyperparameters::Vector{T}
+    ) where {T<:Real}
 
-    K_samp = covariance(x_samp, x_samp, kernel_hyperparameters)
-    K_obs = K_observations(x_obs, measurement_noise, kernel_hyperparameters)
-    K_samp_obs = covariance(x_samp, x_obs, kernel_hyperparameters)
-    K_obs_samp = transpose(K_samp_obs)
-    return K_samp, K_obs, K_samp_obs, K_obs_samp
+    Σ_samp = covariance(x_samp, x_samp, kernel_hyperparameters)
+    Σ_obs = Σ_observations(x_obs, measurement_noise, kernel_hyperparameters)
+    Σ_samp_obs = covariance(x_samp, x_obs, kernel_hyperparameters)
+    Σ_obs_samp = transpose(Σ_samp_obs)
+    return Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp
 end
 
 "calcuate all of the different versions of the covariance matrices for measured and sampled points"
 function covariance_permutations(
     prob_def::Jones_problem_definition,
-    x_samp::AbstractArray{T1,1},
-    total_hyperparameters::AbstractArray{T2,1}
-    ) where {T1<:Real, T2<:Real}
+    x_samp::Vector{T},
+    total_hyperparameters::Vector{T}
+    ) where {T<:Real}
 
-    K_samp = covariance(prob_def, x_samp, x_samp, total_hyperparameters)
-    K_obs = K_observations(prob_def, total_hyperparameters)
-    K_samp_obs = covariance(prob_def, x_samp, prob_def.x_obs, total_hyperparameters)
-    K_obs_samp = transpose(K_samp_obs)
-    return K_samp, K_obs, K_samp_obs, K_obs_samp
+    Σ_samp = covariance(prob_def, x_samp, x_samp, total_hyperparameters)
+    Σ_obs = Σ_observations(prob_def, total_hyperparameters)
+    Σ_samp_obs = covariance(prob_def, x_samp, prob_def.x_obs, total_hyperparameters)
+    Σ_obs_samp = transpose(Σ_samp_obs)
+    return Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp
 end
 
 
 "Condition the GP on data"
 function GP_posteriors_from_covariances(
-    y_obs::AbstractArray{T1,1},
-    K_samp::Union{Cholesky{T2,Array{T2,2}},Symmetric{T3,Array{T3,2}},AbstractArray{T4,2}},
-    K_obs::Cholesky{T5,Array{T5,2}},
-    K_samp_obs::Union{Symmetric{T6,Array{T6,2}},AbstractArray{T7,2}},
-    K_obs_samp::Union{Transpose{T8,Array{T8,2}},Symmetric{T9,Array{T9,2}},AbstractArray{T10,2}};
+    y_obs::Vector{T},
+    Σ_samp::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T}},
+    Σ_obs::Cholesky{T,Matrix{T}},
+    Σ_samp_obs::Union{Symmetric{T,Matrix{T}},Matrix{T}},
+    Σ_obs_samp::Union{Transpose{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T}};
     return_σ::Bool=false,
-    return_K::Bool=true,
+    return_Σ::Bool=true,
     chol::Bool=false
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real, T7<:Real, T8<:Real, T9<:Real, T10<:Real}
+    ) where {T<:Real}
 
     # posterior mean calcuation from RW alg. 2.1
 
     # these are all equivalent but have different computational costs
-    # α = inv(K_obs) * y_obs
+    # α = inv(Σ_obs) * y_obs
     # α = transpose(L) \ (L \ y_obs)
-    α = K_obs \ y_obs
+    α = Σ_obs \ y_obs
 
-    mean_post = K_samp_obs * α
+    mean_post = Σ_samp_obs * α
 
     # posterior standard deviation calcuation from RW alg. 2.1
-    σ = get_σ(K_obs.L, K_obs_samp, diag(K_samp))
+    σ = get_σ(Σ_obs.L, Σ_obs_samp, diag(Σ_samp))
 
     # posterior covariance calculation is from eq. 2.24 of RW
-    if return_K
-        K_post = symmetric_A(K_samp - (K_samp_obs * (K_obs \ K_obs_samp)), chol=chol)
-        return mean_post, σ, K_post
+    if return_Σ
+        Σ_post = symmetric_A(Σ_samp - (Σ_samp_obs * (Σ_obs \ Σ_obs_samp)), chol=chol)
+        return mean_post, σ, Σ_post
     else
         return mean_post, σ
     end
@@ -445,30 +508,30 @@ function GP_posteriors_from_covariances(
 end
 
 function GP_posteriors(
-    x_obs::AbstractArray{T1,1},
-    y_obs::AbstractArray{T2,1},
-    x_samp::AbstractArray{T3,1},
-    measurement_noise::AbstractArray{T4,1},
-    total_hyperparameters::AbstractArray{T5,1};
-    return_K::Bool=true,
+    x_obs::Vector{T},
+    y_obs::Vector{T},
+    x_samp::Vector{T},
+    measurement_noise::Vector{T},
+    total_hyperparameters::Vector{T};
+    return_Σ::Bool=true,
     chol::Bool=false
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+    ) where {T<:Real}
 
-    (K_samp, K_obs, K_samp_obs, K_obs_samp) = covariance_permutations(x_obs, x_samp, measurement_noise, total_hyperparameters)
-    return GP_posteriors_from_covariances(y_obs, K_samp, K_obs, K_samp_obs, K_obs_samp; return_K=return_K, chol=chol)
+    (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp) = covariance_permutations(x_obs, x_samp, measurement_noise, total_hyperparameters)
+    return GP_posteriors_from_covariances(y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp; return_Σ=return_Σ, chol=chol)
 end
 
 function GP_posteriors(
     prob_def::Jones_problem_definition,
-    x_samp::AbstractArray{T1,1},
-    total_hyperparameters::AbstractArray{T2,1};
-    return_K::Bool=true,
+    x_samp::Vector{T},
+    total_hyperparameters::Vector{T};
+    return_Σ::Bool=true,
     chol::Bool=false,
-    y_obs::AbstractArray{T3,1}=prob_def.y_obs
-    ) where {T1<:Real, T2<:Real, T3<:Real}
+    y_obs::Vector{T}=prob_def.y_obs
+    ) where {T<:Real}
 
-    (K_samp, K_obs, K_samp_obs, K_obs_samp) = covariance_permutations(prob_def, x_samp, total_hyperparameters)
-    return GP_posteriors_from_covariances(y_obs, K_samp, K_obs, K_samp_obs, K_obs_samp; return_K=return_K, chol=chol)
+    (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp) = covariance_permutations(prob_def, x_samp, total_hyperparameters)
+    return GP_posteriors_from_covariances(y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp; return_Σ=return_Σ, chol=chol)
 end
 
 
@@ -497,7 +560,7 @@ Returns:
 function coefficient_orders(
     n_out::Integer,
     n_dif::Integer;
-    a::AbstractArray{T,2}=ones(n_out, n_dif)
+    a::Matrix{T}=ones(n_out, n_dif)
     ) where {T<:Real}
 
     @assert size(a) == (n_out, n_dif)
@@ -545,7 +608,7 @@ Parameters:
 
 n_out (int): Amount of dimensions being fit
 n_dif (int): Amount of GP time derivatives are in the Jones model being used
-dKdθ_total (matrix): The coefficients for the Jones model
+dΣdθ_total (matrix): The coefficients for the Jones model
 coeff_orders (6D matrix): Filled with integers for what power each coefficient
     is taken to in the construction of a given block of the total covariance
     matrix. See coefficient_orders()
@@ -559,17 +622,17 @@ Only modifies the passed coeff_orders and coeff_coeffs matrices
 function dif_coefficients!(
     n_out::Integer,
     n_dif::Integer,
-    dKdθ_total::Integer,
-    coeff_orders::AbstractArray{T1,6},
-    coeff_coeffs::AbstractArray{T2,4}
-    ) where {T1<:Integer, T2<:Integer}
+    dΣdθ_total::Integer,
+    coeff_orders::AbstractArray{T,6},
+    coeff_coeffs::AbstractArray{T,4}
+    ) where {T<:Integer}
 
     @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)
     @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)
 
     # only do something if a derivative is being taken
-    if dKdθ_total > 0 && dKdθ_total <= (n_out*n_dif)
-        proper_indices = [((dKdθ_total - 1) % n_out) + 1, div(dKdθ_total - 1, n_out) + 1]
+    if dΣdθ_total > 0 && dΣdθ_total <= (n_out*n_dif)
+        proper_indices = [((dΣdθ_total - 1) % n_out) + 1, div(dΣdθ_total - 1, n_out) + 1]
         for i in 1:n_out
             for j in 1:n_out
                 for k in 1:n_dif
@@ -591,13 +654,13 @@ end
 function dif_coefficients!(
     n_out::Integer,
     n_dif::Integer,
-    dKdθs_total::AbstractArray{T1,1},
-    coeff_orders::AbstractArray{T2,6},
-    coeff_coeffs::AbstractArray{T3,4}
-    ) where {T1<:Integer, T2<:Integer, T3<:Integer}
+    dΣdθs_total::Vector{T},
+    coeff_orders::AbstractArray{T,6},
+    coeff_coeffs::AbstractArray{T,4}
+    ) where {T<:Integer}
 
-    for dKdθ_total in dKdθs_total
-        dif_coefficients!(n_out, n_dif, dKdθ_total, coeff_orders, coeff_coeffs)
+    for dΣdθ_total in dΣdθs_total
+        dif_coefficients!(n_out, n_dif, dΣdθ_total, coeff_orders, coeff_coeffs)
     end
 end
 
@@ -607,29 +670,29 @@ GP negative log marginal likelihood (see Algorithm 2.1 in Rasmussen and Williams
 
 Parameters:
 
-K_obs (Cholesky factorized object): The covariance matrix constructed by
+Σ_obs (Cholesky factorized object): The covariance matrix constructed by
     evaulating the kernel at each pair of observations and adding measurement
     noise.
 y_obs (vector): The observations at each time point
-α (vector): inv(K_obs) * y_obs
+α (vector): inv(Σ_obs) * y_obs
 
 Returns:
 float: the negative log marginal likelihood
 
 """
 function nlogL(
-    K_obs::Cholesky{T1,Array{T1,2}},
-    y_obs::AbstractArray{T2,1},
-    α::AbstractArray{T3,1}
-    ) where {T1<:Real, T2<:Real, T3<:Real}
+    Σ_obs::Cholesky{T,Matrix{T}},
+    y_obs::Vector{T},
+    α::Vector{T}
+    ) where {T<:Real}
 
     n = length(y_obs)
 
     # 2 times negative goodness of fit term
     data_fit = transpose(y_obs) * α
     # 2 times negative complexity penalization term
-    # complexity_penalty = log(det(K_obs))
-    complexity_penalty = logdet(K_obs)  # half memory but twice the time
+    # complexity_penalty = log(det(Σ_obs))
+    complexity_penalty = logdet(Σ_obs)  # half memory but twice the time
     # 2 times negative normalization term (doesn't affect fitting)
     normalization = n * log(2 * π)
 
@@ -637,7 +700,7 @@ function nlogL(
 
 end
 
-nlogL(K_obs, y_obs) = nlogL(K_obs, y_obs, K_obs \ y_obs)
+nlogL(Σ_obs, y_obs) = nlogL(Σ_obs, y_obs, Σ_obs \ y_obs)
 
 
 """
@@ -647,9 +710,9 @@ First partial derivative of the GP negative log marginal likelihood
 Parameters:
 
 y_obs (vector): The observations at each time point
-α (vector): inv(K_obs) * y_obs
-β (matrix): inv(K_obs) * dK_dθ where dK_dθ is the partial derivative of the
-    covariance matrix K_obs w.r.t. a hyperparameter
+α (vector): inv(Σ_obs) * y_obs
+β (matrix): inv(Σ_obs) * dΣ_dθ where dΣ_dθ is the partial derivative of the
+    covariance matrix Σ_obs w.r.t. a hyperparameter
 
 Returns:
 float: the partial derivative of the negative log marginal likelihood w.r.t. the
@@ -657,17 +720,17 @@ float: the partial derivative of the negative log marginal likelihood w.r.t. the
 
 """
 function dnlogLdθ(
-    y_obs::AbstractArray{T1,1},
-    α::AbstractArray{T2,1},
-    β::AbstractArray{T3,2}
-    ) where {T1<:Real, T2<:Real, T3<:Real}
+    y_obs::Vector{T},
+    α::Vector{T},
+    β::Matrix{T}
+    ) where {T<:Real}
 
     # 2 times negative derivative of goodness of fit term
     data_fit = -(transpose(y_obs) * β * α)
     # 2 times negative derivative of complexity penalization term
     complexity_penalty = tr(β)
 
-    # return -1 / 2 * tr((α * transpose(α) - inv(K_obs)) * dK_dθj)
+    # return -1 / 2 * tr((α * transpose(α) - inv(Σ_obs)) * dΣ_dθj)
     return 0.5 * (data_fit + complexity_penalty)
 
 end
@@ -681,13 +744,13 @@ Calculated with help from rules found on page 7 of the matrix cookbook
 Parameters:
 
 y_obs (vector): The observations at each time point
-α (vector): inv(K_obs) * y_obs
-β1 (matrix): inv(K_obs) * dK_dθ1 where dK_dθ1 is the partial derivative of the
-    covariance matrix K_obs w.r.t. a hyperparameter
-β2 (matrix): inv(K_obs) * dK_dθ2 where dK_dθ2 is the partial derivative of the
-    covariance matrix K_obs w.r.t. another hyperparameter
-β12 (matrix): inv(K_obs) * d2K_dθ1dθ2 where d2K_dθ1dθ2 is the partial
-    derivative of the covariance matrix K_obs w.r.t. both of the hyperparameters
+α (vector): inv(Σ_obs) * y_obs
+β1 (matrix): inv(Σ_obs) * dΣ_dθ1 where dΣ_dθ1 is the partial derivative of the
+    covariance matrix Σ_obs w.r.t. a hyperparameter
+β2 (matrix): inv(Σ_obs) * dΣ_dθ2 where dΣ_dθ2 is the partial derivative of the
+    covariance matrix Σ_obs w.r.t. another hyperparameter
+β12 (matrix): inv(Σ_obs) * d2Σ_dθ1dθ2 where d2Σ_dθ1dθ2 is the partial
+    derivative of the covariance matrix Σ_obs w.r.t. both of the hyperparameters
     being considered
 
 Returns:
@@ -696,12 +759,12 @@ float: the partial derivative of the negative log marginal likelihood w.r.t. the
 
 """
 function d2nlogLdθ(
-    y_obs::AbstractArray{T1,1},
-    α::AbstractArray{T2,1},
-    β1::AbstractArray{T3,2},
-    β2::AbstractArray{T4,2},
-    β12::AbstractArray{T5,2}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+    y_obs::Vector{T},
+    α::Vector{T},
+    β1::Matrix{T},
+    β2::Matrix{T},
+    β12::Matrix{T}
+    ) where {T<:Real}
 
     β12mβ2β1 = β12 - β2 * β1
 
@@ -719,21 +782,21 @@ end
 # can't use docstrings with @memoize macro :(
 @memoize function calculate_shared_nlogL_Jones(
     prob_def::Jones_problem_definition,
-    non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real;
-    y_obs::AbstractArray{T2,1} where T2<:Real=prob_def.y_obs,
-    K_obs::Cholesky{T3,Array{T3,2}} where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
+    non_zero_hyperparameters::Vector{<:Real};
+    y_obs::Vector{<:Real}=prob_def.y_obs,
+    Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
     P::Union{Real, Quantity}=0)
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
 
     if P!=0
-        y_obs = remove_kepler(y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), K_obs)
+        y_obs = remove_kepler(y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), Σ_obs)
     end
 
-    α = K_obs \ y_obs
+    α = Σ_obs \ y_obs
 
-    return total_hyperparameters, K_obs, y_obs, α
+    return total_hyperparameters, Σ_obs, y_obs, α
 
 end
 
@@ -742,16 +805,16 @@ end
 # can't use docstrings with @memoize macro :(
 @memoize function calculate_shared_∇nlogL_Jones(
     prob_def::Jones_problem_definition,
-    non_zero_hyperparameters::AbstractArray{T1,1} where T1<:Real;
-    y_obs::AbstractArray{T2,1} where T2<:Real=prob_def.y_obs,
-    K_obs::Cholesky{T3,Array{T3,2}} where T3<:Real=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
+    non_zero_hyperparameters::Vector{<:Real};
+    y_obs::Vector{<:Real}=prob_def.y_obs,
+    Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
     P::Union{Real, Quantity}=0)
 
-    total_hyperparameters, K_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs, K_obs=K_obs, P=P)
+    total_hyperparameters, Σ_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs, Σ_obs=Σ_obs, P=P)
 
-    βs = [K_obs \ covariance(prob_def, total_hyperparameters; dKdθs_total=[i]) for i in findall(!iszero, total_hyperparameters)]
+    βs = [Σ_obs \ covariance(prob_def, total_hyperparameters; dΣdθs_total=[i]) for i in findall(!iszero, total_hyperparameters)]
 
-    return total_hyperparameters, K_obs, y_obs, α, βs
+    return total_hyperparameters, Σ_obs, y_obs, α, βs
 
 end
 
@@ -759,13 +822,13 @@ end
 "nlogL for Jones GP"
 function nlogL_Jones(
     prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T1,1},
-    K_obs::Cholesky{T2,Array{T2,2}},
-    y_obs::AbstractArray{T3,1},
-    α::AbstractArray{T4,1}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+    total_hyperparameters::Vector{T},
+    Σ_obs::Cholesky{T,Matrix{T}},
+    y_obs::Vector{T},
+    α::Vector{T}
+    ) where {T<:Real}
 
-    nlogL_val = nlogL(K_obs, y_obs, α)
+    nlogL_val = nlogL(Σ_obs, y_obs, α)
 
     return nlogL_val
 
@@ -773,25 +836,25 @@ end
 
 function nlogL_Jones(
     prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T1,1};
-    y_obs::AbstractArray{T2,1}=prob_def.y_obs,
-    K_obs::Cholesky{T3,Array{T3,2}}=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
+    total_hyperparameters::Vector{T};
+    y_obs::Vector{T}=prob_def.y_obs,
+    Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
     P::Union{Real, Quantity}=0
-    ) where {T1<:Real, T2<:Real, T3<:Real}
+    ) where {T<:Real}
 
-    total_hyperparameters, K_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, remove_zeros(total_hyperparameters), y_obs=y_obs, K_obs=K_obs, P=P)
-    return nlogL_Jones(prob_def, total_hyperparameters, K_obs, y_obs, α)
+    total_hyperparameters, Σ_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, remove_zeros(total_hyperparameters), y_obs=y_obs, Σ_obs=Σ_obs, P=P)
+    return nlogL_Jones(prob_def, total_hyperparameters, Σ_obs, y_obs, α)
 end
 
 
 "Returns gradient of nlogL for non-zero hyperparameters"
 function ∇nlogL_Jones(
     prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T1,1},
-    y_obs::AbstractArray{T2,1},
-    α::AbstractArray{T3,1},
-    βs::Array{Array{T4,2},1}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real}
+    total_hyperparameters::Vector{T},
+    y_obs::Vector{T},
+    α::Vector{T},
+    βs::Vector{Matrix{T}}
+    ) where {T<:Real}
 
     return [dnlogLdθ(y_obs, α, β) for β in βs]
 
@@ -801,14 +864,14 @@ end
 "Returns gradient of nlogL for non-zero hyperparameters"
 function ∇nlogL_Jones(
     prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T1,1};
-    y_obs::AbstractArray{T2,1}=prob_def.y_obs,
-    K_obs::Cholesky{T3,Array{T3,2}}=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
+    total_hyperparameters::Vector{T};
+    y_obs::Vector{T}=prob_def.y_obs,
+    Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
     P::Union{Real, Quantity}=0
-    ) where {T1<:Real, T2<:Real, T3<:Real}
+    ) where {T<:Real}
 
-    total_hyperparameters, K_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
-        prob_def, remove_zeros(total_hyperparameters); y_obs=y_obs, K_obs=K_obs, P=P)
+    total_hyperparameters, Σ_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
+        prob_def, remove_zeros(total_hyperparameters); y_obs=y_obs, Σ_obs=Σ_obs, P=P)
 
     return ∇nlogL_Jones(prob_def, total_hyperparameters, y_obs, α, βs)
 
@@ -818,12 +881,12 @@ end
 "Replaces H with Hessian of nlogL for non-zero hyperparameters"
 function ∇∇nlogL_Jones(
     prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T1,1},
-    K_obs::Cholesky{T3,Array{T2,2}},
-    y_obs::AbstractArray{T3,1},
-    α::AbstractArray{T4,1},
-    βs::Array{Array{T5,2},1}
-    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+    total_hyperparameters::Vector{T},
+    Σ_obs::Cholesky{T,Matrix{T}},
+    y_obs::Vector{T},
+    α::Vector{T},
+    βs::Array{Matrix{T},1}
+    ) where {T<:Real}
 
     non_zero_inds = findall(!iszero, total_hyperparameters)
     H = zeros(length(non_zero_inds), length(non_zero_inds))
@@ -831,7 +894,7 @@ function ∇∇nlogL_Jones(
     for (k, i) in enumerate(non_zero_inds)
         for (l, j) in enumerate(non_zero_inds)
             if k <= l
-                H[k, l] = d2nlogLdθ(y_obs, α, βs[k], βs[l], K_obs \ covariance(prob_def, total_hyperparameters; dKdθs_total=[i, j]))
+                H[k, l] = d2nlogLdθ(y_obs, α, βs[k], βs[l], Σ_obs \ covariance(prob_def, total_hyperparameters; dΣdθs_total=[i, j]))
             end
         end
     end
@@ -844,16 +907,16 @@ end
 "Replaces H with Hessian of nlogL for non-zero hyperparameters"
 function ∇∇nlogL_Jones(
     prob_def::Jones_problem_definition,
-    total_hyperparameters::AbstractArray{T1,1};
-    y_obs::AbstractArray{T2,1}=prob_def.y_obs,
-    K_obs::Cholesky{T3,Array{T3,2}}=K_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
+    total_hyperparameters::Vector{T};
+    y_obs::Vector{T}=prob_def.y_obs,
+    Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
     P::Union{Real, Quantity}=0
-    ) where {T1<:Real, T2<:Real, T3<:Real}
+    ) where {T<:Real}
 
-    total_hyperparameters, K_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
-        prob_def, remove_zeros(total_hyperparameters); y_obs=y_obs, K_obs=K_obs, P=P)
+    total_hyperparameters, Σ_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
+        prob_def, remove_zeros(total_hyperparameters); y_obs=y_obs, Σ_obs=Σ_obs, P=P)
 
-    return ∇∇nlogL_Jones(prob_def, total_hyperparameters, K_obs, y_obs, α, βs)
+    return ∇∇nlogL_Jones(prob_def, total_hyperparameters, Σ_obs, y_obs, α, βs)
 
 end
 
@@ -861,7 +924,7 @@ end
 "reinsert the zero coefficients into the non-zero hyperparameter list if needed"
 function reconstruct_total_hyperparameters(
     prob_def::Jones_problem_definition,
-    hyperparameters::AbstractArray{T,1}
+    hyperparameters::Vector{T}
     ) where {T<:Real}
 
     if length(hyperparameters)!=(prob_def.n_kern_hyper + length(prob_def.a0))
@@ -911,7 +974,7 @@ end
 "Iitialize an optimize_Jones_model_jld2"
 function initialize_optimize_Jones_model_jld2!(
     kernel_name::AbstractString,
-    current_params::AbstractArray{T,1}
+    current_params::Vector{T}
     ) where {T<:Real}
 
     current_fit_time = now()
@@ -941,7 +1004,7 @@ end
 
 
 function logGP_prior(
-    total_hyperparameters::AbstractArray{T,1};
+    total_hyperparameters::Vector{T};
     alpha::Real=1,
     beta::Real=1
     ) where {T<:Real}
@@ -959,7 +1022,7 @@ function logGP_prior(
 end
 
 function ∇logGP_prior(
-    total_hyperparameters::AbstractArray{T,1};
+    total_hyperparameters::Vector{T};
     alpha::Real=1,
     beta::Real=1
     ) where {T<:Real}
@@ -977,7 +1040,7 @@ function ∇logGP_prior(
 end
 
 function ∇∇logGP_prior(
-    total_hyperparameters::AbstractArray{T,1};
+    total_hyperparameters::Vector{T};
     alpha::Real=1,
     beta::Real=1
     ) where {T<:Real}

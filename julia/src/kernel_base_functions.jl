@@ -2,13 +2,12 @@
 using SpecialFunctions
 using SymEngine
 
-
 "Scale kernel. Multiplied with other kernels to modify their amplitude"
-scale_kernel_base(kernel_amplitude::Union{Real, Basic}, x1, x2) where {T<:Real} = kernel_amplitude * kernel_amplitude
+scale_kernel_base(kernel_amplitude::Number, x1::Vector{T}, x2::Vector{T}) where {T<:Number} = kernel_amplitude * kernel_amplitude
 
 
 "Linear GP kernel"
-function linear_kernel_base(hyperparameters::Union{AbstractArray{T,1}, AbstractArray{Basic,1}}, x1, x2) where {T<:Real}
+function linear_kernel_base(hyperparameters::Vector{<:Number}, x1::Vector{T}, x2::Vector{T}) where {T<:Number}
 
     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
     sigma_b, sigma_a = hyperparameters
@@ -18,13 +17,13 @@ end
 
 
 "Radial basis function GP kernel (aka squared exonential, ~gaussian)"
-function se_kernel_base(kernel_length::Union{Real, Basic}, dif::Union{Basic,Real}) where {T<:Real}
+function se_kernel_base(kernel_length::Number, dif::Number)
     return exp(-dif * dif / (2 * (kernel_length * kernel_length)))
 end
 
 
 "Periodic kernel (for random cyclic functions)"
-function periodic_kernel_base(hyperparameters::Union{AbstractArray{T,1}, AbstractArray{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
+function periodic_kernel_base(hyperparameters::Vector{<:Number}, dif::Number)
 
     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
     kernel_period, kernel_length = hyperparameters
@@ -37,7 +36,7 @@ end
 
 
 "Quasi-periodic kernel"
-function quasi_periodic_kernel_base(hyperparameters::Union{AbstractArray{T,1}, AbstractArray{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
+function quasi_periodic_kernel_base(hyperparameters::Vector{<:Number}, dif::Number)
 
     @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
     SE_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
@@ -47,14 +46,14 @@ end
 
 
 "Ornstein–Uhlenbeck (Exponential) kernel"
-function ou_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}) where {T<:Real}
+function ou_kernel_base(kernel_length::Number, abs_dif::Number)
     # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
     return exp(-abs_dif / kernel_length)
 end
 
 
 "Exponential-periodic kernel"
-function exp_periodic_kernel_base(hyperparameters::Union{AbstractArray{T,1}, AbstractArray{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
+function exp_periodic_kernel_base(hyperparameters::Vector{<:Number}, dif::Number)
 
     @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
     OU_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
@@ -64,7 +63,7 @@ end
 
 
 "general Matern kernel"
-function matern_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}, nu::Real) where {T<:Real}
+function matern_kernel_base(kernel_length::Number, abs_dif::Number, nu::Real)
 
     #limit of the function as it apporaches 0 (see https://en.wikipedia.org/wiki/Mat%C3%A9rn_covariance_function)
     if dif == 0
@@ -78,7 +77,7 @@ end
 
 
 "Matern 3/2 kernel"
-function matern32_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}) where {T<:Real}
+function matern32_kernel_base(kernel_length::Number, abs_dif::Number)
     # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
     x = sqrt(3) * abs_dif / kernel_length
     return (1 + x) * exp(-x)
@@ -86,7 +85,7 @@ end
 
 
 "Matern 5/2 kernel"
-function matern52_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}) where {T<:Real}
+function matern52_kernel_base(kernel_length::Number, abs_dif::Number)
     # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
     x = sqrt(5) * abs_dif / kernel_length
     return (1 + x * (1 + x / 3)) * exp(-x)
@@ -94,7 +93,7 @@ end
 
 
 "Matern 7/2 kernel"
-function matern72_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}) where {T<:Real}
+function matern72_kernel_base(kernel_length::Number, abs_dif::Number)
     # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
     x = sqrt(7) * abs_dif / kernel_length
     return (1 + x * (1 + x * (2 / 5 + x / 15))) * exp(-x)
@@ -102,7 +101,7 @@ end
 
 
 "Matern 9/2 kernel"
-function matern92_kernel_base(kernel_length::Union{Real, Basic}, abs_dif::Union{Basic,Real}) where {T<:Real}
+function matern92_kernel_base(kernel_length::Number, abs_dif::Number)
     # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
     x = 3 * abs_dif / kernel_length
     return (1 + x * (1 + x * (3 / 7 + x * (2 / 21 + x / 105)))) * exp(-x)
@@ -113,7 +112,7 @@ end
 Rational Quadratic kernel (equivalent to adding together many SE kernels
 with different lengthscales. When α→∞, the RQ is identical to the SE.)
 """
-function rq_kernel_base(hyperparameters::Union{AbstractArray{T,1}, AbstractArray{Basic,1}}, dif::Union{Basic,Real}) where {T<:Real}
+function rq_kernel_base(hyperparameters::Vector{<:Number}, dif::Number)
 
     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
     kernel_length, alpha = hyperparameters
@@ -128,7 +127,7 @@ end
 # differential equation that are finite at the origin (x = 0) for integer or positive α
 # http://crsouza.com/2010/03/17/kernel-functions-for-machine-learning-applications/#bessel
 # """
-# function bessel_kernel_base(hyperparameters::Union{AbstractArray{T,1}, AbstractArray{Basic,1}}, dif::Union{Basic,Real}; nu=0) where {T<:Real}
+# function bessel_kernel_base(hyperparameters::Vector{<:Number}, dif::Number; nu=0)
 #
 #     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
 #     kernel_length, n = hyperparameters

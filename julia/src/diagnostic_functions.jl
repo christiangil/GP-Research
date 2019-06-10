@@ -5,13 +5,13 @@ using Statistics
 """
 Estimate the covariance derivatives with forward differences
 """
-function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::AbstractArray{T,1}; return_est::Bool=true, return_anal::Bool=false, return_dif::Bool=false, return_bool::Bool=false, dif::Real=1e-6, print_stuff::Bool=true) where {T<:Real}
+function est_dΣdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::Vector{T}; return_est::Bool=true, return_anal::Bool=false, return_dif::Bool=false, return_bool::Bool=false, dif::Real=1e-6, print_stuff::Bool=true) where {T<:Real}
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
 
     if print_stuff
         println()
-        println("est_dKdθ: Check that our analytical dKdθ are close to numerical estimates")
+        println("est_dΣdθ: Check that our analytical dΣdθ are close to numerical estimates")
         println("hyperparameters: ", total_hyperparameters)
     end
 
@@ -19,50 +19,50 @@ function est_dKdθ(prob_def::Jones_problem_definition, kernel_hyperparameters::A
     return_vec = []
     coeff_orders = coefficient_orders(prob_def.n_out, prob_def.n_dif, a=prob_def.a0)
 
-    # construct estimated dKdθs
+    # construct estimated dΣdθs
     if return_est || return_dif || return_bool
         val = covariance(prob_def, total_hyperparameters)
-        est_dKdθs = zeros(length(total_hyperparameters), prob_def.n_out * length(x), prob_def.n_out * length(x))
+        est_dΣdθs = zeros(length(total_hyperparameters), prob_def.n_out * length(x), prob_def.n_out * length(x))
         for i in 1:length(total_hyperparameters)
             if total_hyperparameters[i]!=0
                 hold = copy(total_hyperparameters)
                 hold[i] += dif
-                est_dKdθs[i, :, :] =  (covariance(prob_def, hold) - val) / dif
+                est_dΣdθs[i, :, :] =  (covariance(prob_def, hold) - val) / dif
             end
         end
-        if return_est; append!(return_vec, [est_dKdθs]) end
+        if return_est; append!(return_vec, [est_dΣdθs]) end
     end
 
-    # construct analytical dKdθs
+    # construct analytical dΣdθs
     if return_anal || return_dif || return_bool
-        anal_dKdθs = zeros(length(total_hyperparameters), prob_def.n_out * length(x), prob_def.n_out * length(x))
+        anal_dΣdθs = zeros(length(total_hyperparameters), prob_def.n_out * length(x), prob_def.n_out * length(x))
         for i in 1:length(total_hyperparameters)
-            anal_dKdθs[i, :, :] =  covariance(prob_def, total_hyperparameters; dKdθs_total=[i])
+            anal_dΣdθs[i, :, :] =  covariance(prob_def, total_hyperparameters; dΣdθs_total=[i])
         end
-        if return_anal; append!(return_vec, [anal_dKdθs]) end
+        if return_anal; append!(return_vec, [anal_dΣdθs]) end
     end
 
     if return_dif || return_bool
-        difs = est_dKdθs - anal_dKdθs
+        difs = est_dΣdθs - anal_dΣdθs
         append!(return_vec, [difs])
     end
 
-    # find whether the analytical and estimated dKdθs are approximately the same
+    # find whether the analytical and estimated dΣdθs are approximately the same
     if return_bool
         no_differences = true
         min_thres = 5e-3
         max_val = 0
         for ind in 1:length(total_hyperparameters)
-            est = est_dKdθs[ind,:,:]
+            est = est_dΣdθs[ind,:,:]
             est[est .== 0] .= 1e-8
             val = mean(abs.(difs[ind,:,:] ./ est))
             max_val = maximum([max_val, val])
             if val>min_thres
                 no_differences = false
-                if print_stuff; println("dK/dθ$ind has a average ratioed difference of: ", val) end
+                if print_stuff; println("dΣ/dθ$ind has a average ratioed difference of: ", val) end
             end
         end
-        if print_stuff; println("Maximum average dK/dθ ratioed difference of: ", max_val) end
+        if print_stuff; println("Maximum average dΣ/dθ ratioed difference of: ", max_val) end
         return no_differences
     end
 
@@ -86,7 +86,7 @@ Returns:
 vector: An estimate of the gradient
 
 """
-function est_grad(prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T,1}; dif::Real=1e-4) where {T<:Real}
+function est_grad(prob_def::Jones_problem_definition, total_hyperparameters::Vector{T}; dif::Real=1e-4) where {T<:Real}
 
     # original value
     val = nlogL_Jones(prob_def, total_hyperparameters)
@@ -121,7 +121,7 @@ Returns:
 bool: Whether or not every part of the analytical and numerical gradients match
 
 """
-function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::AbstractArray{T,1}; dif::Real=1e-4, print_stuff::Bool=true) where {T<:Real}
+function test_grad(prob_def::Jones_problem_definition, kernel_hyperparameters::Vector{T}; dif::Real=1e-4, print_stuff::Bool=true) where {T<:Real}
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
     G = ∇nlogL_Jones(prob_def, total_hyperparameters)
@@ -163,7 +163,7 @@ Returns:
 matrix: An estimate of the hessian
 
 """
-function est_hess(prob_def::Jones_problem_definition, total_hyperparameters::AbstractArray{T,1}; dif::Real=1e-4) where {T<:Real}
+function est_hess(prob_def::Jones_problem_definition, total_hyperparameters::Vector{T}; dif::Real=1e-4) where {T<:Real}
 
     # original value
     val = ∇nlogL_Jones(prob_def, total_hyperparameters)
@@ -198,7 +198,7 @@ Returns:
 bool: Whether or not every part of the analytical and numerical Hessians match
 
 """
-function test_hess(prob_def::Jones_problem_definition, kernel_hyperparameters::AbstractArray{T,1}; dif::Real=1e-4, print_stuff::Bool=true) where {T<:Real}
+function test_hess(prob_def::Jones_problem_definition, kernel_hyperparameters::Vector{T}; dif::Real=1e-4, print_stuff::Bool=true) where {T<:Real}
 
     total_hyperparameters = append!(collect(Iterators.flatten(prob_def.a0)), kernel_hyperparameters)
     H = ∇∇nlogL_Jones(prob_def, total_hyperparameters)
