@@ -11,13 +11,13 @@ if length(ARGS)>0
     kernel_name = kernel_names[user_input]
     @load "jld2_files/problem_def_full_base.jld2" problem_def_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
+    problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
 else
     user_input = 1
     kernel_name = kernel_names[user_input]
     @load "jld2_files/problem_def_sample_base.jld2" problem_def_base normals
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-    problem_definition = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
+    problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
 end
 
 @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_params

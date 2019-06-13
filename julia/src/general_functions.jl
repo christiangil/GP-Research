@@ -26,12 +26,11 @@ function symmetric_A(A::Union{Matrix{T},Symmetric{T,Matrix{T}}}; ignore_asymmetr
         if max_dif == zero(max_dif)
             A = Symmetric(A)
 
-    elseif (max_dif < thres) || ignore_asymmetry
+        elseif (max_dif < thres) || ignore_asymmetry
             # return the symmetrized version of the matrix
             A = symmetrize_A(A)
         else
             println("Array dimensions match, but the max dif ($max_dif) is greater than the threshold ($thres)")
-            println(max_dif)
             chol = false
         end
     else
@@ -265,7 +264,7 @@ end
 powers_of_negative_one(power::Integer) = iseven(power) ? 1 : -1
 
 
-"Return the passed vector, removing all zero entries"
+"Return the a version of the passed vector after removing all zero entries"
 remove_zeros(V::Vector{T} where T<:Real) = V[findall(!iszero, V)]
 
 

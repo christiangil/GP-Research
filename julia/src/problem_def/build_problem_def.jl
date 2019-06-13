@@ -21,7 +21,7 @@ n_out = 3
 # how many differentiated versions of the original GP you will use
 n_dif = 3
 
-function build_problem_definition(inds, save_str)
+function init_problem_definition(inds, save_str)
     amount_of_measurements = length(inds)
     total_amount_of_measurements = amount_of_measurements * n_out
 
@@ -49,16 +49,16 @@ function build_problem_definition(inds, save_str)
     a0 = zeros(n_out, n_dif)
     a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0  #  /= 20
 
-    problem_def_base = build_problem_definition(n_dif, n_out, x_obs, x_obs_units, a0; y_obs=y_obs, y_obs_units=y_obs_units, normals=normals, noise=measurement_noise)
+    problem_def_base = init_problem_definition(n_dif, n_out, x_obs, x_obs_units, a0; y_obs=y_obs, y_obs_units=y_obs_units, normals=normals, noise=measurement_noise)
     @save "../../jld2_files/" * hdf5_filename * "_problem_def_" * save_str * "_base.jld2" problem_def_base
 
     kernel_function, num_kernel_hyperparameters = include("../kernels/quasi_periodic_kernel.jl")
-    problem_def = build_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
+    problem_def = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
     @save "../../jld2_files/" * hdf5_filename * "_problem_def_" * save_str * ".jld2" problem_def
 end
 
 inds = collect(1:size(noisy_scores, 2))
-build_problem_definition(inds, "full")
-build_problem_definition(sort(sample(inds, 70; replace=false)), "sample")
+init_problem_definition(inds, "full")
+init_problem_definition(sort(sample(inds, 70; replace=false)), "sample")
 
 cd(old_dir)

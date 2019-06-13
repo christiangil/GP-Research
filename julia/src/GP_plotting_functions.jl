@@ -115,6 +115,6 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
 
     end
 
-    PyPlot.close_figs()
+    PyPlot.close("all")
 
 end

@@ -95,7 +95,8 @@ end
     amount_of_samp_points = 50
     true_coeffs = rand(3)
     x_samp = 5 .* pi .* sort(rand(amount_of_samp_points))
-    fake_data = true_coeffs[1] .* cos.(x_samp) .+ true_coeffs[2] .* sin.(x_samp) .+ true_coeffs[3]
+    fake_data = kepler_rv_circ(x_samp, 2 * π, true_coeffs)
+    # fake_data = true_coeffs[1] .* cos.(x_samp) .+ true_coeffs[2] .* sin.(x_samp) .+ true_coeffs[3]
     noise_mag =  0.01 * maximum(fake_data)
     noise_vect = noise_mag .* randn(amount_of_samp_points)
     fake_data += noise_vect

@@ -50,17 +50,16 @@ end
 "save current PyPlot figure and close all figures"
 function save_PyPlot_fig(filename::AbstractString)
     savefig(filename)
-    PyPlot.close_figs()
+    PyPlot.close("all")
 end
 
 
-function plot_im(A; file::AbstractString="")
-    init_plot(figsize=(9,9))
+function plot_im(A; file::AbstractString="", figsize=(9,9))
+    init_plot(figsize=figsize)
     fig = imshow(A[:,:], origin="lower")
     colorbar()
     # title("Heatmap")
     if file != ""; save_PyPlot_fig(file) end
-    PyPlot.close_figs()
 end
 
 

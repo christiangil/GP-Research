@@ -2,7 +2,7 @@
 using SpecialFunctions
 using LinearAlgebra
 using Test
-using Memoize
+# using Memoize
 using SharedArrays
 using Distributed
 using JLD2, FileIO
@@ -83,7 +83,7 @@ end
 
 
 "Ensure that Jones_problem_definition_base is constructed correctly"
-function build_problem_definition(
+function init_problem_definition(
     n_dif::Integer,
     n_out::Integer,
     x_obs::Vector{T1},
@@ -102,7 +102,7 @@ function build_problem_definition(
 end
 
 "Calculate the coeffficient orders for Jones_problem_definition_base construction if they weren't passed"
-function build_problem_definition(
+function init_problem_definition(
     n_dif::Integer,
     n_out::Integer,
     x_obs::Vector{T},
@@ -115,11 +115,11 @@ function build_problem_definition(
     ) where {T<:Real}
 
     coeff_orders, coeff_coeffs = coefficient_orders(n_out, n_dif, a=a0)
-    return build_problem_definition(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, normals, a0, coeff_orders, coeff_coeffs)
+    return init_problem_definition(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, normals, a0, coeff_orders, coeff_coeffs)
 end
 
 "Construct Jones_problem_definition by adding kernel information to Jones_problem_definition_base"
-function build_problem_definition(
+function init_problem_definition(
     kernel_func::Function,
     num_kernel_hyperparameters::Integer,
     prob_def_base::Jones_problem_definition_base)
@@ -211,8 +211,7 @@ function covariance!(
         for i in 1:x1_length
             Σ[i, i:end] = kernline[1:(x1_length + 1 - i)]
         end
-        Σ = Symmetric(Σ)
-        return Σ
+        return Symmetric(Σ)
     else
         covariance!(Σ, kernel_func, x1list, x2list, kernel_hyperparameters, dorder, symmetric, dΣdθs_kernel, same_x, equal_spacing)
     end
@@ -234,6 +233,8 @@ function covariance!(
     x1_length = length(x1list)
     x2_length = length(x2list)
 
+    @assert size(Σ) == (x1_length, x2_length)
+
     if same_x && symmetric
         sendto(workers(), kernel_func=kernel_func, kernel_hyperparameters=kernel_hyperparameters, x1list=x1list, dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
         @sync @distributed for i in 1:length(x1list)
@@ -241,7 +242,7 @@ function covariance!(
                 if i <= j; Σ[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x1list[j], dorder=dorder, dΣdθs_kernel=dΣdθs_kernel) end
             end
         end
-        Σ = Symmetric(Σ)
+        return Symmetric(Σ)
     else
         sendto(workers(), kernel_func=kernel_func, kernel_hyperparameters=kernel_hyperparameters, x1list=x1list, x2list=x2list, dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
         @sync @distributed for i in 1:length(x1list)
@@ -249,8 +250,8 @@ function covariance!(
                 Σ[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x2list[j], dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
             end
         end
+        return Σ
     end
-    return Σ
 end
 
 function covariance!(
@@ -269,21 +270,23 @@ function covariance!(
     x1_length = length(x1list)
     x2_length = length(x2list)
 
+    @assert size(Σ) == (x1_length, x2_length)
+
     if same_x && symmetric
         for i in 1:length(x1list)
             for j in 1:length(x1list)
                 if i <= j; Σ[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x1list[j], dorder=dorder, dΣdθs_kernel=dΣdθs_kernel) end
             end
         end
-        Σ = Symmetric(Σ)
+        return Symmetric(Σ)
     else
         for i in 1:length(x1list)
             for j in 1:length(x2list)
                 Σ[i, j] = kernel(kernel_func, kernel_hyperparameters, x1list[i], x2list[j], dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
             end
         end
+        return Σ
     end
-    return Σ
 end
 
 
@@ -297,15 +300,20 @@ function covariance(
     dΣdθs_kernel::Vector{T2}=Int64[]
     ) where {T1<:Real, T2<:Integer}
 
-    Σ_share = SharedArray{Float64}(length(x1list), length(x2list))
-    # Σ_share = zeros(length(x1list), length(x2list))
-    return covariance!(Σ_share, kernel_func, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=symmetric, dΣdθs_kernel=dΣdθs_kernel)
+    if nworkers()>1
+        return covariance!(SharedArray{Float64}(length(x1list), length(x2list)), kernel_func, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=symmetric, dΣdθs_kernel=dΣdθs_kernel)
+    else
+        return covariance!(zeros(length(x1list), length(x2list)), kernel_func, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=symmetric, dΣdθs_kernel=dΣdθs_kernel)
+    end
+
 end
 
 
-# Calculating the covariance between all outputs for a combination of dependent GPs
-# written so that the intermediate Σ's don't have to be calculated over and over again
-@memoize function covariance(
+"""
+Calculating the covariance between all outputs for a combination of dependent GPs
+written so that the intermediate Σ's don't have to be calculated over and over again
+"""
+function covariance(
     prob_def::Jones_problem_definition,
     x1list::Vector{<:Real},
     x2list::Vector{<:Real},
@@ -323,14 +331,18 @@ end
     kernel_hyperparameters = total_hyperparameters[(num_coefficients + 1):end]
     # println(length(kernel_hyperparameters))
 
-    # calculating the total size of the multi-output covariance matrix
     x1_length = length(x1list)
     x2_length = length(x2list)
-    Σ = zeros((n_out * x1_length, n_out * x2_length))
+
+    if nworkers()>1
+        holder = SharedArray{Float64}(length(x1list), length(x2list))
+    else
+        holder = zeros(length(x1list), length(x2list))
+    end
 
     # only calculating each sub-matrix once and using the fact that they should
     # be basically the same if the kernel has been differentiated the same amount of times
-    A_list = Vector{AbstractArray{T,2} where {T<:Real}}(undef, 2 * n_dif - 1)
+    A_list = Vector{AbstractArray{<:Real,2}}(undef, 2 * n_dif - 1)
     for i in 0:(2 * n_dif - 2)
 
         # CHANGE THIS TO MAKE MORE SENSE WITH NEW KERNEL SCHEME
@@ -338,12 +350,19 @@ end
         dorder = [rem(i - 1, 2) + 1, 2 * div(i - 1, 2)]
 
         # things that have been differentiated an even amount of times are symmetric about t1-t2==0
-        iseven(i) ? A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dΣdθs_kernel=dΣdθs_kernel) : A_list[i + 1] = covariance(prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
+        if iseven(i)
+            A_list[i + 1] = covariance!(holder, prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dΣdθs_kernel=dΣdθs_kernel)
+        else
+            A_list[i + 1] = covariance!(holder, prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
+        end
 
     end
 
     # assembling the coefficient matrix
     a = reshape(total_hyperparameters[1:num_coefficients], (n_out, n_dif))
+
+    # initializing the multi-output covariance matrix
+    Σ = zeros((n_out * x1_length, n_out * x2_length))
 
     coeff_orders = copy(prob_def.coeff_orders)
     coeff_coeffs = copy(prob_def.coeff_coeffs)
@@ -355,6 +374,7 @@ end
                     for l in 1:n_dif
                         # if the coefficient for the Jones coefficients is non-zero
                         if coeff_coeffs[i, j, k, l] != 0
+                            # make it negative or not based on how many times it has been differentiated in the x1 direction
                             A_mat_coeff = coeff_coeffs[i, j, k, l] * powers_of_negative_one(l + 1)
                             for m in 1:n_out
                                 for n in 1:n_dif
@@ -362,7 +382,6 @@ end
                                 end
                             end
                             # add the properly negative differentiated A matrix from the list
-                            # make it negative or not based on how many times it has been differentiated in the x1 direction
                             Σ[((i - 1) * x1_length + 1):(i * x1_length),
                                 ((j - 1) * x2_length + 1):(j * x2_length)] +=
                                 A_mat_coeff * A_list[k + l - 1]
@@ -408,6 +427,7 @@ function Σ_observations(
     Σ_obs = covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters)
     return symmetric_A(Σ_obs + Diagonal(measurement_noise); ignore_asymmetry=ignore_asymmetry, chol=true)
 end
+
 
 "adding measurement noise to Σ_obs"
 function Σ_observations(
@@ -736,6 +756,10 @@ function dnlogLdθ(
 end
 
 
+"Returns gradient of nlogL"
+∇nlogL(y_obs::Vector{T}, α::Vector{T}, βs::Vector{Matrix{T}}) where {T<:Real} = [dnlogLdθ(y_obs, α, β) for β in βs]
+
+
 """
 Second partial derivative of the GP negative log marginal likelihood.
 Calculated with help from rules found on page 7 of the matrix cookbook
@@ -778,20 +802,60 @@ function d2nlogLdθ(
 end
 
 
-# "Calculates the quantities shared by the nlogL and ∇nlogL calculations"
-# can't use docstrings with @memoize macro :(
-@memoize function calculate_shared_nlogL_Jones(
+struct nlogL_Jones_matrix_workspace{T<:Real}
+    nlogL_hyperparameters::Vector{T}
+    Σ_obs::Cholesky{T,Matrix{T}}
+    y_obs::Vector{T}
+    α::Vector{T}
+    ∇nlogL_hyperparameters::Vector{T}
+    βs::Vector{Matrix{T}}
+end
+
+
+# "Ensure that the passed matrix workspace parameters are what we expect them to be"
+# function check_matrix_workspace(
+#     nlogL_hyperparameters::Vector{T}
+#     Σ_obs::Cholesky{T,Matrix{T}}
+#     y_obs::Vector{T}
+#     α::Vector{T}
+#     ∇nlogL_hyperparameters::Vector{T}
+#     βs::Vector{Matrix{T}}
+#     ) where {T<:Real}
+#
+#     @assert length(y_obs) == length(α) == size(Σ_obs, 1) == size(Σ_obs, 2) = size(βs[1], 1) == size(βs[1], 2)
+#     @assert length(nlogL_hyperparameters) == length(∇nlogL_hyperparameters)
+#     @assert length(findall(!iszero, nlogL_hyperparameters)) == length(findall(!iszero, ∇nlogL_hyperparameters)) == size(βs, 1)
+# end
+
+
+function init_nlogL_Jones_matrix_workspace(
+    prob_def::Jones_problem_definition,
+    total_hyperparameters::Vector{<:Real})
+
+    total_hyper = reconstruct_total_hyperparameters(prob_def, total_hyperparameters)
+    Σ_obs = Σ_observations(prob_def, total_hyper; ignore_asymmetry=true)
+    return nlogL_Jones_matrix_workspace(
+        total_hyper,
+        Σ_obs,
+        prob_def.y_obs,
+        Σ_obs \ prob_def.y_obs,
+        total_hyper,
+        [Σ_obs \ covariance(prob_def, total_hyper; dΣdθs_total=[i]) for i in findall(!iszero, total_hyper)])
+end
+
+
+"Calculates the quantities shared by the nlogL and ∇nlogL calculations"
+function calculate_shared_nlogL_Jones(
     prob_def::Jones_problem_definition,
     non_zero_hyperparameters::Vector{<:Real};
-    y_obs::Vector{<:Real}=prob_def.y_obs,
-    Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
+    Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters); ignore_asymmetry=true),
     P::Union{Real, Quantity}=0)
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
 
     if P!=0
-        y_obs = remove_kepler(y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), Σ_obs)
+        y_obs = remove_kepler(prob_def.y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), Σ_obs)
     end
 
     α = Σ_obs \ y_obs
@@ -801,16 +865,45 @@ end
 end
 
 
-# "Calculates the quantities shared by the ∇nlogL and ∇∇nlogL calculations"
-# can't use docstrings with @memoize macro :(
-@memoize function calculate_shared_∇nlogL_Jones(
+function calculate_shared_nlogL_Jones!(
+    workspace::nlogL_Jones_matrix_workspace,
     prob_def::Jones_problem_definition,
     non_zero_hyperparameters::Vector{<:Real};
-    y_obs::Vector{<:Real}=prob_def.y_obs,
+    P::Union{Real, Quantity}=0)
+
+    # this allows us to prevent the optimizer from seeing the constant zero coefficients
+    total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
+
+    recalc_α = false
+
+    if !isapprox(workspace.nlogL_hyperparameters, total_hyperparameters)
+        workspace.nlogL_hyperparameters[:] = total_hyperparameters
+        workspace.Σ_obs = Σ_observations(prob_def, workspace.nlogL_hyperparameters; ignore_asymmetry=true)
+        recalc_α = true
+    end
+
+    P != 0 ? y_obs = remove_kepler(prob_def.y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), workspace.Σ_obs) : y_obs = copy(prob_def.y_obs)
+
+    println(y_obs)
+
+    if !isapprox(workspace.y_obs, y_obs)
+        workspace.y_obs[:] = y_obs
+        recalc_α = true
+    end
+
+    if recalc_α; workspace.α[:] = workspace.Σ_obs \ workspace.y_obs end
+
+end
+
+
+"Calculates the quantities shared by the ∇nlogL and ∇∇nlogL calculations"
+function calculate_shared_∇nlogL_Jones(
+    prob_def::Jones_problem_definition,
+    non_zero_hyperparameters::Vector{<:Real};
     Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
     P::Union{Real, Quantity}=0)
 
-    total_hyperparameters, Σ_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters; y_obs=y_obs, Σ_obs=Σ_obs, P=P)
+    total_hyperparameters, Σ_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters; Σ_obs=Σ_obs, P=P)
 
     βs = [Σ_obs \ covariance(prob_def, total_hyperparameters; dΣdθs_total=[i]) for i in findall(!iszero, total_hyperparameters)]
 
@@ -819,45 +912,46 @@ end
 end
 
 
-"nlogL for Jones GP"
-function nlogL_Jones(
+function calculate_shared_∇nlogL_Jones!(
+    workspace::nlogL_Jones_matrix_workspace,
     prob_def::Jones_problem_definition,
-    total_hyperparameters::Vector{T},
-    Σ_obs::Cholesky{T,Matrix{T}},
-    y_obs::Vector{T},
-    α::Vector{T}
-    ) where {T<:Real}
+    non_zero_hyperparameters::Vector{<:Real};
+    P::Union{Real, Quantity}=0)
 
-    nlogL_val = nlogL(Σ_obs, y_obs, α)
+    calculate_shared_nlogL_Jones!(workspace, prob_def, non_zero_hyperparameters; P=P)
 
-    return nlogL_val
+    if !isapprox(workspace.∇nlogL_hyperparameters, workspace.nlogL_hyperparameters)
+        workspace.∇nlogL_hyperparameters[:] = workspace.nlogL_hyperparameters
+        workspace.βs[:, :, :] = [workspace.Σ_obs \ covariance(prob_def, workspace.∇nlogL_hyperparameters; dΣdθs_total=[i]) for i in findall(!iszero, workspace.∇nlogL_hyperparameters)]
+    end
 
 end
 
+
+"nlogL for Jones GP"
 function nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
-    y_obs::Vector{T}=prob_def.y_obs,
     Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
     P::Union{Real, Quantity}=0
     ) where {T<:Real}
 
-    total_hyperparameters, Σ_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, remove_zeros(total_hyperparameters), y_obs=y_obs, Σ_obs=Σ_obs, P=P)
-    return nlogL_Jones(prob_def, total_hyperparameters, Σ_obs, y_obs, α)
+    total_hyperparameters, Σ_obs, y_obs, α = calculate_shared_nlogL_Jones(
+        prob_def, remove_zeros(total_hyperparameters); Σ_obs=Σ_obs, P=P)
+    return nlogL(Σ_obs, y_obs, α)
 end
 
 
-"Returns gradient of nlogL for non-zero hyperparameters"
-function ∇nlogL_Jones(
+"nlogL for Jones GP"
+function nlogL_Jones(
+    workspace::nlogL_Jones_matrix_workspace,
     prob_def::Jones_problem_definition,
-    total_hyperparameters::Vector{T},
-    y_obs::Vector{T},
-    α::Vector{T},
-    βs::Vector{Matrix{T}}
+    total_hyperparameters::Vector{T};
+    P::Union{Real, Quantity}=0
     ) where {T<:Real}
 
-    return [dnlogLdθ(y_obs, α, β) for β in βs]
-
+    calculate_shared_nlogL_Jones!(workspace, prob_def, total_hyperparameters; P=P)
+    return nlogL(workspace.Σ_obs, workspace.y_obs, workspace.α)
 end
 
 
@@ -865,15 +959,29 @@ end
 function ∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
-    y_obs::Vector{T}=prob_def.y_obs,
     Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
     P::Union{Real, Quantity}=0
     ) where {T<:Real}
 
     total_hyperparameters, Σ_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
-        prob_def, remove_zeros(total_hyperparameters); y_obs=y_obs, Σ_obs=Σ_obs, P=P)
+        prob_def, remove_zeros(total_hyperparameters); Σ_obs=Σ_obs, P=P)
 
-    return ∇nlogL_Jones(prob_def, total_hyperparameters, y_obs, α, βs)
+    return ∇nlogL(y_obs, α, βs)
+
+end
+
+
+"Returns gradient of nlogL for non-zero hyperparameters"
+function ∇nlogL_Jones(
+    worskpace::nlogL_Jones_matrix_workspace,
+    prob_def::Jones_problem_definition,
+    total_hyperparameters::Vector{T};
+    P::Union{Real, Quantity}=0
+    ) where {T<:Real}
+
+    calculate_shared_∇nlogL_Jones!(workspace, prob_def, total_hyperparameters; P=P)
+
+    return ∇nlogL(workspace.y_obs, workspace.α, workspace.βs)
 
 end
 
@@ -891,10 +999,10 @@ function ∇∇nlogL_Jones(
     non_zero_inds = findall(!iszero, total_hyperparameters)
     H = zeros(length(non_zero_inds), length(non_zero_inds))
 
-    for (k, i) in enumerate(non_zero_inds)
-        for (l, j) in enumerate(non_zero_inds)
-            if k <= l
-                H[k, l] = d2nlogLdθ(y_obs, α, βs[k], βs[l], Σ_obs \ covariance(prob_def, total_hyperparameters; dΣdθs_total=[i, j]))
+    for (i, nzind1) in enumerate(non_zero_inds)
+        for (j, nzind2) in enumerate(non_zero_inds)
+            if i <= j
+                H[i, j] = d2nlogLdθ(y_obs, α, βs[i], βs[j], Σ_obs \ covariance(prob_def, total_hyperparameters; dΣdθs_total=[nzind1, nzind2]))
             end
         end
     end
@@ -908,13 +1016,12 @@ end
 function ∇∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
-    y_obs::Vector{T}=prob_def.y_obs,
     Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
     P::Union{Real, Quantity}=0
     ) where {T<:Real}
 
     total_hyperparameters, Σ_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
-        prob_def, remove_zeros(total_hyperparameters); y_obs=y_obs, Σ_obs=Σ_obs, P=P)
+        prob_def, remove_zeros(total_hyperparameters); Σ_obs=Σ_obs, P=P)
 
     return ∇∇nlogL_Jones(prob_def, total_hyperparameters, Σ_obs, y_obs, α, βs)
 
