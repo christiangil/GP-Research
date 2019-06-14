@@ -292,7 +292,7 @@ float: An estimate of log(∫ exp(-λ g(y)) h(y) dy)
 
 """
 function log_laplace_approximation(
-    H::Matrix{T},
+    H::Union{Symmetric{T,Matrix{T}},Matrix{T}},
     g::Real,
     logh::Real;
     λ = 1

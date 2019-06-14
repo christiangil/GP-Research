@@ -130,6 +130,16 @@ function init_problem_definition(
 end
 
 
+function normalize_problem_definition!(prob_def::Jones_problem_definition)
+    n_obs = length(prob_def.x_obs)
+    for i in 1:prob_def.n_out
+        prob_def.normals[i] = std(prob_def.y_obs[1 + (i - 1) * n_obs : i * n_obs])
+        prob_def.y_obs[1 + (i - 1) * n_obs : i * n_obs] /= prob_def.normals[i]
+        prob_def.noise[1 + (i - 1) * n_obs : i * n_obs] /= prob_def.normals[i]
+    end
+end
+
+
 """
 The basic kernel function evaluator
 t1 and t2 are single time points
@@ -199,8 +209,11 @@ function covariance!(
         equal_spacing = false
     end
 
-    @assert size(Σ, 1) == length(x1list)
-    @assert size(Σ, 2) == length(x2list)
+    x1_length = length(x1list)
+    x2_length = length(x2list)
+
+    @assert size(Σ, 1) == x1_length
+    @assert size(Σ, 2) == x2_length
 
     if equal_spacing && symmetric
         # this section is so fast, it isn't worth parallelizing
@@ -351,9 +364,9 @@ function covariance(
 
         # things that have been differentiated an even amount of times are symmetric about t1-t2==0
         if iseven(i)
-            A_list[i + 1] = covariance!(holder, prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dΣdθs_kernel=dΣdθs_kernel)
+            A_list[i + 1] = copy(covariance!(holder, prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=true, dΣdθs_kernel=dΣdθs_kernel))
         else
-            A_list[i + 1] = covariance!(holder, prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, dΣdθs_kernel=dΣdθs_kernel)
+            A_list[i + 1] = copy(covariance!(holder, prob_def.kernel, x1list, x2list, kernel_hyperparameters; dorder=dorder, dΣdθs_kernel=dΣdθs_kernel))
         end
 
     end
@@ -375,7 +388,7 @@ function covariance(
                         # if the coefficient for the Jones coefficients is non-zero
                         if coeff_coeffs[i, j, k, l] != 0
                             # make it negative or not based on how many times it has been differentiated in the x1 direction
-                            A_mat_coeff = coeff_coeffs[i, j, k, l] * powers_of_negative_one(l + 1)
+                            A_mat_coeff = coeff_coeffs[i, j, k, l] * powers_of_negative_one(l - 1)
                             for m in 1:n_out
                                 for n in 1:n_dif
                                     A_mat_coeff *= a[m, n] ^ coeff_orders[i, j, k, l, m, n]
@@ -424,8 +437,7 @@ function Σ_observations(
     ignore_asymmetry::Bool=false
     ) where {T<:Real}
 
-    Σ_obs = covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters)
-    return symmetric_A(Σ_obs + Diagonal(measurement_noise); ignore_asymmetry=ignore_asymmetry, chol=true)
+    return symmetric_A(covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters) + Diagonal(measurement_noise); ignore_asymmetry=ignore_asymmetry, chol=true)
 end
 
 
@@ -436,8 +448,7 @@ function Σ_observations(
     ignore_asymmetry::Bool=false
     ) where {T<:Real}
 
-    Σ_obs = covariance(prob_def, total_hyperparameters)
-    return symmetric_A(Σ_obs + Diagonal(prob_def.noise); ignore_asymmetry=ignore_asymmetry, chol=true)
+    return symmetric_A(covariance(prob_def, total_hyperparameters) + Diagonal(prob_def.noise); ignore_asymmetry=ignore_asymmetry, chol=true)
 end
 
 
@@ -546,12 +557,11 @@ function GP_posteriors(
     x_samp::Vector{T},
     total_hyperparameters::Vector{T};
     return_Σ::Bool=true,
-    chol::Bool=false,
-    y_obs::Vector{T}=prob_def.y_obs
+    chol::Bool=false
     ) where {T<:Real}
 
     (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp) = covariance_permutations(prob_def, x_samp, total_hyperparameters)
-    return GP_posteriors_from_covariances(y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp; return_Σ=return_Σ, chol=chol)
+    return GP_posteriors_from_covariances(prob_def.y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp; return_Σ=return_Σ, chol=chol)
 end
 
 
@@ -837,9 +847,9 @@ function init_nlogL_Jones_matrix_workspace(
     return nlogL_Jones_matrix_workspace(
         total_hyper,
         Σ_obs,
-        prob_def.y_obs,
+        copy(prob_def.y_obs),
         Σ_obs \ prob_def.y_obs,
-        total_hyper,
+        copy(total_hyper),
         [Σ_obs \ covariance(prob_def, total_hyper; dΣdθs_total=[i]) for i in findall(!iszero, total_hyper)])
 end
 
@@ -854,8 +864,10 @@ function calculate_shared_nlogL_Jones(
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
 
+    y_obs = copy(prob_def.y_obs)
+
     if P!=0
-        y_obs = remove_kepler(prob_def.y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), Σ_obs)
+        y_obs = remove_kepler(y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), Σ_obs)
     end
 
     α = Σ_obs \ y_obs
@@ -878,13 +890,11 @@ function calculate_shared_nlogL_Jones!(
 
     if !isapprox(workspace.nlogL_hyperparameters, total_hyperparameters)
         workspace.nlogL_hyperparameters[:] = total_hyperparameters
-        workspace.Σ_obs = Σ_observations(prob_def, workspace.nlogL_hyperparameters; ignore_asymmetry=true)
+        workspace.Σ_obs.factors[:,:] = Σ_observations(prob_def, total_hyperparameters).factors
         recalc_α = true
     end
 
     P != 0 ? y_obs = remove_kepler(prob_def.y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), workspace.Σ_obs) : y_obs = copy(prob_def.y_obs)
-
-    println(y_obs)
 
     if !isapprox(workspace.y_obs, y_obs)
         workspace.y_obs[:] = y_obs
@@ -922,7 +932,7 @@ function calculate_shared_∇nlogL_Jones!(
 
     if !isapprox(workspace.∇nlogL_hyperparameters, workspace.nlogL_hyperparameters)
         workspace.∇nlogL_hyperparameters[:] = workspace.nlogL_hyperparameters
-        workspace.βs[:, :, :] = [workspace.Σ_obs \ covariance(prob_def, workspace.∇nlogL_hyperparameters; dΣdθs_total=[i]) for i in findall(!iszero, workspace.∇nlogL_hyperparameters)]
+        workspace.βs[:] = [workspace.Σ_obs \ covariance(prob_def, workspace.∇nlogL_hyperparameters; dΣdθs_total=[i]) for i in findall(!iszero, workspace.∇nlogL_hyperparameters)]
     end
 
 end

@@ -28,7 +28,7 @@ function custom_GP_plot(x_samp::Vector{T}, show_curves::Matrix{T}, x_obs::Vector
 end
 
 
-function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::Vector{T}; show::Integer=3, file::AbstractString="", find_post::Bool=true, plot_Σ::Bool=false, plot_Σ_profile::Bool=false, filetype::AbstractString="png", y_obs::Vector{T}=prob_def.y_obs) where {T<:Real}
+function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::Vector{T}; show::Integer=3, file::AbstractString="", find_post::Bool=true, plot_Σ::Bool=false, plot_Σ_profile::Bool=false, filetype::AbstractString="png") where {T<:Real}
 
     x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points))
     amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out
@@ -38,7 +38,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
 
     # calculate mean, σ, and show_curves
     if find_post
-        mean, σ, Σ = GP_posteriors(prob_def, x_samp, total_hyperparameters; y_obs=y_obs)
+        mean, σ, Σ = GP_posteriors(prob_def, x_samp, total_hyperparameters)
         if plot_Σ; plot_im(Σ, file = file * "_K_post." * filetype) end
         L = ridge_chol(Σ).L
         for i in 1:show
@@ -81,7 +81,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
         obs_output_indices = (amount_of_obs * (output - 1) + 1):(amount_of_obs * output)
 
         # geting the y values for the proper output
-        y_o = y_obs[obs_output_indices]
+        y_o = prob_def.y_obs[obs_output_indices]
         show_curves_o = show_curves[:, sample_output_indices]
         σ_o = σ[sample_output_indices]
         mean_o = mean[sample_output_indices]
@@ -102,7 +102,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
 
         if find_post
             # put log likelihood on plot
-            LogL = -nlogL_Jones(prob_def, total_hyperparameters; y_obs=y_obs)
+            LogL = -nlogL_Jones(prob_def, total_hyperparameters)
             text(minimum(prob_def.x_obs), 0.9 * maximum([maximum(y_o), maximum(show_curves_o)]), L"l_{act}(\theta|t,s): " * string(round(LogL)), fontsize=30)
         end
 

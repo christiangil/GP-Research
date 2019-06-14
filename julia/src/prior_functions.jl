@@ -153,7 +153,7 @@ function nlogprior_kernel_hyperparameters!(
 end
 
 function logprior_kernel_hyperparameters!(
-    H::Matrix{T},
+    H::Union{Symmetric{T,Matrix{T}},Matrix{T}},
     n_kern_hyper::Integer,
     total_hyperparameters::Vector{T}
     ) where {T<:Real}
@@ -165,7 +165,7 @@ function logprior_kernel_hyperparameters!(
 end
 
 function nlogprior_kernel_hyperparameters!(
-    H::Matrix{T},
+    H::Union{Symmetric{T,Matrix{T}},Matrix{T}},
     n_kern_hyper::Integer,
     total_hyperparameters::Vector{T}
     ) where {T<:Real}
