@@ -5,13 +5,13 @@ include("../all_functions.jl")
 # using MultivariateStats
 using HDF5
 
-length(ARGS)>0 ? hdf5_loc = parse(String, ARGS[1]) : hdf5_loc = "D:/Christian/Downloads/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.h5"
+length(ARGS)>0 ? hdf5_loc = parse(String, ARGS[1]) : hdf5_loc = "C:/Users/chris/Downloads/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.h5"
 
 hdf5_filename = string(split(hdf5_loc,"/")[end])[1:end-3]
 
 fid = h5open(hdf5_loc, "r")
 
-# objects = names(fid)
+objects = names(fid)
 # println(objects)
 
 @elapsed obs = fid["active"][:, :]

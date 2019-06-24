@@ -4,6 +4,7 @@ using LinearAlgebra
 using Distributed
 using IterativeSolvers
 using Printf  # for formatting print statements
+using Unitful
 
 
 "a generalized version of the built in append!() function"
@@ -303,4 +304,15 @@ function log_laplace_approximation(
 
     return logh - λ * g + 0.5 * (n * log(2 * π / λ) - logdet(H))
 
+end
+
+
+function planck(λÅ::Union{Quantity, Real}, TK::Union{Quantity, Real})
+    λ = convert_and_strip_units(u"m", λÅ)u"m" / 10 ^ 10
+    h = u"h"
+    c = (light_speed)u"m/s"
+    k = u"k"
+    T = convert_and_strip_units(u"K", TK)u"K"
+    # W·sr−1·m−3
+    return strip_units(2 * h * c ^ 2 / λ^5 / (exp(h * c / (λ * k * T)) - 1))
 end

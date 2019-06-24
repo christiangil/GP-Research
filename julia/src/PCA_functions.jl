@@ -107,18 +107,35 @@ function fit_gen_pca_rv_RVSKL(X::Matrix{T}, fixed_comp::Vector{T}; mu::Vector{T}
 end
 
 
-make_noisy_spectra(time_series_spectra::Matrix{T}, NSR::Real) where {T<:Real} = time_series_spectra .* (1 .+ (NSR .* randn(size(time_series_spectra))))
+function make_noisy_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vector{T}; SNR::Real=100, temperature::Real=5700) where {T<:Real}
+	noisy_spectra = zero(time_series_spectra)
+	plancks = planck.(λs, temperature)
+	photons = u"h" * uconvert(u"m / s", (1)u"c") ./ ((λs)u"m" / 10 ^ 10)
+	mask = findall(!iszero, time_series_spectra[:, 1])
+	mu = vec(mean(time_series_spectra, dims=2))
+	noises = sqrt.(strip_units.(plancks .* mu .* photons))
+	norm = mean(noises[mask] ./ mu[mask])
+	ratios = noises / (norm * 100)
+	ratios[mask] ./= mu[mask]  # prevent NaNs from dividing by zero
+	for i in 1:size(time_series_spectra, 2)
+		# noises = sqrt.(strip_units.(plancks .* time_series_spectra[:, i] .* photons))
+		# norm = mean(noises[mask] ./ time_series_spectra[:, i][mask])
+		# ratios = norm * noises ./ time_series_spectra[:, i] ./ SNR
+		noisy_spectra[:, i] = time_series_spectra[:, i] .* (1 .+ (ratios .* randn(length(λs))))
+	end
+	return noisy_spectra
+end
 
 
 """
 Generate a noisy permutation of the data by recalculating PCA components and scores
 after adding a noise-to-signal ratio amount of Gaussian noise to each flux bin
 """
-function noisy_scores_from_spectra(time_series_spectra::Matrix{T}, NSR::Real, M::Matrix{T}) where {T<:Real}
+function noisy_scores_from_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vector{T}, M::Matrix{T}) where {T<:Real}
 	num_components = size(M, 2)
 	num_spectra = size(time_series_spectra, 2)
 	noisy_scores = zeros(num_components, num_spectra)
-	time_series_spectra_tmp = make_noisy_spectra(time_series_spectra, NSR)
+	time_series_spectra_tmp = make_noisy_SOAP_spectra(time_series_spectra, λs)
 	time_series_spectra_tmp .-= vec(mean(time_series_spectra_tmp, dims=2))
 	fixed_comp_norm2 = sum(abs2, view(M, :, 1))
 	for i in 1:num_spectra
@@ -136,13 +153,12 @@ end
 
 
 "bootstrapping for errors in PCA scores. Takes ~28s per bootstrap on my computer"
-function bootstrap_errors(time_series_spectra::Matrix{T}, hdf5_filename::AbstractString; boot_amount::Integer=10) where {T<:Real}
+function bootstrap_SOAP_errors(time_series_spectra::Matrix{T}, λs::Vector{T}, hdf5_filename::AbstractString; boot_amount::Integer=10) where {T<:Real}
 
     @load hdf5_filename * "_rv_data.jld2" M scores
 
 	scores_mean = copy(scores)  # saved to ensure that the scores are paired with the proper rv_data
 
-    NSR = 1e-2
     num_lambda = size(time_series_spectra, 1)
     num_spectra = size(time_series_spectra, 2)
 
@@ -150,9 +166,11 @@ function bootstrap_errors(time_series_spectra::Matrix{T}, hdf5_filename::Abstrac
     scores_tot_new = zeros(boot_amount, num_components, num_spectra)
 
     for k in 1:boot_amount
-        scores = noisy_scores_from_spectra(time_series_spectra, NSR, M)
+        scores = noisy_scores_from_SOAP_spectra(time_series_spectra, λs, M)
         scores_tot_new[k, :, :] = scores
     end
+
+	close(fid)
 
 	save_filename = hdf5_filename * "_bootstrap.jld2"
 

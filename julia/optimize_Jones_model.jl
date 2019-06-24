@@ -29,7 +29,7 @@ else
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
     flux_cb_delay = 3600 / 120
-    grad_norm_thres = 5e0
+    grad_norm_thres = 5e-1
     opt = ADAM(0.2)
 end
 
@@ -43,17 +43,21 @@ prep_parallel_covariance(kernel_name)
 # Adding planet and normalizing scores #
 ########################################
 
-P = (30)u"d"
-e = 0.1
-M0 = 5.57  # 2 * π * rand()
-length(ARGS) > 1 ? K = parse(Int, ARGS[2]) / 10 : K = 2  # m/s
-ω = 3.87  # 2 * π * rand()
+P = (20 + 3 * randn())u"d"
+e = rand() / 5
+M0 = 2 * π * rand()
+length(ARGS) > 1 ? K = parse(Int, ARGS[2]) / 10 : K = 0.5  # m/s
+ω = 2 * π * rand()
 γ = 0
 problem_definition.y_obs[:] = add_kepler_to_Jones_problem_definition(
     problem_definition, P, e, M0, K, ω; γ = γ,
     normalization=problem_definition.normals[1])
 
 normalize_problem_definition!(problem_definition)
+
+mean(problem_definition.noise[1:70])
+mean(problem_definition.noise[71:140])
+mean(problem_definition.noise[141:210])
 
 #####################################
 # Initial hyperparameters and plots #
@@ -268,4 +272,6 @@ K1, e1, M01, ω1, γ1 = fit_linear_kepler(problem_definition.y_obs, problem_defi
 println("\noriginial injected keplerian")
 println("K: $K, e: $e, M0: $M0, ω: $ω, γ: $γ")
 
-println("evidence for Jones + planet model: " * string(log_laplace_approximation(H2, nlogL_val2, logprior_kepler(best_period, e1, M01, K1, ω1, γ1))))
+llH2 = log_laplace_approximation(H2, nlogL_val2, 0)
+println("evidence for Jones + planet model (no prior): " * string(llH2))
+println("evidence for Jones + planet model: " * string(llH2 + logprior_kepler(best_period, e1, M01, K1, ω1, γ1)))

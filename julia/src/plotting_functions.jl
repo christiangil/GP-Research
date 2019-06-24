@@ -72,11 +72,11 @@ function corner_plot(
     input::Vector{<:Real},
     filename::AbstractString;
     steps::Integer=15+1,
-    spread::Real=1/2,
+    min_spread::Real=1/2,
     input_labels::Vector{<:AbstractString}=repeat([L" "],length(input)),
     n::Integer=length(input))
 
-    assert_positive(spread, steps, n)
+    assert_positive(min_spread, steps, n)
     @assert n <= length(input)
     @assert length(input_labels) == n
 
@@ -88,9 +88,12 @@ function corner_plot(
 
             holder = copy(input)
 
+            xspread = max(min_spread, abs(input[k]) / 10)
+            yspread = max(min_spread, abs(input[l]) / 10)
+
             # create function profiles on diagonals
             if k == l
-                x = linspace(input[k] - spread, input[k] + spread, steps)
+                x = linspace(input[k] - xspread, input[k] + xspread, steps)
                 y = zero(x)
                 for i in 1:length(x)
                     holder[k] = x[i]
@@ -99,12 +102,12 @@ function corner_plot(
                 axs[k, k].set_title(input_labels[k], fontsize=10*n)
                 axs[k, k].plot(x, y, linewidth=16/n)
                 axs[k, k].axvline(x=input[k], color="black", linewidth=16/n)
-                if abs(input[k]) < spread; axs[k, k].axvline(x=0, color="grey", linewidth=16/n) end
+                if abs(input[k]) < xspread; axs[k, k].axvline(x=0, color="grey", linewidth=16/n) end
 
             # create function heatmaps elsewhere
             elseif k < l
-                xmin, xmax =  (input[k] - spread, input[k] + spread)
-                ymin, ymax =  (input[l] - spread, input[l] + spread)
+                xmin, xmax =  (input[k] - xspread, input[k] + xspread)
+                ymin, ymax =  (input[l] - yspread, input[l] + yspread)
                 x = linspace(xmin, xmax, steps)
                 y = linspace(ymin, ymax, steps)
                 Z = zeros((steps,steps))
@@ -120,8 +123,13 @@ function corner_plot(
                 axs[l, k].contour(X, Y, Z, colors="k", linewidths=16/n)
                 axs[l, k].imshow(Z, interpolation="bilinear", origin="lower", extent=(xmin, xmax, ymin, ymax))
                 axs[l, k].scatter(input[k], input[l], marker="X", c="k", s=1200/n)
-                if abs(input[k]) < spread; axs[l, k].axvline(x=0, color="grey", linewidth=32/n) end
-                if abs(input[l]) < spread; axs[l, k].axhline(y=0, color="grey", linewidth=32/n) end
+                if abs(input[k]) < xspread; axs[l, k].axvline(x=0, color="grey", linewidth=32/n) end
+                if abs(input[l]) < yspread; axs[l, k].axhline(y=0, color="grey", linewidth=32/n) end
+
+                # setting image aspect ratio to make it square
+                # xleft, xright = axs[l, k].get_xlim()
+                # ybottom, ytop = axs[l, k].get_ylim()
+                axs[l, k].set_aspect(xspread / yspread)
 
             # remove plots above the diagonal
             else
