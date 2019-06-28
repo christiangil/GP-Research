@@ -11,8 +11,7 @@ hdf5_filename = string(split(hdf5_loc,"/")[end])[1:end-3]
 
 fid = h5open(hdf5_loc, "r")
 
-objects = names(fid)
-# println(objects)
+# println(names(fid))
 
 @elapsed obs = fid["active"][:, :]
 

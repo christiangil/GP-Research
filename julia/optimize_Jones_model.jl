@@ -1,6 +1,6 @@
 # adding in custom functions
 # include("src/setup.jl")
-# include("test/runtests.jl")
+include("test/runtests.jl")
 include("src/all_functions.jl")
 
 ###################################
@@ -23,7 +23,7 @@ if length(ARGS)>0
     grad_norm_thres = 5e0
     opt = ADAM(0.1)
 else
-    kernel_name = kernel_names[3]
+    kernel_name = kernel_names[2]
     @load "jld2_files/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11_problem_def_sample_base.jld2" problem_def_base
     # @load "jld2_files/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11_problem_def_full_base.jld2" problem_def_base
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
@@ -55,9 +55,9 @@ problem_definition.y_obs[:] = add_kepler_to_Jones_problem_definition(
 
 normalize_problem_definition!(problem_definition)
 
-mean(problem_definition.noise[1:70])
-mean(problem_definition.noise[71:140])
-mean(problem_definition.noise[141:210])
+# mean(problem_definition.noise[1:70])
+# mean(problem_definition.noise[71:140])
+# mean(problem_definition.noise[141:210])
 
 #####################################
 # Initial hyperparameters and plots #

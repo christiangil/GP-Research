@@ -316,3 +316,28 @@ function planck(λÅ::Union{Quantity, Real}, TK::Union{Quantity, Real})
     # W·sr−1·m−3
     return strip_units(2 * h * c ^ 2 / λ^5 / (exp(h * c / (λ * k * T)) - 1))
 end
+
+
+"""
+trapezoidal integration, shamelessly modified from
+https://github.com/dextorious/NumericalIntegration.jl/blob/master/src/NumericalIntegration.jl
+"""
+function trapz(x::Vector{T}, y::Vector{T}) where {T<:Real}
+    @assert length(x) == length(y) "x and y vectors must be of the same length!"
+    integral = zero(T)
+    # @fastmath @simd for i in 1:(length(y) - 1)
+    @simd for i in 1:(length(y) - 1)
+        @inbounds integral += (x[i+1] - x[i]) * (y[i] + y[i+1])
+    end
+    return integral / 2
+end
+
+
+"Normalize all of the columns (second index number) integrate to the same value"
+function normalize_columns_to_first_integral!(ys::Matrix{T}, x::Vector{T}) where {T<:Real}
+    integrated_first = trapz(x, ys[:, 1])
+    for i in 1:size(ys, 2)
+        ys[:, i] *= integrated_first / trapz(x, ys[:, i])
+    end
+    return ys
+end

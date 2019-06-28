@@ -42,7 +42,7 @@ modified code shamelessly stolen from RvSpectraKitLearn.jl/src/generalized_pca.j
 Compute the PCA component with the largest eigenvalue
 X is data, r is vector of random numbers, s is preallocated memory; r && s  are of same length as each data point
 """
-function compute_pca_component_RVSKL!(X::Matrix{T}, r::Vector{T}, s::Vector{T}; tol::Float64=1e-8, max_it::Int64=20) where {T<:Real}
+function compute_pca_component_RVSKL!(X::Matrix{T}, r::AbstractArray{T, 1}, s::Vector{T}; tol::Float64=1e-8, max_it::Int64=20) where {T<:Real}
 	num_lambda = size(X, 1)
     num_spectra = size(X, 2)
     @assert length(r) == num_lambda
@@ -104,97 +104,6 @@ function fit_gen_pca_rv_RVSKL(X::Matrix{T}, fixed_comp::Vector{T}; mu::Vector{T}
 	rvs = light_speed * scores[1, :]  # c * z
 
 	return (mu, M, scores, fracvar, rvs)
-end
-
-
-function make_noisy_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vector{T}; SNR::Real=100, temperature::Real=5700) where {T<:Real}
-	noisy_spectra = zero(time_series_spectra)
-	plancks = planck.(λs, temperature)
-	photons = u"h" * uconvert(u"m / s", (1)u"c") ./ ((λs)u"m" / 10 ^ 10)
-	mask = findall(!iszero, time_series_spectra[:, 1])
-	mu = vec(mean(time_series_spectra, dims=2))
-	noises = sqrt.(strip_units.(plancks .* mu .* photons))
-	norm = mean(noises[mask] ./ mu[mask])
-	ratios = noises / (norm * 100)
-	ratios[mask] ./= mu[mask]  # prevent NaNs from dividing by zero
-	for i in 1:size(time_series_spectra, 2)
-		# noises = sqrt.(strip_units.(plancks .* time_series_spectra[:, i] .* photons))
-		# norm = mean(noises[mask] ./ time_series_spectra[:, i][mask])
-		# ratios = norm * noises ./ time_series_spectra[:, i] ./ SNR
-		noisy_spectra[:, i] = time_series_spectra[:, i] .* (1 .+ (ratios .* randn(length(λs))))
-	end
-	return noisy_spectra
-end
-
-
-"""
-Generate a noisy permutation of the data by recalculating PCA components and scores
-after adding a noise-to-signal ratio amount of Gaussian noise to each flux bin
-"""
-function noisy_scores_from_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vector{T}, M::Matrix{T}) where {T<:Real}
-	num_components = size(M, 2)
-	num_spectra = size(time_series_spectra, 2)
-	noisy_scores = zeros(num_components, num_spectra)
-	time_series_spectra_tmp = make_noisy_SOAP_spectra(time_series_spectra, λs)
-	time_series_spectra_tmp .-= vec(mean(time_series_spectra_tmp, dims=2))
-	fixed_comp_norm2 = sum(abs2, view(M, :, 1))
-	for i in 1:num_spectra
-		noisy_scores[1, i] = (dot(view(time_series_spectra_tmp, :, i), view(M, :, 1)) / fixed_comp_norm2)  # Normalize differently, so scores are z (i.e., doppler shift)
-		time_series_spectra_tmp[:, i] -= noisy_scores[1, i] * view(M, :, 1)
-	end
-	for j in 2:num_components
-		for i in 1:num_spectra
-			noisy_scores[j, i] = dot(view(time_series_spectra_tmp, :, i), view(M, :, j)) #/sum(abs2,view(M,:,j-1))
-			time_series_spectra_tmp[:, i] .-= noisy_scores[j, i] * view(M, :, j)
-		end
-	end
-	return noisy_scores
-end
-
-
-"bootstrapping for errors in PCA scores. Takes ~28s per bootstrap on my computer"
-function bootstrap_SOAP_errors(time_series_spectra::Matrix{T}, λs::Vector{T}, hdf5_filename::AbstractString; boot_amount::Integer=10) where {T<:Real}
-
-    @load hdf5_filename * "_rv_data.jld2" M scores
-
-	scores_mean = copy(scores)  # saved to ensure that the scores are paired with the proper rv_data
-
-    num_lambda = size(time_series_spectra, 1)
-    num_spectra = size(time_series_spectra, 2)
-
-    num_components = size(M, 2)
-    scores_tot_new = zeros(boot_amount, num_components, num_spectra)
-
-    for k in 1:boot_amount
-        scores = noisy_scores_from_SOAP_spectra(time_series_spectra, λs, M)
-        scores_tot_new[k, :, :] = scores
-    end
-
-	close(fid)
-
-	save_filename = hdf5_filename * "_bootstrap.jld2"
-
-    if isfile(save_filename)
-        @load save_filename scores_tot
-        scores_tot = vcat(scores_tot, scores_tot_new)
-    else
-        scores_tot = scores_tot_new
-    end
-
-    error_ests = zeros(num_components, num_spectra)
-
-	# est_point_error(a) = fit_mle(Normal, a).σ
-    # std_uncorr(a) = std(a; corrected=false)
-
-    for i in 1:num_components
-		# # produce same results
-        # error_ests[i, :] = mapslices(est_point_error, scores_tot[:, i, :]; dims=1)
-        # error_ests[i,:] = mapslices(std_uncorr, scores_tot[:, i, :]; dims=1)
-
-        error_ests[i,:] = mapslices(std, scores_tot[:, i, :]; dims=1)
-    end
-
-    @save save_filename scores_mean scores_tot error_ests
 end
 
 
