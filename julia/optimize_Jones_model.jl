@@ -1,6 +1,6 @@
 # adding in custom functions
 # include("src/setup.jl")
-include("test/runtests.jl")
+# include("test/runtests.jl")
 include("src/all_functions.jl")
 
 ###################################
@@ -23,7 +23,7 @@ if length(ARGS)>0
     grad_norm_thres = 5e0
     opt = ADAM(0.1)
 else
-    kernel_name = kernel_names[2]
+    kernel_name = kernel_names[1]
     @load "jld2_files/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11_problem_def_sample_base.jld2" problem_def_base
     # @load "jld2_files/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11_problem_def_full_base.jld2" problem_def_base
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
@@ -72,8 +72,8 @@ total_hyperparameters = append!(collect(Iterators.flatten(problem_definition.a0)
 # how finely to sample the domain (for plotting)
 amount_of_samp_points = convert(Int64, max(500, round(2 * sqrt(2) * length(problem_definition.x_obs))))
 
-Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/initial_gp", find_post=false)  # , plot_Σ=true, plot_Σ_profile=true)
-Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters; file="figs/gp/$kernel_name/post_gp")  # , plot_Σ=true, plot_Σ_profile=true)
+Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, "figs/gp/$kernel_name/initial_gp"; find_post=false)  # , plot_Σ=true, plot_Σ_profile=true)
+Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, "figs/gp/$kernel_name/post_gp")  # , plot_Σ=true, plot_Σ_profile=true)
 
 #################################
 # Jones model fitting with FLux #
@@ -104,7 +104,7 @@ flux_data = Iterators.repeated((), 2000)  # use at most 500 iterations
 # stop training if our gradient norm gets small enough
 flux_cb = function ()
     training_time_str = Dates.format(now(),"yyyy_mm_dd_HH_MM_SS")
-    # Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)); file="figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp")  # , plot_Σ_profile=true)
+    # Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)), "figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp")  # ; plot_Σ_profile=true)
     grad_norm = norm(g_custom())
     println("Current time: " * training_time_str * " score: ", data(f_custom()), " with gradient norm ", grad_norm)
     println("Current hyperparameters: " * string(data(non_zero_hyper_param)))
@@ -131,7 +131,7 @@ println("ending hyperparameters")
 println(fit1_total_hyperparameters)
 println(nlogL_Jones(problem_definition, fit1_total_hyperparameters), "\n")
 
-Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters; file="figs/gp/$kernel_name/fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
+Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, "figs/gp/$kernel_name/fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
 
 # coeffs = fit1_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
 # coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)
@@ -216,13 +216,13 @@ ps2 = Flux.params(non_zero_hyper_param2)
 f_custom2() = f_custom2(non_zero_hyper_param2)
 
 # setting things for Flux to use
-flux_data = Iterators.repeated((), 500)  # use at most 500 iterations
+flux_data = Iterators.repeated((), 2000)  # use at most 500 iterations
 
 # save plots as we are training every flux_cb_delay seconds
 # stop training if our gradient norm gets small enough
 flux_cb2 = function ()
     training_time_str = Dates.format(now(),"yyyy_mm_dd_HH_MM_SS")
-    # Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)); file="figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp", plot_Σ_profile=true)
+    # Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)), "figs/gp/$kernel_name/training/trained_" * training_time_str * "_gp"; plot_Σ_profile=true)
     grad_norm = norm(g_custom2())
     println("Current time: " * training_time_str * " score: ", data(f_custom2()), " with gradient norm ", grad_norm)
     println("Current hyperparameters: " * string(data(non_zero_hyper_param2)))
@@ -253,7 +253,7 @@ println(nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_perio
 
 hold = copy(problem_definition.y_obs)
 problem_definition.y_obs[:] = remove_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs)
-Jones_line_plots(amount_of_samp_points, problem_definition, fit2_total_hyperparameters; file="figs/gp/$kernel_name/after")
+Jones_line_plots(amount_of_samp_points, problem_definition, fit2_total_hyperparameters, "figs/gp/$kernel_name/after")
 problem_definition.y_obs[:] = hold
 
 ##########################
@@ -271,6 +271,9 @@ println("best fit keplerian")
 K1, e1, M01, ω1, γ1 = fit_linear_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs1; return_params=true, print_params=true)[2:end]
 println("\noriginial injected keplerian")
 println("K: $K, e: $e, M0: $M0, ω: $ω, γ: $γ")
+
+diag(H2)
+nlogL_val2
 
 llH2 = log_laplace_approximation(H2, nlogL_val2, 0)
 println("evidence for Jones + planet model (no prior): " * string(llH2))

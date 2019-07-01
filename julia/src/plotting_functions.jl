@@ -9,7 +9,7 @@ matplotlib.use("Agg")
 
 
 "set axes and tick label font sizes for PyPlot plots"
-function set_font_sizes(ax; axes::Real=30., ticks::Real=24., title::Real=45.)
+function set_font_sizes(ax; axes::Real=30., ticks::Real=24.)
 
     # this doesn't work. set title size at plot creating
     # setp(ax[:title], fontsize=title)
@@ -31,17 +31,19 @@ end
 
 
 "create a nice, large PyPlot with large text sizes (excluding title)"
-function init_plot(;figsize=(16,9))
-    figure(figsize=figsize)
+function init_plot(;figsize=(16,9), hspace::Real=-1)
+    fig = figure(figsize=figsize)
     ax = subplot(111)
     set_font_sizes(ax)
+    if hspace != -1; fig.subplots_adjust(hspace=hspace) end
     return ax
 end
 
 
 "create a nice, large set of PyPlots with large text sizes (excluding title)"
-function init_subplots(;nrows::Integer=1, ncols::Integer=1, sharex::Bool=false, sharey::Bool=false, figsize=(16,16))
+function init_subplots(;nrows::Integer=1, ncols::Integer=1, sharex::Bool=false, sharey::Bool=false, figsize=(16,16), hspace::Real=-1)
     fig, axs = subplots(nrows=nrows, ncols=ncols, sharex=sharex, sharey=sharey, figsize=figsize)
+    if hspace != -1; fig.subplots_adjust(hspace=hspace) end
     for ax in axs; set_font_sizes(ax) end
     return axs
 end

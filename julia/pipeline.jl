@@ -1,4 +1,5 @@
-# errors
+# SOAP spectra conversion pipeline
+
 # include("src/setup.jl")
 include("src/all_functions.jl")
 
@@ -9,8 +10,10 @@ cd(@__DIR__)
 # Importing from SOAP HDF5 file #
 #################################
 
-hdf5_loc = "C:/Users/chris/Downloads/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.h5"
-# hdf5_loc = "D:/Christian/Downloads/res-1000-lambda-3923-6664-0years_1spots_diffrot_id2.h5"
+# hdf5_loc = "C:/Users/chris/Downloads/res-1000-lambda-3923-6664-1years_1584spots_diffrot_id12.h5"
+# hdf5_loc = "D:/Christian/Downloads/res-1000-lambda-3923-6664-1years_1584spots_diffrot_id12.h5"
+length(ARGS)>0 ? id = parse(String, ARGS[1]) : id = "11"
+hdf5_loc = "/gpfs/group/ebf11/default/SOAP_output/Christian_runs/res-1000-1years_full_id$id.h5"
 
 hdf5_filename = string(split(hdf5_loc,"/")[end])[1:end-3]
 fid = h5open(hdf5_loc, "r")
@@ -41,7 +44,7 @@ mu, M, scores, fracvar, rvs = @time fit_gen_pca_rv_RVSKL(obs, doppler_comp, mu=a
 ##########################################
 
 boot_amount = 10
-for i in 1:1
+for i in 1:5
     bootstrap_SOAP_errors(obs, λs, "jld2_files/" * hdf5_filename; boot_amount=boot_amount)
     println("Completed $(i * boot_amount) bootstraps resamples so far")
 end

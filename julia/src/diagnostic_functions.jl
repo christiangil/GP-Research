@@ -223,7 +223,7 @@ function test_hess(prob_def::Jones_problem_definition, kernel_hyperparameters::V
     matches = fill(1, size(H))
     for i in 1:size(H, 1)
         for j in 1:size(H, 2)
-            if !(isapprox(H[i, j], est_H[i, j], rtol=5e-2))
+            if !(isapprox(H[i, j], est_H[i, j], rtol=1e-1))
                 # println("mismatch d2nlogL/dθ" * string(i) * "dθ" * string(j))
                 matches[i, j] = 0
                 no_mismatch = false

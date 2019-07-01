@@ -133,9 +133,11 @@ end
 function normalize_problem_definition!(prob_def::Jones_problem_definition)
     n_obs = length(prob_def.x_obs)
     for i in 1:prob_def.n_out
-        prob_def.normals[i] = std(prob_def.y_obs[1 + (i - 1) * n_obs : i * n_obs])
-        prob_def.y_obs[1 + (i - 1) * n_obs : i * n_obs] /= prob_def.normals[i]
-        prob_def.noise[1 + (i - 1) * n_obs : i * n_obs] /= prob_def.normals[i]
+        inds = 1 + (i - 1) * n_obs : i * n_obs
+        prob_def.y_obs[inds] .-= mean(prob_def.y_obs[inds])
+        prob_def.normals[i] = stdm(prob_def.y_obs[inds], 0)
+        prob_def.y_obs[inds] /= prob_def.normals[i]
+        prob_def.noise[inds] /= prob_def.normals[i]
     end
 end
 
@@ -434,10 +436,13 @@ function Σ_observations(
     x_obs::Vector{T},
     measurement_noise::Vector{T},
     kernel_hyperparameters::Vector{T};
-    ignore_asymmetry::Bool=false
+    ignore_asymmetry::Bool=false,
+    return_both::Bool=false
     ) where {T<:Real}
 
-    return symmetric_A(covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters) + Diagonal(measurement_noise); ignore_asymmetry=ignore_asymmetry, chol=true)
+    Σ = symmetric_A(covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters); ignore_asymmetry=ignore_asymmetry)
+    Σ_obs = symmetric_A(Σ + Diagonal(measurement_noise .* measurement_noise); ignore_asymmetry=ignore_asymmetry, chol=true)
+    return return_both ? (Σ_obs, Σ) : Σ_obs
 end
 
 
@@ -445,10 +450,13 @@ end
 function Σ_observations(
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
-    ignore_asymmetry::Bool=false
+    ignore_asymmetry::Bool=false,
+    return_both::Bool=false
     ) where {T<:Real}
 
-    return symmetric_A(covariance(prob_def, total_hyperparameters) + Diagonal(prob_def.noise); ignore_asymmetry=ignore_asymmetry, chol=true)
+    Σ = symmetric_A(covariance(prob_def, total_hyperparameters); ignore_asymmetry=ignore_asymmetry)
+    Σ_obs = symmetric_A(Σ + Diagonal(prob_def.noise .* prob_def.noise); ignore_asymmetry=ignore_asymmetry, chol=true)
+    return return_both ? (Σ_obs, Σ) : Σ_obs
 end
 
 
@@ -461,6 +469,7 @@ function get_σ(
 
     v = L_obs \ Σ_obs_samp
     return sqrt.(diag_Σ_samp - [dot(v[:, i], v[:, i]) for i in 1:length(diag_Σ_samp)])  # σ
+    # return sqrt.(diag_Σ_samp - diag(Σ_samp_obs * (Σ_obs \ Σ_obs_samp)))  # much slower
 end
 
 function get_σ(
@@ -476,31 +485,81 @@ end
 
 "calcuate all of the different versions of the covariance matrices for measured and sampled points"
 function covariance_permutations(
+    kernel_func::Function,
     x_obs::Vector{T},
     x_samp::Vector{T},
     measurement_noise::Vector{T},
-    kernel_hyperparameters::Vector{T}
+    kernel_hyperparameters::Vector{T};
+    return_both::Bool=false
     ) where {T<:Real}
 
-    Σ_samp = covariance(x_samp, x_samp, kernel_hyperparameters)
-    Σ_obs = Σ_observations(x_obs, measurement_noise, kernel_hyperparameters)
-    Σ_samp_obs = covariance(x_samp, x_obs, kernel_hyperparameters)
+    Σ_samp = covariance(kernel_func, x_samp, x_samp, kernel_hyperparameters)
+    Σ_samp_obs = covariance(kernel_func, x_samp, x_obs, kernel_hyperparameters)
     Σ_obs_samp = transpose(Σ_samp_obs)
-    return Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp
+    if return_both
+        Σ_obs, Σ_obs_raw = Σ_observations(kernel_func, x_obs, measurement_noise, kernel_hyperparameters; return_both=return_both)
+        return Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp, Σ_obs_raw
+    else
+        Σ_obs = Σ_observations(kernel_func, x_obs, measurement_noise, kernel_hyperparameters; return_both=return_both)
+        return Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp
+    end
 end
 
 "calcuate all of the different versions of the covariance matrices for measured and sampled points"
 function covariance_permutations(
     prob_def::Jones_problem_definition,
     x_samp::Vector{T},
-    total_hyperparameters::Vector{T}
+    total_hyperparameters::Vector{T};
+    return_both::Bool=false
     ) where {T<:Real}
 
     Σ_samp = covariance(prob_def, x_samp, x_samp, total_hyperparameters)
-    Σ_obs = Σ_observations(prob_def, total_hyperparameters)
     Σ_samp_obs = covariance(prob_def, x_samp, prob_def.x_obs, total_hyperparameters)
     Σ_obs_samp = transpose(Σ_samp_obs)
-    return Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp
+    if return_both
+        Σ_obs, Σ_obs_raw = Σ_observations(prob_def, total_hyperparameters; return_both=return_both)
+        return Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp, Σ_obs_raw
+    else
+        Σ_obs = Σ_observations(prob_def, total_hyperparameters; return_both=return_both)
+        return Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp
+    end
+end
+
+
+"Condition the GP on data"
+function GP_posteriors_from_covariances(
+    y_obs::Vector{T},
+    Σ_samp::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T}},
+    Σ_obs::Cholesky{T,Matrix{T}},
+    Σ_samp_obs::Union{Symmetric{T,Matrix{T}},Matrix{T}},
+    Σ_obs_samp::Union{Transpose{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T}},
+    Σ_obs_raw::Symmetric{T,Matrix{T}};
+    return_σ::Bool=false,
+    return_Σ::Bool=true,
+    chol::Bool=false,
+    ) where {T<:Real}
+
+    # posterior mean calcuation from RW alg. 2.1
+
+    # these are all equivalent but have different computational costs
+    # α = inv(Σ_obs) * y_obs
+    # α = transpose(L) \ (L \ y_obs)
+    α = Σ_obs \ y_obs
+
+    mean_post = Σ_samp_obs * α
+    mean_post_obs = Σ_obs_raw * α
+
+    # posterior standard deviation calcuation from RW alg. 2.1
+    σ = get_σ(Σ_obs.L, Σ_obs_samp, diag(Σ_samp))
+
+    # posterior covariance calculation is from eq. 2.24 of RW
+    if return_Σ
+        Σ_post = symmetric_A(Σ_samp - (Σ_samp_obs * (Σ_obs \ Σ_obs_samp)), chol=chol)
+        return mean_post, σ, mean_post_obs, Σ_post
+    else
+        return mean_post, σ, mean_post_obs
+    end
+
 end
 
 
@@ -513,7 +572,7 @@ function GP_posteriors_from_covariances(
     Σ_obs_samp::Union{Transpose{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T}};
     return_σ::Bool=false,
     return_Σ::Bool=true,
-    chol::Bool=false
+    chol::Bool=false,
     ) where {T<:Real}
 
     # posterior mean calcuation from RW alg. 2.1
@@ -538,18 +597,26 @@ function GP_posteriors_from_covariances(
 
 end
 
+
 function GP_posteriors(
+    kernel_func::Function,
     x_obs::Vector{T},
     y_obs::Vector{T},
     x_samp::Vector{T},
     measurement_noise::Vector{T},
     total_hyperparameters::Vector{T};
     return_Σ::Bool=true,
-    chol::Bool=false
+    chol::Bool=false,
+    return_mean_obs::Bool=false
     ) where {T<:Real}
 
-    (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp) = covariance_permutations(x_obs, x_samp, measurement_noise, total_hyperparameters)
-    return GP_posteriors_from_covariances(y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp; return_Σ=return_Σ, chol=chol)
+    if return_mean_obs
+        (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp, Σ_obs_raw) = covariance_permutations(kernel_func, x_obs, x_samp, measurement_noise, total_hyperparameters; return_both=return_mean_obs)
+        return GP_posteriors_from_covariances(y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp, Σ_obs_raw; return_Σ=return_Σ, chol=chol)
+    else
+        (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp) = covariance_permutations(kernel_func, x_obs, x_samp, measurement_noise, total_hyperparameters; return_both=return_mean_obs)
+        return GP_posteriors_from_covariances(y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp; return_Σ=return_Σ, chol=chol)
+    end
 end
 
 function GP_posteriors(
@@ -557,11 +624,18 @@ function GP_posteriors(
     x_samp::Vector{T},
     total_hyperparameters::Vector{T};
     return_Σ::Bool=true,
-    chol::Bool=false
+    chol::Bool=false,
+    return_mean_obs::Bool=false
     ) where {T<:Real}
 
-    (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp) = covariance_permutations(prob_def, x_samp, total_hyperparameters)
-    return GP_posteriors_from_covariances(prob_def.y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp; return_Σ=return_Σ, chol=chol)
+    if return_mean_obs
+        (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp, Σ_obs_raw) = covariance_permutations(prob_def, x_samp, total_hyperparameters; return_both=return_mean_obs)
+        return GP_posteriors_from_covariances(prob_def.y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp, Σ_obs_raw; return_Σ=return_Σ, chol=chol)
+    else
+        (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp) = covariance_permutations(prob_def, x_samp, total_hyperparameters; return_both=return_mean_obs)
+        return GP_posteriors_from_covariances(prob_def.y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp; return_Σ=return_Σ, chol=chol)
+    end
+
 end
 
 
