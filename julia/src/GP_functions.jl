@@ -536,7 +536,7 @@ function GP_posteriors_from_covariances(
     Σ_obs_raw::Symmetric{T,Matrix{T}};
     return_σ::Bool=false,
     return_Σ::Bool=true,
-    chol::Bool=false,
+    chol::Bool=false
     ) where {T<:Real}
 
     # posterior mean calcuation from RW alg. 2.1
@@ -572,7 +572,7 @@ function GP_posteriors_from_covariances(
     Σ_obs_samp::Union{Transpose{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T}};
     return_σ::Bool=false,
     return_Σ::Bool=true,
-    chol::Bool=false,
+    chol::Bool=false
     ) where {T<:Real}
 
     # posterior mean calcuation from RW alg. 2.1
@@ -1194,56 +1194,54 @@ function update_optimize_Jones_model_jld2!(
 end
 
 
-function logGP_prior(
-    total_hyperparameters::Vector{T};
-    alpha::Real=1,
-    beta::Real=1
+function initialize_optimize_Jones_model_jld2!(
+    kernel_name::AbstractString,
+    current_params::Vector{T}
     ) where {T<:Real}
 
-    logP = 0
-
-    # adding prior for physical length scales
-    for i in 1:prob_def.n_kern_hyper
-        kernel_length = total_hyperparameters[end + 1 - i]
-        logP += log_inverse_gamma(kernel_length, alpha, beta)
+    current_fit_time = now()
+    if isfile("jld2_files/optimize_Jones_model_$kernel_name.jld2")
+        @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" initial_time total_fit_time current_params
+        @save "jld2_files/optimize_Jones_model_$kernel_name.jld2" initial_time current_fit_time total_fit_time current_params
+    else
+        initial_time = now()
+        total_fit_time = Millisecond(0)
+        @save "jld2_files/optimize_Jones_model_$kernel_name.jld2" initial_time current_fit_time total_fit_time current_params
     end
-
-    return logP
-
+    return current_params
 end
 
-function ∇logGP_prior(
-    total_hyperparameters::Vector{T};
-    alpha::Real=1,
-    beta::Real=1
+
+using DataFrames, CSV
+
+
+function save_nlogLs!(
+    nLogL::T,
+    id::Integer,
+    hyperparameters::Vector{T},
+    kernel_name::String
     ) where {T<:Real}
 
-    ∇logP = zero(total_hyperparameters)
+    file_name = "csv_files/$(kernel_name)_logLs.csv"
 
-    # adding prior for physical length scales
-    for i in 1:prob_def.n_kern_hyper
-        kernel_length = total_hyperparameters[end + 1 - i]
-        ∇logP[end + 1 - i] -= log_inverse_gamma(kernel_length, alpha, beta; d=1)
+    if isfile(file_name)
+
+        df = copy(CSV.read(file_name))
+        df_add = DataFrame(nLogL=nLogL, id=id, date=today())
+        for i in 1:length(hyperparameters)
+            df_add[Symbol("H$i")] = hyperparameters[i]
+        end
+        append!(df, df_add)
+
+    else
+
+        df = DataFrame(nLogL=nLogL, id=id, date=today())
+        for i in 1:length(hyperparameters)
+            df[Symbol("H$i")] = hyperparameters[i]
+        end
+
     end
 
-    return ∇logP
-
-end
-
-function ∇∇logGP_prior(
-    total_hyperparameters::Vector{T};
-    alpha::Real=1,
-    beta::Real=1
-    ) where {T<:Real}
-
-    ∇∇logP = zeros(length(total_hyperparameters), length(total_hyperparameters))
-
-    # adding prior for physical length scales
-    for i in 1:prob_def.n_kern_hyper
-        kernel_length = total_hyperparameters[end + 1 - i]
-        ∇∇logP[end + 1 - i, end + 1 - i] -= log_inverse_gamma(kernel_length, alpha, beta; d=2)
-    end
-
-    return ∇∇logP
+    CSV.write(file_name, df)
 
 end

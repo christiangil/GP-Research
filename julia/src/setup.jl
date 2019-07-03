@@ -13,6 +13,8 @@ using Pkg; using Pkg.API
 # Pkg.add("SymEngine")
 # Pkg.add("Unitful")
 # Pkg.add("UnitfulAstro")
+# Pkg.add("CSV")
+# Pkg.add("DataFrames")
 
 # Pkg.add("CUDAdrv")
 # Pkg.add("CUDAnative")

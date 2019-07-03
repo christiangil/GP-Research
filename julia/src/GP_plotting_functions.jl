@@ -14,8 +14,8 @@ function custom_GP_plot(x_samp::Vector{T}, show_curves::Matrix{T}, x_obs::Vector
 
         ax = init_plot()
 
-        # filling the 5-95th percentile with a transparent orange
-        fill_between(x_samp, mean + 1.96 * σ, mean - 1.96 * σ, alpha=0.5, color="orange")
+        # filling the ±1 σ with a transparent orange
+        fill_between(x_samp, mean + σ, mean - σ, alpha=0.5, color="orange")
 
         plot(x_samp, mean, color="black", zorder=2)
 
@@ -37,8 +37,8 @@ function custom_GP_plot(x_samp::Vector{T}, show_curves::Matrix{T}, x_obs::Vector
         ax2 = subplot2grid((4, 1), (3, 0))
         set_font_sizes(ax2)
 
-        # filling the 5-95th percentile with a transparent orange
-        ax1.fill_between(x_samp, mean + 1.96 * σ, mean - 1.96 * σ, alpha=0.5, color="orange")
+        # filling the ±1 σ with a transparent orange
+        ax1.fill_between(x_samp, mean + σ, mean - σ, alpha=0.5, color="orange")
 
         ax1.plot(x_samp, mean, color="black", zorder=2)
 
@@ -49,9 +49,10 @@ function custom_GP_plot(x_samp::Vector{T}, show_curves::Matrix{T}, x_obs::Vector
         ax1.scatter(x_obs, y_obs, color="black", zorder=2)
         ax1.errorbar(x_obs, y_obs, yerr=[errors';errors'], fmt="o", color="black", zorder=2)
 
-        resids = (y_obs - mean_obs) ./ errors
+        resids = y_obs - mean_obs
         ax2.scatter(x_obs, resids, color="black")
-        # ax2.errorbar(x_obs, resids, yerr=[errors';errors'], fmt="o", color="black")
+        ax2.errorbar(x_obs, resids, yerr=[errors';errors'], fmt="o", color="black")
+        ax2.fill_between(x_samp, σ, -σ, alpha=0.5, color="orange")
         ax2.axhline(y=0, color="black")
 
         return [ax1, ax2]
@@ -60,7 +61,7 @@ function custom_GP_plot(x_samp::Vector{T}, show_curves::Matrix{T}, x_obs::Vector
 end
 
 
-function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::Vector{T}, file::AbstractString; show::Integer=3, find_post::Bool=true, plot_Σ::Bool=false, plot_Σ_profile::Bool=false, filetype::AbstractString="png") where {T<:Real}
+function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::Vector{T}, file::AbstractString; show::Integer=0, find_post::Bool=true, plot_Σ::Bool=false, plot_Σ_profile::Bool=false, filetype::AbstractString="png") where {T<:Real}
 
     x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points))
     amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out
@@ -136,12 +137,14 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
         if find_post
             # put log likelihood on plot
             LogL = -nlogL_Jones(prob_def, total_hyperparameters)
-            axs[1].text(minimum(prob_def.x_obs), 0.9 * maximum([maximum(y_o), maximum(show_curves_o)]), L"l_{act}(\theta|t,s): " * string(round(LogL)), fontsize=30)
+            show > 0 ? max_val = maximum([maximum(y_o + obs_noise_o), maximum(show_curves_o), maximum(mean_o + σ_o)]) : max_val = maximum([maximum(y_o + obs_noise_o), maximum(mean_o + σ_o)])
+            axs[1].text(minimum(prob_def.x_obs), 0.9 * max_val, L"l_{act}(\theta|t,s): " * string(round(LogL)), fontsize=30)
         end
 
         # put kernel lengths on plot
         kernel_lengths = total_hyperparameters[end-prob_def.n_kern_hyper+1:end]
-        axs[1].text(minimum(prob_def.x_obs), 1 * minimum([minimum(y_o), minimum(show_curves_o)]), "Hyperparameters: " * string(kernel_lengths), fontsize=30)
+        show > 0 ? min_val = minimum([minimum(y_o - obs_noise_o), minimum(show_curves_o), minimum(mean_o - σ_o)]) : min_val = minimum([minimum(y_o - obs_noise_o), minimum(mean_o - σ_o)])
+        axs[1].text(minimum(prob_def.x_obs), 1 * min_val, "Hyperparameters: " * string(kernel_lengths), fontsize=30)
         # text(minimum(prob_def.x_obs), 1 *minimum(y_o), "Wavelengths: " * string(kernel_lengths), fontsize=30)
 
         @assert 0<length(axs)<3
