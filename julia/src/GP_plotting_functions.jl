@@ -117,10 +117,17 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
 
         # getting the y values for the proper output
         y_o = prob_def.y_obs[obs_output_indices]
+        obs_noise_o = prob_def.noise[obs_output_indices]
         show_curves_o = show_curves[:, sample_output_indices]
         σ_o = σ[sample_output_indices]
         mean_o = mean[sample_output_indices]
-        obs_noise_o = prob_def.noise[obs_output_indices]
+        if output==1
+            y_o ./= prob_def.normals[output]
+            obs_noise_o ./= prob_def.normals[output]
+            show_curves_o ./= prob_def.normals[output]
+            σ_o ./= prob_def.normals[output]
+            mean_o ./= prob_def.normals[output]
+        end
 
         show_resids ? axs = custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o, mean_obs=mean_obs[obs_output_indices]) : axs = custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o)
 
@@ -128,7 +135,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
             y_str = "RVs (" * string(prob_def.y_obs_units) * ")"
             title_string = "Apparent RVs"
         else
-            y_str = "Scores"
+            y_str = "Normalized scores"
             title_string = "DCPCA Component " * string(output-1)
         end
         axs[1].set_ylabel(y_str)
@@ -138,7 +145,7 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
             # put log likelihood on plot
             LogL = -nlogL_Jones(prob_def, total_hyperparameters)
             show > 0 ? max_val = maximum([maximum(y_o + obs_noise_o), maximum(show_curves_o), maximum(mean_o + σ_o)]) : max_val = maximum([maximum(y_o + obs_noise_o), maximum(mean_o + σ_o)])
-            axs[1].text(minimum(prob_def.x_obs), 0.9 * max_val, L"l_{act}(\theta|t,s): " * string(round(LogL)), fontsize=30)
+            axs[1].text(minimum(prob_def.x_obs), 0.9 * max_val, L"\ell_{act}(\theta|t,s): " * string(convert(Int64, round(LogL))), fontsize=30)
         end
 
         # put kernel lengths on plot

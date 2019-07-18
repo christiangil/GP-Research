@@ -341,3 +341,6 @@ function normalize_columns_to_first_integral!(ys::Matrix{T}, x::Vector{T}) where
     end
     return ys
 end
+
+import SparseArrays: spdiagm
+precond(n::Number) = spdiagm(-1 => -ones(n-1), 0 => 2*ones(n), 1 => -ones(n-1)) * (n+1)

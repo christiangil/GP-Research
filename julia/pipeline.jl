@@ -46,9 +46,9 @@ for i in 1:10
     println("Completed $(i * boot_amount) bootstraps resamples so far")
 end
 
-################################
-# Creating problem definitions #
-################################
-
-init_problem_definition(hdf5_filename)
-init_problem_definition(hdf5_filename; sub_sample=70, save_str="sample")
+# ################################
+# # Creating problem definitions #
+# ################################
+#
+# init_problem_definition(hdf5_filename)
+# init_problem_definition(hdf5_filename; sub_sample=70, save_str="sample")

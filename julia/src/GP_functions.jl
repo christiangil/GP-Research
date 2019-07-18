@@ -1027,7 +1027,7 @@ end
 
 
 "nlogL for Jones GP"
-function nlogL_Jones(
+function nlogL_Jones!(
     workspace::nlogL_Jones_matrix_workspace,
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
@@ -1056,8 +1056,8 @@ end
 
 
 "Returns gradient of nlogL for non-zero hyperparameters"
-function ∇nlogL_Jones(
-    worskpace::nlogL_Jones_matrix_workspace,
+function ∇nlogL_Jones!(
+    workspace::nlogL_Jones_matrix_workspace,
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
     P::Union{Real, Quantity}=0
@@ -1108,6 +1108,21 @@ function ∇∇nlogL_Jones(
         prob_def, remove_zeros(total_hyperparameters); Σ_obs=Σ_obs, P=P)
 
     return ∇∇nlogL_Jones(prob_def, total_hyperparameters, Σ_obs, y_obs, α, βs)
+
+end
+
+
+"Returns gradient of nlogL for non-zero hyperparameters"
+function ∇∇nlogL_Jones!(
+    workspace::nlogL_Jones_matrix_workspace,
+    prob_def::Jones_problem_definition,
+    total_hyperparameters::Vector{T};
+    P::Union{Real, Quantity}=0
+    ) where {T<:Real}
+
+    calculate_shared_∇nlogL_Jones!(workspace, prob_def, total_hyperparameters; P=P)
+
+    return ∇∇nlogL_Jones(prob_def, workspace.nlogL_hyperparameters, workspace.Σ_obs, workspace.y_obs, workspace.α, workspace.βs)
 
 end
 
