@@ -1,4 +1,4 @@
-# these functions are directly related to calculating GP quantities
+# GP_functions.jl
 using SpecialFunctions
 using LinearAlgebra
 using Test
@@ -9,137 +9,6 @@ using JLD2, FileIO
 using Dates
 using Unitful
 using UnitfulAstro
-
-
-"""
-A structure that holds all of the relevant information for constructing the
-model used in the Jones et al. 2017+ paper (https://arxiv.org/pdf/1711.01318.pdf).
-"""
-struct Jones_problem_definition{T1<:Real, T2<:Integer}
-    kernel::Function  # kernel function
-    n_kern_hyper::T2  # amount of hyperparameters for the kernel function
-    n_dif::T2  # amount of times you are differenting the base kernel
-    n_out::T2  # amount of scores you are jointly modelling
-    x_obs::Vector{T1} # the observation times/phases
-    x_obs_units::Unitful.FreeUnits  # the units of x_obs
-    y_obs::Vector{T1}  # the flattened, observed data
-    y_obs_units::Unitful.FreeUnits  # the units of the RV section ogy_obs
-    noise::Vector{T1}  # the measurement noise at all observations
-    normals::Vector{T1}  # the normalization of each section of y_obs
-    a0::Matrix{T1}  # the meta kernel coefficients
-    # The powers that each a0 coefficient
-    # is taken to for each part of the matrix construction
-    # used for constructing differentiated versions of the kernel
-    coeff_orders::AbstractArray{T2,6}
-    coeff_coeffs::AbstractArray{T2,4}
-end
-
-
-"Jones_problem_definition without kernel information"
-struct Jones_problem_definition_base{T1<:Real, T2<:Integer}
-    n_dif::Integer  # amount of times you are differenting the base kernel
-    n_out::Integer  # amount of scores you are jointly modelling
-    x_obs::Vector{T1} # the observation times/phases
-    x_obs_units::Unitful.FreeUnits  # the units of x_bs
-    y_obs::Vector{T1}  # the flattened, observed data
-    y_obs_units::Unitful.FreeUnits  # the units of y_obs
-    noise::Vector{T1}  # the measurement noise at all observations
-    normals::Vector{T1}  # the normalization of each section of y_obs
-    a0::Matrix{T1}  # the meta kernel coefficients
-    # The powers that each a0 coefficient
-    # is taken to for each part of the matrix construction
-    # used for constructing differentiated versions of the kernel
-    coeff_orders::AbstractArray{T2,6}
-    coeff_coeffs::AbstractArray{T2,4}
-end
-
-
-"Ensure that the passed problem definition parameters are what we expect them to be"
-function check_problem_definition(
-    n_dif::Integer,
-    n_out::Integer,
-    x_obs::Vector{T1},
-    x_obs_units::Unitful.FreeUnits,
-    y_obs::Vector{T1},
-    y_obs_units::Unitful.FreeUnits,
-    noise::Vector{T1},
-    normals::Vector{T1},
-    a0::Matrix{T1},
-    coeff_orders::AbstractArray{T2,6},
-    coeff_coeffs::AbstractArray{T2,4}
-    ) where {T1<:Real, T2<:Integer}
-
-    @assert n_dif>0
-    @assert n_out>0
-    @assert dimension(x_obs_units) == dimension(u"s")
-    @assert dimension(y_obs_units) == dimension(u"m / s")
-    @assert (length(x_obs) * n_out) == length(y_obs)
-    @assert length(y_obs) == length(noise)
-    @assert length(normals) == n_out
-    @assert size(a0) == (n_out, n_dif)
-    @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)  # maybe unnecessary due to the fact that we construct it
-    @assert size(coeff_coeffs) == (n_out, n_out, n_dif, n_dif)  # maybe unnecessary due to the fact that we construct it
-end
-
-
-"Ensure that Jones_problem_definition_base is constructed correctly"
-function init_problem_definition(
-    n_dif::Integer,
-    n_out::Integer,
-    x_obs::Vector{T1},
-    x_obs_units::Unitful.FreeUnits,
-    y_obs::Vector{T1},
-    y_obs_units::Unitful.FreeUnits,
-    noise::Vector{T1},
-    normals::Vector{T1},
-    a0::Matrix{T1},
-    coeff_orders::AbstractArray{T2,6},
-    coeff_coeffs::AbstractArray{T2,4},
-    ) where {T1<:Real, T2<:Integer}
-
-    check_problem_definition(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, normals, a0, coeff_orders, coeff_coeffs)
-    return Jones_problem_definition_base(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, normals, a0, coeff_orders, coeff_coeffs)
-end
-
-"Calculate the coeffficient orders for Jones_problem_definition_base construction if they weren't passed"
-function init_problem_definition(
-    n_dif::Integer,
-    n_out::Integer,
-    x_obs::Vector{T},
-    x_obs_units::Unitful.FreeUnits,
-    a0::Matrix{T};
-    y_obs::Vector{T}=zeros(length(x_obs) * n_out),
-    y_obs_units::Unitful.FreeUnits=u"m / s",
-    noise::Vector{T}=zeros(length(x_obs) * n_out),
-    normals::Vector{T}=ones(n_out)
-    ) where {T<:Real}
-
-    coeff_orders, coeff_coeffs = coefficient_orders(n_out, n_dif, a=a0)
-    return init_problem_definition(n_dif, n_out, x_obs, x_obs_units, y_obs, y_obs_units, noise, normals, a0, coeff_orders, coeff_coeffs)
-end
-
-"Construct Jones_problem_definition by adding kernel information to Jones_problem_definition_base"
-function init_problem_definition(
-    kernel_func::Function,
-    num_kernel_hyperparameters::Integer,
-    prob_def_base::Jones_problem_definition_base)
-
-    @assert isfinite(kernel_func(ones(num_kernel_hyperparameters), randn(); dorder=zeros(Int64, 2 + num_kernel_hyperparameters)))  # make sure the kernel is valid by testing a sample input
-    check_problem_definition(prob_def_base.n_dif, prob_def_base.n_out, prob_def_base.x_obs, prob_def_base.x_obs_units, prob_def_base.y_obs, prob_def_base.y_obs_units, prob_def_base.noise, prob_def_base.normals, prob_def_base.a0, prob_def_base.coeff_orders, prob_def_base.coeff_coeffs)  # might be unnecessary
-    return Jones_problem_definition(kernel_func, num_kernel_hyperparameters, prob_def_base.n_dif, prob_def_base.n_out, prob_def_base.x_obs, prob_def_base.x_obs_units, prob_def_base.y_obs, prob_def_base.y_obs_units, prob_def_base.noise, prob_def_base.normals, prob_def_base.a0, prob_def_base.coeff_orders, prob_def_base.coeff_coeffs)
-end
-
-
-function normalize_problem_definition!(prob_def::Jones_problem_definition)
-    n_obs = length(prob_def.x_obs)
-    for i in 1:prob_def.n_out
-        inds = 1 + (i - 1) * n_obs : i * n_obs
-        prob_def.y_obs[inds] .-= mean(prob_def.y_obs[inds])
-        prob_def.normals[i] = stdm(prob_def.y_obs[inds], 0)
-        prob_def.y_obs[inds] /= prob_def.normals[i]
-        prob_def.noise[inds] /= prob_def.normals[i]
-    end
-end
 
 
 """
@@ -320,7 +189,7 @@ function covariance(
     else
         return covariance!(zeros(length(x1list), length(x2list)), kernel_func, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=symmetric, dΣdθs_kernel=dΣdθs_kernel)
     end
-
+    # return covariance!(zeros(length(x1list), length(x2list)), kernel_func, x1list, x2list, kernel_hyperparameters; dorder=dorder, symmetric=symmetric, dΣdθs_kernel=dΣdθs_kernel)
 end
 
 
@@ -1163,15 +1032,13 @@ end
 
 """
 Make it easy to run the covariance calculations on many processors
-Automatically adds as many workers as there are CPU threads minus 2 if none are
-active and no number of procs to add is given
+Makes sure every worker has access to kernel function
 """
 function prep_parallel_covariance(
     kernel_name::AbstractString;
     add_procs::Integer=0)
 
-    auto_addprocs(;add_procs=add_procs)
-    @everywhere include("src/base_functions.jl")
+    prep_parallel(; add_procs=add_procs)
     sendto(workers(), kernel_name=kernel_name)
     @everywhere include_kernel(kernel_name)
 end
@@ -1232,7 +1099,8 @@ using DataFrames, CSV
 
 function save_nlogLs!(
     nLogL::T,
-    id::Integer,
+    sim_id::Integer,
+    seed::Integer,
     hyperparameters::Vector{T},
     kernel_name::String
     ) where {T<:Real}
@@ -1242,7 +1110,7 @@ function save_nlogLs!(
     if isfile(file_name)
 
         df = copy(CSV.read(file_name))
-        df_add = DataFrame(nLogL=nLogL, id=id, date=today())
+        df_add = DataFrame(nLogL=nLogL, sim_id=sim_id, seed=seed, date=today())
         for i in 1:length(hyperparameters)
             df_add[Symbol("H$i")] = hyperparameters[i]
         end
@@ -1250,7 +1118,7 @@ function save_nlogLs!(
 
     else
 
-        df = DataFrame(nLogL=nLogL, id=id, date=today())
+        df = DataFrame(nLogL=nLogL, sim_id=sim_id, seed=seed, date=today())
         for i in 1:length(hyperparameters)
             df[Symbol("H$i")] = hyperparameters[i]
         end

@@ -30,12 +30,14 @@ function custom_GP_plot(x_samp::Vector{T}, show_curves::Matrix{T}, x_obs::Vector
     else
 
         # initialize figure size
-        init_plot(; hspace=0)
+        init_plot(; hspace=0, wspace=0)
 
-        ax1 = subplot2grid((4, 1), (0, 0), rowspan=3)
+        ax1 = subplot2grid((4, 6), (0, 0), rowspan=3, colspan=5)
         set_font_sizes(ax1)
-        ax2 = subplot2grid((4, 1), (3, 0))
+        ax2 = subplot2grid((4, 6), (3, 0), colspan=5)
         set_font_sizes(ax2)
+        ax3 = subplot2grid((4, 6), (3, 5))
+        set_font_sizes(ax3)
 
         # filling the ±1 σ with a transparent orange
         ax1.fill_between(x_samp, mean + σ, mean - σ, alpha=0.5, color="orange")
@@ -54,6 +56,9 @@ function custom_GP_plot(x_samp::Vector{T}, show_curves::Matrix{T}, x_obs::Vector
         ax2.errorbar(x_obs, resids, yerr=[errors';errors'], fmt="o", color="black")
         ax2.fill_between(x_samp, σ, -σ, alpha=0.5, color="orange")
         ax2.axhline(y=0, color="black")
+
+        ax3.hist(resids, bins=convert(Int64, round(length(resids) / 10)), orientation="horizontal")
+        ax3.axis("off")
 
         return [ax1, ax2]
     end

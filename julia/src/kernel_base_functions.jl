@@ -2,122 +2,171 @@
 using SpecialFunctions
 using SymEngine
 
-"Scale kernel. Multiplied with other kernels to modify their amplitude"
-scale_kernel_base(kernel_amplitude::Number, x1::Vector{T}, x2::Vector{T}) where {T<:Number} = kernel_amplitude * kernel_amplitude
+# "Scale kernel. Multiplied with other kernels to moδy their amplitude"
+# scale_kernel_base(kernel_amplitude::Number, x1::Vector{T}, x2::Vector{T}) where {T<:Number} = kernel_amplitude * kernel_amplitude
 
 
-"Linear GP kernel"
-function linear_kernel_base(hyperparameters::Vector{<:Number}, x1::Vector{T}, x2::Vector{T}) where {T<:Number}
-
-    @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
-    sigma_b, sigma_a = hyperparameters
-
-    return sigma_b * sigma_b * vecdot(x1, x2) + sigma_a * sigma_a
-end
+# "Linear GP kernel"
+# function linear_kernel_base(hyperparameters::Vector{<:Number}, x1::Vector{T}, x2::Vector{T}) where {T<:Number}
+#
+#     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
+#     sigma_b, sigma_a = hyperparameters
+#
+#     return sigma_b * sigma_b * vecdot(x1, x2) + sigma_a * sigma_a
+# end
 
 
 "Radial basis function GP kernel (aka squared exonential, ~gaussian)"
-function se_kernel_base(kernel_length::Number, dif::Number)
-    return exp(-dif * dif / (2 * (kernel_length * kernel_length)))
+function se_kernel_base(λ::Number, δ::Number)
+    return exp(-δ * δ / (2 * λ * λ))
 end
 
 
-"Periodic kernel (for random cyclic functions)"
-function periodic_kernel_base(hyperparameters::Vector{<:Number}, dif::Number)
+"""
+Periodic kernel (for random cyclic functions)
+SE kernel where δ^2 -> 4 sin(π δ/P)^2
+"""
+function periodic_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
 
     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
-    kernel_period, kernel_length = hyperparameters
+    P, λ = hyperparameters
 
-    sin_τ = sin(π * (dif / kernel_period))
-    return exp(-2 * sin_τ * sin_τ / (kernel_length * kernel_length))
-
-
+    sin_τ = sin(π * δ / P)
+    return exp(-2 * sin_τ * sin_τ / (λ * λ))
 end
 
 
 "Quasi-periodic kernel"
-function quasi_periodic_kernel_base(hyperparameters::Vector{<:Number}, dif::Number)
+function quasi_periodic_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
 
     @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
-    SE_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
+    SE_λ, P_P, P_λ = hyperparameters
 
-    return se_kernel_base(SE_kernel_length, dif) * periodic_kernel_base([P_kernel_period, P_kernel_length], dif)
+    return se_kernel_base(SE_λ, δ) * periodic_kernel_base([P_P, P_λ], δ)
 end
 
 
-"Ornstein–Uhlenbeck (Exponential) kernel"
-function ou_kernel_base(kernel_length::Number, abs_dif::Number)
-    # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
-    return exp(-abs_dif / kernel_length)
-end
+# "Ornstein–Uhlenbeck (Exponential) kernel"
+# function exp_kernel_base(λ::Number, abs_δ::Number)
+#     # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
+#     return exp(-abs_δ / λ)
+# end
 
 
-"Exponential-periodic kernel"
-function exp_periodic_kernel_base(hyperparameters::Vector{<:Number}, dif::Number)
-
-    @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
-    OU_kernel_length, P_kernel_period, P_kernel_length = hyperparameters
-
-    return ou_kernel_base(OU_kernel_length, dif) * periodic_kernel_base([P_kernel_period, P_kernel_length], dif)
-end
-
-
-"general Matern kernel"
-function matern_kernel_base(kernel_length::Number, abs_dif::Number, nu::Real)
-
-    #limit of the function as it apporaches 0 (see https://en.wikipedia.org/wiki/Mat%C3%A9rn_covariance_function)
-    if dif == 0
-        return kernel_amplitude * kernel_amplitude
-    else
-        # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
-        x = (sqrt(2 * nu) * abs_dif) / kernel_length
-        return ((2 ^ (1 - nu)) / (gamma(nu))) * x ^ nu * besselk(nu, x)
-    end
-end
+# "Exponential-periodic kernel"
+# function exp_periodic_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
+#
+#     @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
+#     OU_λ, P_P, P_λ = hyperparameters
+#
+#     return ou_kernel_base(OU_λ, δ) * periodic_kernel_base([P_P, P_λ], δ)
+# end
 
 
-"Matern 3/2 kernel"
-function matern32_kernel_base(kernel_length::Number, abs_dif::Number)
-    # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
-    x = sqrt(3) * abs_dif / kernel_length
-    return (1 + x) * exp(-x)
-end
+# "general Matern kernel"
+# function matern_kernel_base(λ::Number, abs_δ::Number, nu::Number)
+#
+#     #limit of the function as it apporaches 0 (see https://en.wikipedia.org/wiki/Mat%C3%A9rn_covariance_function)
+#     if δ == 0
+#         return kernel_amplitude * kernel_amplitude
+#     else
+#         # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
+#         x = (sqrt(2 * nu) * abs_δ) / λ
+#         return ((2 ^ (1 - nu)) / (gamma(nu))) * x ^ nu * besselk(nu, x)
+#     end
+# end
+
+
+# "Matern 3/2 kernel"
+# function matern32_kernel_base(λ::Number, abs_δ::Number)
+#     # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
+#     x = sqrt(3) * abs_δ / λ
+#     return (1 + x) * exp(-x)
+# end
 
 
 "Matern 5/2 kernel"
-function matern52_kernel_base(kernel_length::Number, abs_dif::Number)
-    # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
-    x = sqrt(5) * abs_dif / kernel_length
+function matern52_kernel_base(λ::Number, abs_δ::Number)
+    # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
+    x = sqrt(5) * abs_δ / λ
     return (1 + x * (1 + x / 3)) * exp(-x)
 end
 
 
 "Matern 7/2 kernel"
-function matern72_kernel_base(kernel_length::Number, abs_dif::Number)
-    # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
-    x = sqrt(7) * abs_dif / kernel_length
+function matern72_kernel_base(λ::Number, abs_δ::Number)
+    # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
+    x = sqrt(7) * abs_δ / λ
     return (1 + x * (1 + x * (2 / 5 + x / 15))) * exp(-x)
 end
 
 
 "Matern 9/2 kernel"
-function matern92_kernel_base(kernel_length::Number, abs_dif::Number)
-    # abs_dif used instead of abs(dif) so that symbolic differentiator can deal with it)
-    x = 3 * abs_dif / kernel_length
+function matern92_kernel_base(λ::Number, abs_δ::Number)
+    # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
+    x = 3 * abs_δ / λ
     return (1 + x * (1 + x * (3 / 7 + x * (2 / 21 + x / 105)))) * exp(-x)
 end
 
 
+# """
+# Rational Quadratic kernel
+# Equivalent to adding together SE kernels with the inverse square of the
+# lengthscales (τ = SE_λ^-2) are distributed as a Gamma distribution of p(τ|k,θ)
+# where k (sometimes written as α) is the shape parameter and θ is the scale
+# parameter. When α→∞, the RQ is identical to the SE with λ = (k θ)^-1/2.
+# """
+# function rq_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
+#
+#     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
+#     k, θ = hyperparameters
+#
+#     return (1 + δ * δ * θ / 2) ^ -k
+#     # return (1 / θ + δ * δ / 2) ^ -k
+# end
+# """
+# Rational Quadratic kernel
+# Equivalent to adding together SE kernels with the inverse square of the
+# lengthscales (τ = SE_λ^-2) are distributed as a Gamma distribution of p(τ|α,β)
+# where α (sometimes written as k) is the shape parameter and β is the rate
+# parameter. When α→∞, the RQ is identical to the SE with λ = (α / β)^-1/2.
+# """
+# function rq_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
+#
+#     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
+#     α, β = hyperparameters
+#
+#     # return (1 + δ * δ / (2 * β)) ^ -α
+#     return (β + δ * δ / 2) ^ -α
+# end
 """
-Rational Quadratic kernel (equivalent to adding together many SE kernels
-with different lengthscales. When α→∞, the RQ is identical to the SE.)
+Rational Quadratic kernel
+Equivalent to adding together SE kernels with the inverse square of the
+lengthscales (τ = SE_λ^-2) are distributed as a Gamma distribution of p(τ|α,θ)
+where α (sometimes written as k) is the shape parameter and θ is the scale
+parameter. When α→∞, the RQ is identical to the SE with λ = μ^-1/2.
 """
-function rq_kernel_base(hyperparameters::Vector{<:Number}, dif::Number)
+function rq_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
 
     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
-    kernel_length, alpha = hyperparameters
+    α, μ = hyperparameters
 
-    return (1 + dif * dif / (2 * alpha * kernel_length * kernel_length)) ^ -alpha
+    return (1 + δ * δ * μ / (2 * α)) ^ -α
+    # return (α / μ + δ * δ / 2) ^ -α
+end
+
+
+"""
+Periodic kernel (for random cyclic functions)
+RQ kernel where δ^2 -> 4 sin(π δ/P)^2
+"""
+function periodic_rq_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
+
+    @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
+    P, λ, α = hyperparameters
+
+    sin_τ = sin(π * δ / P)
+    return (1 + 2 * sin_τ * sin_τ / (α * λ * λ)) ^ -α
 end
 
 
@@ -127,12 +176,12 @@ end
 # differential equation that are finite at the origin (x = 0) for integer or positive α
 # http://crsouza.com/2010/03/17/kernel-functions-for-machine-learning-applications/#bessel
 # """
-# function bessel_kernel_base(hyperparameters::Vector{<:Number}, dif::Number; nu=0)
+# function bessel_kernel_base(hyperparameters::Vector{<:Number}, δ::Number; nu=0)
 #
 #     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
-#     kernel_length, n = hyperparameters
+#     λ, n = hyperparameters
 #
 #     @assert nu >= 0 "nu must be >= 0"
 #
-#     return besselj(nu + 1, kernel_length * dif) / (dif ^ (-n * (nu + 1)))
+#     return besselj(nu + 1, λ * δ) / (δ ^ (-n * (nu + 1)))
 # end

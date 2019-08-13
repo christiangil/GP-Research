@@ -342,5 +342,17 @@ function normalize_columns_to_first_integral!(ys::Matrix{T}, x::Vector{T}) where
     return ys
 end
 
-import SparseArrays: spdiagm
-precond(n::Number) = spdiagm(-1 => -ones(n-1), 0 => 2*ones(n), 1 => -ones(n-1)) * (n+1)
+
+# import SparseArrays: spdiagm
+# precond(n::Number) = spdiagm(-1 => -ones(n-1), 0 => 2*ones(n), 1 => -ones(n-1)) * (n+1)
+
+
+"""
+Automatically adds as many workers as there are CPU threads minus 2 if none are
+active and no number of procs to add is given
+Also includes all basic functions for analysis
+"""
+function prep_parallel(; add_procs::Integer=0)
+    auto_addprocs(;add_procs=add_procs)
+    @everywhere include("src/base_functions.jl")
+end

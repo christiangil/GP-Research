@@ -31,11 +31,12 @@ end
 
 
 "create a nice, large PyPlot with large text sizes (excluding title)"
-function init_plot(;figsize=(16,9), hspace::Real=-1)
+function init_plot(;figsize=(16,9), hspace::Real=-1, wspace::Real=-1)
     fig = figure(figsize=figsize)
     ax = subplot(111)
     set_font_sizes(ax)
     if hspace != -1; fig.subplots_adjust(hspace=hspace) end
+    if wspace != -1; fig.subplots_adjust(wspace=wspace) end
     return ax
 end
 
@@ -51,7 +52,8 @@ end
 
 "save current PyPlot figure and close all figures"
 function save_PyPlot_fig(filename::AbstractString)
-    savefig(filename)
+    # savefig(filename, bbox_inches="tight", pad_inches=0)
+    savefig(filename, bbox_inches="tight")
     PyPlot.close("all")
 end
 

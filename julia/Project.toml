@@ -1,4 +1,5 @@
 [deps]
+AlgebraicMultigrid = "2169fc97-5a83-5252-b627-83903c6c433c"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
@@ -14,6 +15,7 @@ LombScargle = "fc60dff9-86e7-5f2f-a8a0-edeadbb75bd9"
 Memoize = "c03570c3-d221-55d1-a50c-7939bbd78826"
 MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+Preconditioners = "af69fa37-3177-5a40-98ee-561f696e4fcd"
 PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
