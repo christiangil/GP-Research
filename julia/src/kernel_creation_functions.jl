@@ -24,7 +24,7 @@ The function is saved in src/kernels/\$kernel_name.jl, so you can use it with a 
     include("src/kernels/" * kernel_name * ".jl")
 
 """
-function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manual_simplifications::Bool=true)
+function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String; manual_simplifications::Bool=true, periodic::Bool=false)
 
     # get the symbols of the passed function and check that δ is first
     symbols = free_symbols(symbolic_kernel_original)
@@ -34,21 +34,31 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     uses_abs_δ = (length(δ_inds)==1)
     if uses_abs_δ
         @vars δ
-        δ_sym = free_symbols(δ)[1]
         symbolic_kernel_original = subs(symbolic_kernel_original, abs_δ=>δ)
     else
         δ_inds = findall(x -> x=="δ", symbols_str)
-        @assert 0<length(δ_inds)<2 "A single δ or abs_δ symbol must be passed"
-        δ_sym = symbols[δ_inds[1]]
+        @assert 0<length(δ_inds)<2 "A single δ or abs_δ symbol must be used in the expression"
     end
+    δ_sym = convert(Basic, "δ")
     δ_ind = δ_inds[1]
     deleteat!(symbols, δ_ind)
     deleteat!(symbols_str, δ_ind)
-    # println(symbols_str)
-    # println(symbols)
+
+    if periodic
+        P_sym_str = kernel_name * "_P"
+        P_sym = convert(Basic, P_sym_str)
+        append!(symbols, [P_sym])
+        append!(symbols_str, [P_sym_str])
+        @vars δ
+        symbolic_kernel_original = subs(symbolic_kernel_original, δ=>2*sin(π*δ/P_sym))
+        kernel_name *= "_periodic"
+    end
+
     hyper_amount = length(symbols)
+    println(symbolic_kernel_original)
 
     # open the file we will write to
+    kernel_name *= "_kernel"
     file_loc = "src/kernels/" * kernel_name * ".jl"
     io = open(file_loc, "w")
 
@@ -137,7 +147,13 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String, manu
     # write(io, string("    if isnan(func)\n"))
     # write(io, string("        func = 0\n"))
     # write(io, string("    end\n\n"))
-    uses_abs_δ ? write(io, "    return -powers_of_negative_one(δ_positive || iseven(dorder[1])) * even_time_derivative * float(func)  # correcting for use of abs_δ and amount of t2 derivatives\n\n") : write(io, "    return even_time_derivative * float(func)  # correcting for amount of t2 derivatives\n\n")
+    if uses_abs_δ
+        write(io, "    coeff = -powers_of_negative_one(δ_positive || iseven(dorder[1]))  # correcting for use of abs_δ\n")
+        if periodic; write(io, "    coeff *= powers_of_negative_one(Int32(floor(δ / $P_sym_str)))  # more correcting for use of abs_δ\n") end
+        write(io, "    return coeff * even_time_derivative * float(func)  # correcting for amount of t2 derivatives\n\n")
+    else
+        write(io, "    return even_time_derivative * float(func)  # correcting for amount of t2 derivatives\n\n")
+    end
     write(io, "end\n\n\n")
     write(io, "return $kernel_name, $num_kernel_hyperparameters  # the function handle and the number of kernel hyperparameters\n")
     close(io)

@@ -10,23 +10,21 @@ include("src/all_functions.jl")
 kernel_names = ["quasi_periodic_kernel", "se_kernel", "matern52_kernel", "rq_kernel"]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
-if length(ARGS)>0
+called_from_terminal = length(ARGS) > 0
+if called_from_terminal
     kernel_name = kernel_names[parse(Int, ARGS[1])]
     seed = parse(Int, ARGS[2])
     rng = MersenneTwister(seed)
     sim_id = sample(rng, 1:50)
-    println("id : ", sim_id)
-    # @load "jld2_files/res-1000-1years_full_id$(id)_problem_def_full_base.jld2" problem_def_base
-    problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$id"; save_prob_def=false, sub_sample=100, on_off=14, rng=rng)
+    println("id: ", sim_id)
+    problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$sim_id"; save_prob_def=false, sub_sample=100, on_off=14, rng=rng)
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
     println("optimizing the full problem using the $kernel_name")
 else
     kernel_name = kernel_names[3]
-    id = 41
-    # @load "jld2_files/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11_problem_def_sample_base.jld2" problem_def_base
-    # @load "jld2_files/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11_problem_def_full_base.jld2" problem_def_base
-    problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$id"; save_prob_def=false, sub_sample=100)
+    # sim_id = 41; problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$sim_id"; save_prob_def=false, sub_sample=100)
+    sim_id = 1; problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=100)
     # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$id"; save_prob_def=false)
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
@@ -36,10 +34,12 @@ end
 mkpath("figs/gp/$kernel_name/training")
 
 # allowing covariance matrix to be calculated in parallel
-try
-    prep_parallel_covariance(kernel_name)
-catch
-    prep_parallel_covariance(kernel_name)
+if !called_from_terminal
+    try
+        prep_parallel_covariance(kernel_name)
+    catch
+        prep_parallel_covariance(kernel_name)
+    end
 end
 
 ########################################
@@ -157,20 +157,23 @@ initial_x = remove_zeros(total_hyperparameters)
 
 function f(non_zero_hyper::Vector{T}) where {T<:Real}
     println(non_zero_hyper)
-    return (nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
-        + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper))
+    return nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+    # return (nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+    #     + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper))
 end
 
 function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-    G[:] = (nlogprior_kernel_hyperparameters!(
-        ∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper),
-        problem_definition.n_kern_hyper, non_zero_hyper))
+    G[:] = ∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+    # G[:] = (nlogprior_kernel_hyperparameters!(
+    #     ∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper),
+    #     problem_definition.n_kern_hyper, non_zero_hyper))
 end
 
 function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-    H[:, :] = (nlogprior_kernel_hyperparameters!(
-        ∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper),
-        problem_definition.n_kern_hyper, non_zero_hyper))
+    H[:, :] = ∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+    # H[:, :] = (nlogprior_kernel_hyperparameters!(
+    #     ∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper),
+    #     problem_definition.n_kern_hyper, non_zero_hyper))
 end
 
 # ends optimization if true
@@ -226,9 +229,11 @@ println(fit1_total_hyperparameters)
 fit_nLogL = nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
 println(fit_nLogL, "\n")
 
-# save_nlogLs!(fit_nLogL, sim_id, seed, fit1_total_hyperparameters, kernel_name)
-
-Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, "figs/gp/$kernel_name/id$(id)_fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
+if called_from_terminal
+    save_nlogLs!(fit_nLogL, sim_id, seed, fit1_total_hyperparameters, kernel_name)
+else
+    Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, "figs/gp/$kernel_name/id$(sim_id)_fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
+end
 
 # # coeffs = fit1_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
 # # coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)

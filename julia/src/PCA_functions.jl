@@ -83,7 +83,7 @@ function fit_gen_pca_rv_RVSKL(X::Matrix{T}, fixed_comp::Vector{T}; mu::Vector{T}
 	M[:, 1] = fixed_comp  # Force fixed (i.e., Doppler) component to replace first PCA component
     fixed_comp_norm2 = sum(abs2, fixed_comp)
     for i in 1:num_spectra
-        scores[1, i] = z = (dot(view(Xtmp, :, i), fixed_comp) / fixed_comp_norm2)  # Normalize differently, so scores are z (i.e., doppler shift)
+        scores[1, i] = z = dot(view(Xtmp, :, i), fixed_comp) / fixed_comp_norm2  # Normalize differently, so scores are z (i.e., doppler shift)
 	    Xtmp[:, i] -= z * fixed_comp
     end
 	fracvar[1] = sum(abs2, Xtmp) / totalvar

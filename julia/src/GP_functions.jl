@@ -1105,25 +1105,15 @@ function save_nlogLs!(
     kernel_name::String
     ) where {T<:Real}
 
-    file_name = "csv_files/$(kernel_name)_logLs.csv"
+    # file_name = "csv_files/$(kernel_name)_logLs.csv"
+    file_name = "csv_files/$(kernel_name)_logL_$seed.csv"
 
-    if isfile(file_name)
-
-        df = copy(CSV.read(file_name))
-        df_add = DataFrame(nLogL=nLogL, sim_id=sim_id, seed=seed, date=today())
-        for i in 1:length(hyperparameters)
-            df_add[Symbol("H$i")] = hyperparameters[i]
-        end
-        append!(df, df_add)
-
-    else
-
-        df = DataFrame(nLogL=nLogL, sim_id=sim_id, seed=seed, date=today())
-        for i in 1:length(hyperparameters)
-            df[Symbol("H$i")] = hyperparameters[i]
-        end
-
+    df = DataFrame(nLogL=nLogL, sim_id=sim_id, seed=seed, date=today())
+    for i in 1:length(hyperparameters)
+        df[!, Symbol("H$i")] .= hyperparameters[i]
     end
+
+    # if isfile(file_name); append!(df, CSV.read(file_name)) end
 
     CSV.write(file_name, df)
 

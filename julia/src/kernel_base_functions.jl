@@ -108,6 +108,16 @@ function matern92_kernel_base(λ::Number, abs_δ::Number)
     return (1 + x * (1 + x * (3 / 7 + x * (2 / 21 + x / 105)))) * exp(-x)
 end
 
+"peicewise polynomial kernel that is twice MS differentiable. See eq 4.21 in RW"
+function pp_kernel_base(λ::Number, abs_δ::Number)
+    # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
+    #D = 1
+    q = 2
+    j = q + 1  #  + floor(D / 2)
+    r = abs_δ / λ
+    return (1 - r) ^ (j + 2) * ((j * j + 4 * j + 3) * r * r / 3 + (j + 2) * r + 1)
+end
+
 
 # """
 # Rational Quadratic kernel
@@ -142,9 +152,9 @@ end
 """
 Rational Quadratic kernel
 Equivalent to adding together SE kernels with the inverse square of the
-lengthscales (τ = SE_λ^-2) are distributed as a Gamma distribution of p(τ|α,θ)
-where α (sometimes written as k) is the shape parameter and θ is the scale
-parameter. When α→∞, the RQ is identical to the SE with λ = μ^-1/2.
+lengthscales (τ = SE_λ^-2) are distributed as a Gamma distribution of p(τ|α,μ)
+where α (sometimes written as k) is the shape parameter and μ is the mean of the
+distribution. When α→∞, the RQ is identical to the SE with λ = μ^-1/2.
 """
 function rq_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
 
@@ -153,6 +163,23 @@ function rq_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
 
     return (1 + δ * δ * μ / (2 * α)) ^ -α
     # return (α / μ + δ * δ / 2) ^ -α
+end
+
+
+"""
+Rational Matern 5/2 kernel
+Equivalent to adding together Matern 5/2 kernels with the inverse of the
+lengthscale (τ = M52_λ^-1) are distributed as a Gamma distribution of p(τ|α,μ)
+where α (sometimes written as k) is the shape parameter and μ is the mean of the
+distribution.
+"""
+function rm52_kernel_base(hyperparameters::Vector{<:Number}, abs_δ::Number)
+    # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
+    @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
+    α, μ = hyperparameters
+
+    x = sqrt(5) * abs_δ
+    return (x + α / μ) ^ -α * (α * (α + x * (2 + α) * μ) + x * x * (1 + α) * (3 + α) * μ * μ / 3) / ((α + x * μ) * (α + x * μ))
 end
 
 

@@ -1,5 +1,6 @@
 #setup.jl
 using Pkg; using Pkg.API
+# Pkg.add("SpecialFunctions")
 # Pkg.add("BenchmarkTools")
 # Pkg.add("DistributedArrays")
 # Pkg.add("Distributions")
@@ -24,6 +25,7 @@ using Pkg; using Pkg.API
 # Pkg.add("CuArrays")
 # Pkg.add("GPUArrays")
 
+Pkg.update()
 Pkg.activate(".")
 Pkg.instantiate()
 Pkg.update()
