@@ -47,9 +47,8 @@ end
 
 
 # "Ornstein–Uhlenbeck (Exponential) kernel"
-# function exp_kernel_base(λ::Number, abs_δ::Number)
-#     # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
-#     return exp(-abs_δ / λ)
+# function exp_kernel_base(λ::Number, δ::Number)
+#     return exp(-abs(δ) / λ)
 # end
 
 
@@ -64,58 +63,52 @@ end
 
 
 # "general Matern kernel"
-# function matern_kernel_base(λ::Number, abs_δ::Number, nu::Number)
+# function matern_kernel_base(λ::Number, δ::Number, nu::Number)
 #
 #     #limit of the function as it apporaches 0 (see https://en.wikipedia.org/wiki/Mat%C3%A9rn_covariance_function)
 #     if δ == 0
 #         return kernel_amplitude * kernel_amplitude
 #     else
-#         # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
-#         x = (sqrt(2 * nu) * abs_δ) / λ
+#         x = (sqrt(2 * nu) * abs(δ)) / λ
 #         return ((2 ^ (1 - nu)) / (gamma(nu))) * x ^ nu * besselk(nu, x)
 #     end
 # end
 
 
 # "Matern 3/2 kernel"
-# function matern32_kernel_base(λ::Number, abs_δ::Number)
-#     # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
-#     x = sqrt(3) * abs_δ / λ
+# function matern32_kernel_base(λ::Number, δ::Number)
+#     x = sqrt(3) * abs(δ) / λ
 #     return (1 + x) * exp(-x)
 # end
 
 
 "Matern 5/2 kernel"
-function matern52_kernel_base(λ::Number, abs_δ::Number)
-    # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
-    x = sqrt(5) * abs_δ / λ
+function matern52_kernel_base(λ::Number, δ::Number)
+    x = sqrt(5) * abs(δ) / λ
     return (1 + x * (1 + x / 3)) * exp(-x)
 end
 
 
 "Matern 7/2 kernel"
-function matern72_kernel_base(λ::Number, abs_δ::Number)
-    # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
-    x = sqrt(7) * abs_δ / λ
+function matern72_kernel_base(λ::Number, δ::Number)
+    x = sqrt(7) * abs(δ) / λ
     return (1 + x * (1 + x * (2 / 5 + x / 15))) * exp(-x)
 end
 
 
 "Matern 9/2 kernel"
-function matern92_kernel_base(λ::Number, abs_δ::Number)
-    # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
-    x = 3 * abs_δ / λ
+function matern92_kernel_base(λ::Number, δ::Number)
+    x = 3 * abs(δ) / λ
     return (1 + x * (1 + x * (3 / 7 + x * (2 / 21 + x / 105)))) * exp(-x)
 end
 
 "peicewise polynomial kernel that is twice MS differentiable. See eq 4.21 in RW"
-function pp_kernel_base(λ::Number, abs_δ::Number)
-    # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
-    #D = 1
-    q = 2
-    j = q + 1  #  + floor(D / 2)
-    r = abs_δ / λ
-    return (1 - r) ^ (j + 2) * ((j * j + 4 * j + 3) * r * r / 3 + (j + 2) * r + 1)
+function pp_kernel_base(λ::Number, δ::Number)
+    # D = 1  # 1 dimension
+    # q = 2  # twice MS differentiable
+    # j = q + 1 + floor(D / 2) = 3
+    r = abs(δ) / λ
+    return (1 - r) ^ 5 * (8 * r * r + 5 * r + 1)
 end
 
 
@@ -173,12 +166,11 @@ lengthscale (τ = M52_λ^-1) are distributed as a Gamma distribution of p(τ|α,
 where α (sometimes written as k) is the shape parameter and μ is the mean of the
 distribution.
 """
-function rm52_kernel_base(hyperparameters::Vector{<:Number}, abs_δ::Number)
-    # abs_δ used instead of abs(δ) so that symbolic differentiator can deal with it)
+function rm52_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
     α, μ = hyperparameters
 
-    x = sqrt(5) * abs_δ
+    x = sqrt(5) * abs(δ)
     return (x + α / μ) ^ -α * (α * (α + x * (2 + α) * μ) + x * x * (1 + α) * (3 + α) * μ * μ / 3) / ((α + x * μ) * (α + x * μ))
 end
 
