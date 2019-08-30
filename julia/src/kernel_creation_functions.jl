@@ -4,25 +4,17 @@ using SymEngine
 Creates the necessary differentiated versions of base kernels required by the Jones et al. 2017 paper (https://arxiv.org/abs/1711.01318) method.
 You must pass it a SymEngine Basic object with the variables already declared with the @vars command. δ or abs_δ must be the first declared variables.
 The created function will look like this
-
     \$kernel_name(hyperparameters::Vector{<:Real}, δ::Real; dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))
-
 For example, you could define a kernel like so:
-
     "Radial basis function GP kernel (aka squared exonential, ~gaussian)"
     function rbf_kernel_base(λ::Number, δ::Number)
         return exp(-δ ^ 2 / (2 * λ ^ 2))
     end
-
 And then calculate the necessary derivative versions like so:
-
     @vars δ λ
     kernel_coder(rbf_kernel_base(λ, δ), "rbf_kernel")
-
 The function is saved in src/kernels/\$kernel_name.jl, so you can use it with a command akin to this:
-
     include("src/kernels/" * kernel_name * ".jl")
-
 """
 function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String; manual_simplifications::Bool=true, periodic::Bool=false)
 
@@ -126,7 +118,7 @@ function kernel_coder(symbolic_kernel_original::Basic, kernel_name::String; manu
                 symbolic_kernel = diff(symbolic_kernel, symbols[j], dorder[j+1])
             end
 
-            symbolic_kernel_str = SymEngine.toString(symbolic_kernel)
+            symbolic_kernel_str = SymEngine.toString(expand(symbolic_kernel))
             symbolic_kernel_str = string("        func = " * symbolic_kernel_str * "\n    end\n\n")
 
             if manual_simplifications

@@ -15,10 +15,7 @@ function matern52_kernel(
     even_time_derivative = powers_of_negative_one(dorder[2])
     @assert maximum(dorder) < 3 "No more than two time derivatives for either t1 or t2 can be calculated"
 
-    dorder[1] = sum(dorder[1:2])
-    dorder[2:(end - 1)] = dorder[3:end]
-
-    deleteat!(dorder, length(dorder))
+    dorder = append!([sum(dorder[1:2])], dorder[3:end])
 
     λ = hyperparameters[1]
 

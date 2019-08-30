@@ -1,5 +1,5 @@
 # adding in custom functions
-# include("src/setup.jl")
+include("src/setup.jl")
 # include("test/runtests.jl")
 include("src/all_functions.jl")
 
@@ -15,16 +15,21 @@ if called_from_terminal
     kernel_name = kernel_names[parse(Int, ARGS[1])]
     seed = parse(Int, ARGS[2])
     rng = MersenneTwister(seed)
-    sim_id = sample(rng, 1:50)
-    println("id: ", sim_id)
-    problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$sim_id"; save_prob_def=false, sub_sample=100, on_off=14, rng=rng)
+    # sim_id = sample(rng, 1:50)
+    # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$sim_id"; save_prob_def=false, sub_sample=100, on_off=14, rng=rng)
+    sim_id = sample(rng, 6:10)
+    filename = "res-1000-1years_full_id$sim_id"
+    problem_def_base = init_problem_definition("jld2_files/" * filename; save_prob_def=false, sub_sample=100, on_off=14, rng=rng)
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
-    println("optimizing the full problem using the $kernel_name")
+    println("id: ", sim_id)
+    println("optimizing on " * filename * " using the $kernel_name")
 else
-    kernel_name = kernel_names[3]
+    kernel_name = kernel_names[1]
     # sim_id = 41; problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$sim_id"; save_prob_def=false, sub_sample=100)
-    sim_id = 1; problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=100)
+    sim_id = 10
+    # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=100)
+    problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=100, on_off=14)
     # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$id"; save_prob_def=false)
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
@@ -193,7 +198,7 @@ end
 
 # # second order
 # @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, iterations=1)) # 27s
-@elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb)) # 27s
+@elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=1e-6)) # 27s
 
 # # # first order
 # # @elapsed result = optimize(f, g!, initial_x, ConjugateGradient(), Optim.Options(callback=optim_cb))  # 44s
@@ -347,7 +352,7 @@ end
 # end
 #
 # # second order
-# @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb)) # 27s
+# @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb), g_tol = 1e-6) # 27s
 #
 # # # using preconditioning
 # # try
