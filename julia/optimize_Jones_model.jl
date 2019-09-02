@@ -1,5 +1,5 @@
 # adding in custom functions
-include("src/setup.jl")
+# include("src/setup.jl")
 # include("test/runtests.jl")
 include("src/all_functions.jl")
 
@@ -7,7 +7,7 @@ include("src/all_functions.jl")
 # Loading data and setting kernel #
 ###################################
 
-kernel_names = ["quasi_periodic_kernel", "se_kernel", "matern52_kernel", "rq_kernel"]
+kernel_names = ["pp", "m52", "se", "qp_periodic", "rq"]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
 called_from_terminal = length(ARGS) > 0
@@ -28,8 +28,8 @@ else
     kernel_name = kernel_names[1]
     # sim_id = 41; problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$sim_id"; save_prob_def=false, sub_sample=100)
     sim_id = 10
-    # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=100)
-    problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=100, on_off=14)
+    problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=100)
+    # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=100, on_off=14)
     # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$id"; save_prob_def=false)
     kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
     problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)

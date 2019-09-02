@@ -22,28 +22,28 @@ function se_kernel_base(λ::Number, δ::Number)
 end
 
 
-"""
-Periodic kernel (for random cyclic functions)
-SE kernel where δ^2 -> 4 sin(π δ/P)^2
-"""
-function periodic_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
+# """
+# Periodic kernel (for random cyclic functions)
+# SE kernel where δ^2 -> 4 sin(π δ/P)^2
+# """
+# function periodic_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
+#
+#     @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
+#     P, λ = hyperparameters
+#
+#     sin_τ = sin(π * δ / P)
+#     return exp(-2 * sin_τ * sin_τ / (λ * λ))
+# end
 
-    @assert length(hyperparameters) == 2 "incompatible amount of hyperparameters passed"
-    P, λ = hyperparameters
 
-    sin_τ = sin(π * δ / P)
-    return exp(-2 * sin_τ * sin_τ / (λ * λ))
-end
-
-
-"Quasi-periodic kernel"
-function quasi_periodic_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
-
-    @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
-    SE_λ, P_P, P_λ = hyperparameters
-
-    return se_kernel_base(SE_λ, δ) * periodic_kernel_base([P_P, P_λ], δ)
-end
+# "Quasi-periodic kernel"
+# function quasi_periodic_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
+#
+#     @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
+#     SE_λ, P_P, P_λ = hyperparameters
+#
+#     return se_kernel_base(SE_λ, δ) * periodic_kernel_base([P_P, P_λ], δ)
+# end
 
 
 # "Ornstein–Uhlenbeck (Exponential) kernel"
@@ -89,18 +89,18 @@ function matern52_kernel_base(λ::Number, δ::Number)
 end
 
 
-"Matern 7/2 kernel"
-function matern72_kernel_base(λ::Number, δ::Number)
-    x = sqrt(7) * abs(δ) / λ
-    return (1 + x * (1 + x * (2 / 5 + x / 15))) * exp(-x)
-end
+# "Matern 7/2 kernel"
+# function matern72_kernel_base(λ::Number, δ::Number)
+#     x = sqrt(7) * abs(δ) / λ
+#     return (1 + x * (1 + x * (2 / 5 + x / 15))) * exp(-x)
+# end
 
 
-"Matern 9/2 kernel"
-function matern92_kernel_base(λ::Number, δ::Number)
-    x = 3 * abs(δ) / λ
-    return (1 + x * (1 + x * (3 / 7 + x * (2 / 21 + x / 105)))) * exp(-x)
-end
+# "Matern 9/2 kernel"
+# function matern92_kernel_base(λ::Number, δ::Number)
+#     x = 3 * abs(δ) / λ
+#     return (1 + x * (1 + x * (3 / 7 + x * (2 / 21 + x / 105)))) * exp(-x)
+# end
 
 "peicewise polynomial kernel that is twice MS differentiable. See eq 4.21 in RW"
 function pp_kernel_base(λ::Number, δ::Number)
@@ -175,18 +175,18 @@ function rm52_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
 end
 
 
-"""
-Periodic kernel (for random cyclic functions)
-RQ kernel where δ^2 -> 4 sin(π δ/P)^2
-"""
-function periodic_rq_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
-
-    @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
-    P, λ, α = hyperparameters
-
-    sin_τ = sin(π * δ / P)
-    return (1 + 2 * sin_τ * sin_τ / (α * λ * λ)) ^ -α
-end
+# """
+# Periodic kernel (for random cyclic functions)
+# RQ kernel where δ^2 -> 4 sin(π δ/P)^2
+# """
+# function periodic_rq_kernel_base(hyperparameters::Vector{<:Number}, δ::Number)
+#
+#     @assert length(hyperparameters) == 3 "incompatible amount of hyperparameters passed"
+#     P, λ, α = hyperparameters
+#
+#     sin_τ = sin(π * δ / P)
+#     return (1 + 2 * sin_τ * sin_τ / (α * λ * λ)) ^ -α
+# end
 
 
 # """
@@ -204,3 +204,11 @@ end
 #
 #     return besselj(nu + 1, λ * δ) / (δ ^ (-n * (nu + 1)))
 # end
+
+
+function cosine_kernel_base(hyperparameters::Number, δ::Number)
+    @assert length(hyperparameters) == 1 "incompatible amount of hyperparameters passed"
+    λ = hyperparameters
+
+    return cos(2 * π * δ / λ)
+end
