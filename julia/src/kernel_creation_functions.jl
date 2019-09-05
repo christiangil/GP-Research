@@ -86,11 +86,19 @@ function kernel_coder(
         write(io, "    end\n\n")
     end
 
-    uses_abs_δ = occursin(r"abs\(δ\)", SymEngine.toString(symbolic_kernel_original))
-    if uses_abs_δ
-        # write(io, "    dabsδ = sign(δ)  # store derivative of abs()\n")
-        write(io, "    dabsδ = powers_of_negative_one(δ < 0)  # store derivative of abs()\n")
-        write(io, "    abs_δ = abs(δ)\n\n")
+    abs_vars = String[]
+    for i in append!(["δ"], symbs_str)
+        println("abs($i)")
+        println(occursin(Regex("abs($i)"), "1*abs(δ)*abs(ratio)"))
+        println(occursin(Regex("abs($i)"), SymEngine.toString(symbolic_kernel_original)))
+        println(SymEngine.toString(symbolic_kernel_original))
+        if occursin("abs($i)", SymEngine.toString(symbolic_kernel_original))
+            append!(abs_vars, [i])
+            println("found something")
+            # write(io, "    dabsδ = sign(δ)  # store derivative of abs()\n")
+            write(io, "    dabs_$i = powers_of_negative_one($i < 0)  # store derivative of abs()\n")
+            write(io, "    abs_$i = abs($i)\n\n")
+        end
     end
 
     # δf has 5 derivatives (0-4) and the other symbols have 3 (0-2)
@@ -134,16 +142,16 @@ function kernel_coder(
                 symbolic_kernel = diff(symbolic_kernel, symbs[j], dorder[j+1])
             end
 
-            if uses_abs_δ
-                @vars abs_δ dabsδ
-                symbolic_kernel = subs(symbolic_kernel, diff(abs(δ), δ)=>dabsδ)
+            for j in abs_vars
+                variable, abs_var, dabs_var = symbols("$j abs_$j dabs_$j")
+                symbolic_kernel = subs(symbolic_kernel, diff(abs(variable), variable)=>dabs_var)
                 for i in 2:6
-                    symbolic_kernel = subs(symbolic_kernel, diff(abs(δ), δ, i)=>0)
+                    symbolic_kernel = subs(symbolic_kernel, diff(abs(variable), variable, i)=>0)
                 end
                 for i in 1:2
-                    symbolic_kernel = subs(symbolic_kernel, dabsδ^(i*2)=>1)
+                    symbolic_kernel = subs(symbolic_kernel, dabs_var^(i*2)=>1)
                 end
-                symbolic_kernel = subs(symbolic_kernel, abs(δ)=>abs_δ)
+                symbolic_kernel = subs(symbolic_kernel, abs(variable)=>abs_var)
             end
 
             symbolic_kernel_str = SymEngine.toString(symbolic_kernel)

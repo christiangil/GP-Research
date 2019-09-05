@@ -20,7 +20,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
     x_obs::Vector{T1} # the observation times/phases
     x_obs_units::Unitful.FreeUnits  # the units of x_obs
     y_obs::Vector{T1}  # the flattened, observed data
-    y_obs_units::Unitful.FreeUnits  # the units of the RV section ogy_obs
+    y_obs_units::Unitful.FreeUnits  # the units of the RV section of y_obs
     noise::Vector{T1}  # the measurement noise at all observations
     normals::Vector{T1}  # the normalization of each section of y_obs
     a0::Matrix{T1}  # the meta kernel coefficients
@@ -39,7 +39,7 @@ struct Jones_problem_definition_base{T1<:Real, T2<:Integer}
     x_obs::Vector{T1} # the observation times/phases
     x_obs_units::Unitful.FreeUnits  # the units of x_bs
     y_obs::Vector{T1}  # the flattened, observed data
-    y_obs_units::Unitful.FreeUnits  # the units of y_obs
+    y_obs_units::Unitful.FreeUnits  # the units of the RV section of y_obs
     noise::Vector{T1}  # the measurement noise at all observations
     normals::Vector{T1}  # the normalization of each section of y_obs
     a0::Matrix{T1}  # the meta kernel coefficients
@@ -185,7 +185,8 @@ function init_problem_definition(
 
     # a0 = ones(n_out, n_dif) / 20
     a0 = zeros(n_out, n_dif)
-    a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0  #  /= 20
+	# a0[1,1] = 0.03;
+	a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0
 
     problem_def_base = init_problem_definition(n_dif, n_out, x_obs, x_obs_units, a0; y_obs=y_obs, y_obs_units=y_obs_units, normals=normals, noise=measurement_noise)
 

@@ -1,3 +1,4 @@
+# include("../setup.jl")
 include("../all_functions.jl")
 
 # process for se_kernel_base
@@ -11,15 +12,14 @@ kernel_coder(matern52_kernel_base(λ, δ), "m52")
 @vars δ, λ
 kernel_coder(pp_kernel_base(λ, δ), "pp"; cutoff_var="λ")
 
-@vars δ λ α
-kernel_coder(rq_kernel_base([α, λ], δ), "rq"; periodic_var="δ")
-
+@vars δ λ1 λ2 ratio
+kernel_coder(matern52_kernel_base(λ1, δ) + abs(ratio) * matern52_kernel_base(λ2, δ), "m52x2")
 
 # process for periodic_kernel_base
 # @vars δ se_P λ
 # kernel_coder(periodic_kernel_base([se_P, λ], δ), "periodic")
-@vars δ λ
-kernel_coder(se_kernel_base(λ, δ), "se"; periodic_var="δ")
+# @vars δ λ
+# kernel_coder(se_kernel_base(λ, δ), "se"; periodic_var="δ")
 
 # process for quasi_periodic_kernel_base
 # @vars δ se_λ qp_P p_λ
@@ -38,8 +38,8 @@ kernel_coder(se_kernel_base(se_λ, δ) * se_kernel_base(p_λ, δp), "qp"; period
 @vars δ α μ
 kernel_coder(rq_kernel_base([α, μ], δ), "rq")
 
-@vars abs_δ α μ
-kernel_coder(rm52_kernel_base([α, μ], abs_δ), "rm52")
+@vars δ α μ
+kernel_coder(rm52_kernel_base([α, μ], δ), "rm52")
 
 # @vars δ P λ α
 # kernel_coder(periodic_rq_kernel_base([P, λ, α], δ), "periodic_rq_kernel")
