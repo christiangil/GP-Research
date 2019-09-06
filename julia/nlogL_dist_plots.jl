@@ -2,13 +2,22 @@
 # include("src/setup.jl")
 include("src/all_functions.jl")
 
-kernel_names = ["quasi_periodic_kernel", "se_kernel", "matern52_kernel", "rq_kernel"]
-nice_kernel_names = ["Quasi-Periodic", "Squared Exponential", "Matérn " * L"^5/_2", "Rational Quadratic"]
+kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp_periodic", "m52x2"]
+nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Rational Quadratic", "Rational Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
+# kernel_names = ["pp", "se", "m52", "rm52", "qp_periodic"]
+# nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Rational Matérn " * L"^5/_2", "Quasi-Periodic"]
+
+kernel_amount = length(kernel_names)
 
 
 function get_df(kernel_name)
     file_name = "csv_files/$(kernel_name)_logLs.csv"
     df = CSV.read(file_name)
+end
+
+for i in kernel_names
+    df = get_df(i)
+    println(i * ": ", length(df[!, 1]))
 end
 
 function return_logL(kernel_name; filter::Bool=true)
@@ -20,7 +29,7 @@ function return_logL(kernel_name; filter::Bool=true)
 end
 
 # plot each kernel dist
-for i in 1:3  # length(kernel_names)
+for i in 1:kernel_amount  # length(kernel_names)
     kernel_name = kernel_names[i]
     logL = return_logL(kernel_name)
     ax = init_plot()
@@ -37,11 +46,21 @@ end
 # plot differences from qp
 begin
     ax = init_plot()
-    logL1 = return_logL(kernel_names[1]; filter=false)
-    logL2 = return_logL(kernel_names[2]; filter=false)
-    hist(logL2-logL1; density=true, bins=convert(Int64, floor(length(logL2)/10)), label=nice_kernel_names[2], alpha=0.5)
-    logL3 = return_logL(kernel_names[3]; filter=false)
-    hist(logL3-logL1; density=true, bins=convert(Int64, floor(length(logL3)/10)), label=nice_kernel_names[3], alpha=0.5)
+    qp_df = get_df("qp_periodic")
+    for i in 1:kernel_amount
+        if kernel_names[i] != "qp_periodic"
+            LogL1 = Float64[]
+            LogL2 = Float64[]
+            kernel_df = get_df(kernel_names[i])
+            for j in 1:length(kernel_df[!, 1])
+                if kernel_df.seed[j] in qp_df.seed
+                    append!(LogL1, [kernel_df.nLogL[j]])
+                    append!(LogL2, qp_df.nLogL[qp_df.seed .== kernel_df.seed[j]])
+                end
+            end
+            hist(LogL2-LogL1; density=true, bins=convert(Int64, floor(length(LogL2)/10)), label=nice_kernel_names[i], alpha=1/(kernel_amount-1))
+        end
+    end
     l_act_theta = L"\ell_{act}(\theta|t,s)"
     xlabel(l_act_theta * " difference")
     legend(;fontsize=30)
@@ -49,18 +68,42 @@ begin
     save_PyPlot_fig("difference_test")
 end
 
+
+
 # shared plot
 begin
     ax = init_plot()
-    logL2 = return_logL(kernel_names[2])
-    hist(logL2; density=true, bins=convert(Int64, floor(length(logL2)/10)), label=nice_kernel_names[2], alpha=0.3)
-    logL1 = return_logL(kernel_names[1])
-    hist(logL1; density=true, bins=convert(Int64, floor(length(logL1)/10)), label=nice_kernel_names[1], alpha=0.3)
-    logL3 = return_logL(kernel_names[3])
-    hist(logL3; density=true, bins=convert(Int64, floor(length(logL3)/10)), label=nice_kernel_names[3], alpha=0.3)
+    for i in 1:kernel_amount
+        logL = return_logL(kernel_names[i])
+        hist(logL; density=true, bins=convert(Int64, floor(length(logL)/10)), label=nice_kernel_names[i], alpha=1/kernel_amount)
+    end
     l_act_theta = L"\ell_{act}(\theta|t,s)"
     xlabel(l_act_theta)
     legend(;fontsize=30)
     title("Comparing " * l_act_theta * " between kernels", fontsize=45)
     save_PyPlot_fig("compare_test")
+end
+
+using KernelDensity
+begin
+    df = get_df("qp_periodic")
+    init_plot()
+    # hist(df[!, end-1]; density=true, bins=convert(Int64, floor(length(df[!, end-1])/4)))
+    x = collect(linspace(10, 35, 1000))
+    data = df[!, end-1]
+    plot(x, pdf(kde(data), x))
+    # plot(x, pdf(kde(data; bandwidth=KernelDensity.default_bandwidth(data)/2), x))
+    xlabel("Time (days)")
+    title("QP period hyperparameter distribution (" * L"\tau_{med}" * "=30 days)", fontsize=45)
+    save_PyPlot_fig("test")
+end
+
+begin
+    kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp_periodic", "m52x2"]
+    df = get_df(kernel_names[3])
+    for i in 1:100
+        if !(i in df.seed)
+            println(i)
+        end
+    end
 end

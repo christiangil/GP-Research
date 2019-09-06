@@ -17,6 +17,10 @@ if called_from_terminal
     kernel_choice = parse(Int, ARGS[1])
     kernel_name = kernel_names[kernel_choice]
     seed = parse(Int, ARGS[2])
+    if isfile("csv_files/$(kernel_name)_logL_$seed.csv")
+        println("results aleady calculated")
+        exit()
+    end
     use_planet = length(ARGS) > 2
     rng = MersenneTwister(seed)
     # sim_id = sample(rng, 1:50)
