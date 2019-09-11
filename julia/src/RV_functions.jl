@@ -513,6 +513,10 @@ function add_kepler_to_Jones_problem_definition(
     normalization::Real=1,
     γ::Real=0.)
 
+    if K == 0
+        return prob_def.y_obs
+    end
+
     amount_of_samp_points = length(prob_def.x_obs)
     times_obs = convert_and_strip_units.(u"yr", (prob_def.x_obs)prob_def.x_obs_units)
     planet_rvs = kepler_rv.(times_obs, P, e, M0, K, ω; γ=γ)

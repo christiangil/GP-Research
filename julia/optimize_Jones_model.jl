@@ -1,5 +1,5 @@
 # adding in custom functions
-# include("src/setup.jl")
+include("src/setup.jl")
 # include("test/runtests.jl")
 include("src/all_functions.jl")
 
@@ -33,8 +33,8 @@ if called_from_terminal
     println("id: ", sim_id)
     println("optimizing on " * filename * " using the $kernel_name")
 else
-    use_planet = false
-    kernel_choice = 7
+    use_planet = true
+    kernel_choice = 3
     kernel_name = kernel_names[kernel_choice]
     # sim_id = 41; problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$sim_id"; save_prob_def=false, sub_sample=100)
     sim_id = 10
@@ -62,10 +62,10 @@ end
 ########################################
 
 if use_planet
-    P = (10 + 3 * randn())u"d"
+    P = (8 + 1 * randn())u"d"  # draw over more periods?
     e = rand() / 5
     M0 = 2 * π * rand()
-    length(ARGS) > 1 ? K = parse(Float64, ARGS[3]) : K = 0.3  # m/s
+    length(ARGS) > 1 ? K = parse(Float64, ARGS[3]) : K = 1  # m/s
     ω = 2 * π * rand()
     γ = 0
     problem_definition.y_obs[:] = add_kepler_to_Jones_problem_definition(
@@ -251,28 +251,27 @@ println(fit1_total_hyperparameters)
 fit_nLogL = nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
 println(fit_nLogL, "\n")
 
-if called_from_terminal
-    save_nlogLs!(fit_nLogL, sim_id, seed, fit1_total_hyperparameters, kernel_name)
-else
+if !called_from_terminal
     Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, "figs/gp/$kernel_name/id$(sim_id)_fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
 end
+#     save_nlogLs!(fit_nLogL, sim_id, seed, fit1_total_hyperparameters, kernel_name)
+# else
 
 # # coeffs = fit1_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
 # # coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)
 
-# # ################
-# # # Corner plots #
-# # ################
+# ################
+# # Corner plots #
+# ################
 #
 # # possible_labels = [L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{SE}" L"\lambda_{P}" L"\tau_P";
 # #     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{SE}" L" " L" ";
 # #     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\alpha" L"\lambda_{RQ}" L" ";
 # #     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{M52}" L" " L" "]
-# #
-# # @load "jld2_files/optimize_Jones_model_$kernel_name.jld2" current_params
-# # actual_labels = possible_labels[1, 1:length(current_params)]
-# # f_corner(input) = nlogL_Jones(problem_definition, input)
-# # @elapsed corner_plot(f_corner, current_params, "figs/gp/$kernel_name/corner_$kernel_name.png"; input_labels=actual_labels)
+#
+# actual_labels = [L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}", L"\lambda_{M52}"]
+# f_corner(input) = nlogL_Jones!(workspace, problem_definition, input)
+# @elapsed corner_plot(f_corner, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/corner_$kernel_name.png"; input_labels=actual_labels)
 
 if use_planet
 
@@ -371,7 +370,7 @@ if use_planet
     end
 
     # second order
-    @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb), g_tol = 1e-6) # 27s
+    @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol = 1e-6, iterations=50)) # 27s
 
     # # using preconditioning
     # try
@@ -401,22 +400,27 @@ if use_planet
 
     hold = copy(problem_definition.y_obs)
     problem_definition.y_obs[:] = remove_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs)
-    Jones_line_plots(amount_of_samp_points, problem_definition, fit2_total_hyperparameters, "figs/gp/$kernel_name/after")
+    if !called_from_terminal
+        Jones_line_plots(amount_of_samp_points, problem_definition, fit2_total_hyperparameters, "figs/gp/$kernel_name/after")
+    end
     problem_definition.y_obs[:] = hold
 
     ##########################
     # Evidence approximation #
     ##########################
 
-    H1 = nlogprior_kernel_hyperparameters!(∇∇nlogL_Jones(problem_definition, fit1_total_hyperparameters), problem_definition.n_kern_hyper, fit1_total_hyperparameters)
-    nlogL_val1 = fit_nLogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters)
-    println("evidence for Jones model: " * string(log_laplace_approximation(H1, nlogL_val1, 0)))
+    # H1 = nlogprior_kernel_hyperparameters!(∇∇nlogL_Jones(problem_definition, fit1_total_hyperparameters), problem_definition.n_kern_hyper, fit1_total_hyperparameters)
+    H1 = ∇∇nlogL_Jones(problem_definition, fit1_total_hyperparameters)
+    nlogL_val1 = fit_nLogL  # + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters)
+    llH1 = log_laplace_approximation(H1, nlogL_val1, 0)
+    println("evidence for Jones model: " * string(llH1))
 
-    H2 = nlogprior_kernel_hyperparameters!(∇∇nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_period), problem_definition.n_kern_hyper, fit2_total_hyperparameters)
-    nlogL_val2 = refit_nLogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit2_total_hyperparameters)
+    # H2 = nlogprior_kernel_hyperparameters!(∇∇nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_period), problem_definition.n_kern_hyper, fit2_total_hyperparameters)
+    H2 = ∇∇nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_period)
+    nlogL_val2 = refit_nLogL  # + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit2_total_hyperparameters)
     Σ_obs1 = Σ_observations(problem_definition, fit2_total_hyperparameters)
     println("best fit keplerian")
-    K1, e1, M01, ω1, γ1 = fit_linear_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs1; return_params=true, print_params=true)[2:end]
+    K2, e2, M02, ω2, γ2 = fit_linear_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs1; return_params=true, print_params=true)[2:end]
     println("\noriginial injected keplerian")
     println("K: $K, e: $e, M0: $M0, ω: $ω, γ: $γ")
 
@@ -425,5 +429,11 @@ if use_planet
 
     llH2 = log_laplace_approximation(H2, nlogL_val2, 0)
     println("evidence for Jones + planet model (no prior): " * string(llH2))
-    println("evidence for Jones + planet model: " * string(llH2 + logprior_kepler(best_period, e1, M01, K1, ω1, γ1)))
+    println("evidence for Jones + planet model: " * string(llH2 + logprior_kepler(best_period, e2, M02, K2, ω2, γ2)))
+
+    likelihoods = [-nlogL_val1, llH1, -nlogL_val2, llH2]
+    orbit_params = [K, e, M0, ω, γ, K2, e2, M02, ω2, γ2]
+    if called_from_terminal
+        save_nlogLs(seed, sim_id, likelihoods, append!(copy(fit1_total_hyperparameters), fit2_total_hyperparameters), orbit_params, kernel_name)
+    end
 end

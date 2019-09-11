@@ -1100,20 +1100,37 @@ end
 using DataFrames, CSV
 
 
-function save_nlogLs!(
-    nLogL::T,
-    sim_id::Integer,
+function save_nlogLs(
     seed::Integer,
+    sim_id::Integer,
+    likelihoods::Vector{T},
     hyperparameters::Vector{T},
+    orbit_params::Vector{T},
     kernel_name::String
     ) where {T<:Real}
 
+
+    likelihood_strs = ["L", "E"]
+    num_likelihoods= length(likelihood_strs)
+    @assert length(likelihoods) == 2 * num_likelihoods
+    orbit_params_strs = ["K", "e", "M0", "ω", "γ"]
+    num_orbit_params = length(orbit_params_strs)
+    @assert length(orbit_params) == 2 * num_orbit_params
+    @assert length(hyperparameters)%2 == 0
+    num_hyperparameters = Int(length(hyperparameters) / 2)
     # file_name = "csv_files/$(kernel_name)_logLs.csv"
     file_name = "csv_files/$(kernel_name)_logL_$seed.csv"
 
-    df = DataFrame(nLogL=nLogL, sim_id=sim_id, seed=seed, date=today())
+    df = DataFrame(seed=seed, sim_id=sim_id, date=today())
+
+    for i in 1:length(likelihoods)
+        df[!, Symbol(string(likelihood_strs[(i-1)%num_likelihoods + 1]) * string(Int(1 + floor((i-1)//num_likelihoods))))] .= likelihoods[i]
+    end
     for i in 1:length(hyperparameters)
-        df[!, Symbol("H$i")] .= hyperparameters[i]
+        df[!, Symbol("H" * string(((i-1)%num_hyperparameters) + 1) * "_" * string(Int(1 + floor((i-1)//num_hyperparameters))))] .= hyperparameters[i]
+    end
+    for i in 1:length(orbit_params)
+        df[!, Symbol(string(orbit_params_strs[(i-1)%num_orbit_params + 1]) * string(Int(1 + floor((i-1)//num_orbit_params))))] .= orbit_params[i]
     end
 
     # if isfile(file_name); append!(df, CSV.read(file_name)) end
