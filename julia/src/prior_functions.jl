@@ -13,6 +13,24 @@ function log_inverse_gamma(x::Real, α::Real=1., β::Real=1.; d::Integer=0)
     return val
 end
 
+α=1
+β=1
+x=4
+using Distributions; logpdf(Gamma(α, β), x)
+
+"Log of the Gamma pdf. Equivalent to using Distributions; logpdf(Gamma(α, β), x)"
+function log_gamma(x::Real, α::Real=1., θ::Real=1.; d::Integer=0)
+    @assert 0 <= d <= 2
+    if d==0
+        x > 0 ? val = -(x / θ) + (α - 1) * log(x) - α * log(θ) - log(gamma(α)) : val = -Inf
+    elseif d==1
+        x > 0 ? val = (α - 1) / x - 1 / θ : val = 0
+    else
+        x > 0 ? val = -(α - 1) / (x * x) : val = 0
+    end
+    return val
+end
+
 "Log of the Uniform pdf."
 function log_uniform(x::Real, min::Real=0, max::Real=1.; d::Integer=0)
     @assert 0 <= d <= 2
@@ -27,6 +45,7 @@ end
 """
 Log of the log-Uniform pdf.
 Flattens out in log space starting at shift
+Also known as a (modified in shifted case) Jeffrey's prior
 """
 function log_loguniform(x::Real, min::Real, max::Real; d::Integer=0, shift::Real=0)
     @assert 0 <= d <= 2
@@ -36,7 +55,7 @@ function log_loguniform(x::Real, min::Real, max::Real; d::Integer=0, shift::Real
         min <= x <= max ? val = -log(xpshift) - log(log((max + shift)/(min + shift))) : val = -Inf
     elseif d==1
         min <= x <= max ? val = -1 / xpshift : val = 0
-    else
+    elseif d==2
         min <= x <= max ? val = 1 / (xpshift * xpshift) : val = 0
     end
     return val

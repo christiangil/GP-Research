@@ -277,7 +277,7 @@ and ω
 hp = sqrt(e) * sin(ω)
 kp = sqrt(e) * cos(ω)
 so
-e = hp/^2 + kp^2
+e = hp^2 + kp^2
 ω = atan(h, k)
 sin(ω) = hp / sqrt(e)
 cos(ω) = kp / sqrt(e)

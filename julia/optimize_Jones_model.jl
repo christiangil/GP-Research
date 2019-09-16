@@ -1,5 +1,5 @@
 # adding in custom functions
-include("src/setup.jl")
+# include("src/setup.jl")
 # include("test/runtests.jl")
 include("src/all_functions.jl")
 
@@ -9,6 +9,8 @@ include("src/all_functions.jl")
 
 kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp_periodic", "m52x2"]
 initial_hypers = [[12.], [12], [12], [4, 12], [4, 12], [1, 15, 40], [12, 24, 1]]
+
+
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
 called_from_terminal = length(ARGS) > 0
