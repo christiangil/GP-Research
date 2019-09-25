@@ -1112,7 +1112,7 @@ function save_nlogLs(
 
     likelihood_strs = ["L", "E"]
     num_likelihoods= length(likelihood_strs)
-    @assert length(likelihoods) == 2 * num_likelihoods
+    @assert length(likelihoods) == 2 * num_likelihoods + 1
     orbit_params_strs = ["K", "e", "M0", "ω", "γ"]
     num_orbit_params = length(orbit_params_strs)
     @assert length(orbit_params) == 2 * num_orbit_params
@@ -1123,9 +1123,10 @@ function save_nlogLs(
 
     df = DataFrame(seed=seed, sim_id=sim_id, date=today())
 
-    for i in 1:length(likelihoods)
+    for i in 1:(length(likelihoods) - 1)
         df[!, Symbol(string(likelihood_strs[(i-1)%num_likelihoods + 1]) * string(Int(1 + floor((i-1)//num_likelihoods))))] .= likelihoods[i]
     end
+    df[!, Symbol("E_wp")] .= likelihoods[i]
     for i in 1:length(hyperparameters)
         df[!, Symbol("H" * string(((i-1)%num_hyperparameters) + 1) * "_" * string(Int(1 + floor((i-1)//num_hyperparameters))))] .= hyperparameters[i]
     end

@@ -185,7 +185,7 @@ function init_problem_definition(
 
     # a0 = ones(n_out, n_dif) / 20
     a0 = zeros(n_out, n_dif)
-	# a0[1,1] = 0.03;
+	a0[1,1] = 0.03;
 	a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0
 
     problem_def_base = init_problem_definition(n_dif, n_out, x_obs, x_obs_units, a0; y_obs=y_obs, y_obs_units=y_obs_units, normals=normals, noise=measurement_noise)

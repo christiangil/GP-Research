@@ -195,7 +195,7 @@ end
 "assert all passed variables are positive"
 function assert_positive(vars...)
     for i in vars
-        @assert i>0 "passed a negative/0 variable that needs to be positive"
+        @assert all(i .> 0) "passed a negative/0 variable that needs to be positive"
     end
 end
 

@@ -1,5 +1,5 @@
 # adding in custom functions
-# include("src/setup.jl")
+include("src/setup.jl")
 # include("test/runtests.jl")
 include("src/all_functions.jl")
 
@@ -8,9 +8,7 @@ include("src/all_functions.jl")
 ###################################
 
 kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp_periodic", "m52x2"]
-initial_hypers = [[12.], [12], [12], [4, 12], [4, 12], [1, 15, 40], [12, 24, 1]]
-
-
+initial_hypers = [[12.], [12], [12], [4, 12], [4, 12], [1, 20, 40], [12, 24, 1]]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
 called_from_terminal = length(ARGS) > 0
@@ -30,21 +28,64 @@ if called_from_terminal
     sim_id = sample(rng, 6:20)
     filename = "res-1000-1years_full_id$sim_id"
     problem_def_base = init_problem_definition("jld2_files/" * filename; save_prob_def=false, sub_sample=sample_size, on_off=14, rng=rng)
-    kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-    problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
-    println("id: ", sim_id)
     println("optimizing on " * filename * " using the $kernel_name")
 else
     use_planet = true
-    kernel_choice = 3
+    kernel_choice = 7
     kernel_name = kernel_names[kernel_choice]
     # sim_id = 41; problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$sim_id"; save_prob_def=false, sub_sample=100)
     sim_id = 10
+    seed = 0
     problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=sample_size)
     # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=100, on_off=14)
     # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$id"; save_prob_def=false)
-    kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-    problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
+end
+
+kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
+problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
+println("id: ", sim_id)
+
+if kernel_choice < 4
+    # normals
+    parameters = gamma_mode_std_2_alpha_theta(10, 10)
+    function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
+        return [log_gamma(hps[1], parameters; d=d)]
+    end
+elseif kernel_choice < 6
+    # rationals
+    paramsα = gamma_mode_std_2_alpha_theta(4, 10)
+    paramsμ = gamma_mode_std_2_alpha_theta(10, 10)
+    function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
+        return [log_gamma(hps[1], paramsα; d=d), log_gamma(hps[2], paramsμ; d=d)]
+    end
+elseif kernel_choice == 6
+    # qp
+    paramsλp = gamma_mode_std_2_alpha_theta(1, 1)
+    paramsP = gamma_mode_std_2_alpha_theta(20, 10)
+    paramsλse = gamma_mode_std_2_alpha_theta(40, 20)
+    function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
+        return [log_gamma(hps[1], paramsλp; d=d), log_gamma(hps[2], paramsP; d=d), log_gamma(hps[3], paramsλse; d=d)]
+    end
+elseif kernel_choice == 7
+    # m52x2
+    paramsλ1 = gamma_mode_std_2_alpha_theta(10, 10)
+    paramsλ2 = gamma_mode_std_2_alpha_theta(20, 10)
+    function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
+        return [log_gamma(hps[1], paramsλ1; d=d), log_gamma(hps[2], paramsλ2; d=d), log_gaussian(hps[3], [0, 3]; d=d)]
+    end
+end
+
+function nlogprior_kernel_hyperparameters(n_kern_hyper::Integer, total_hyperparameters::Vector{<:Real}, d::Integer)
+    hps = total_hyperparameters[(end - (n_kern_hyper - 1)):end]
+    if d == 0
+        return -sum(kernel_hyper_priors(hps, d))
+    elseif d == 1
+        return append!(zeros(length(total_hyperparameters) - n_kern_hyper), -kernel_hyper_priors(hps, d))
+    elseif d == 2
+        H = zeros(length(total_hyperparameters), length(total_hyperparameters))
+        H[(end - (n_kern_hyper - 1)):end, (end - (n_kern_hyper - 1)):end] -= Diagonal(kernel_hyper_priors(hps, d))
+        return H
+    end
 end
 
 # creating path to save figures
@@ -180,24 +221,22 @@ end
 initial_x = remove_zeros(total_hyperparameters)
 
 function f(non_zero_hyper::Vector{T}) where {T<:Real}
-    println(non_zero_hyper)
-    return nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
-    # return (nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
-    #     + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper))
+    # println(non_zero_hyper)
+    # return nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+    return (nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+        + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0))
 end
 
 function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-    G[:] = ∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
-    # G[:] = (nlogprior_kernel_hyperparameters!(
-    #     ∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper),
-    #     problem_definition.n_kern_hyper, non_zero_hyper))
+    # G[:] = ∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+    G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+        + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
 end
 
 function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-    H[:, :] = ∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
-    # H[:, :] = (nlogprior_kernel_hyperparameters!(
-    #     ∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper),
-    #     problem_definition.n_kern_hyper, non_zero_hyper))
+    # H[:, :] = ∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+    H[:, :] = (∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+     + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 2))
 end
 
 # ends optimization if true
@@ -254,7 +293,7 @@ fit_nLogL = nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparamete
 println(fit_nLogL, "\n")
 
 if !called_from_terminal
-    Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, "figs/gp/$kernel_name/id$(sim_id)_fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
+    Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_id$(sim_id)_fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
 end
 #     save_nlogLs!(fit_nLogL, sim_id, seed, fit1_total_hyperparameters, kernel_name)
 # else
@@ -262,18 +301,23 @@ end
 # # coeffs = fit1_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
 # # coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)
 
-# ################
-# # Corner plots #
-# ################
-#
-# # possible_labels = [L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{SE}" L"\lambda_{P}" L"\tau_P";
-# #     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{SE}" L" " L" ";
-# #     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\alpha" L"\lambda_{RQ}" L" ";
-# #     L"a_{11}" L"a_{21}" L"a_{12}" L"a_{32}" L"a_{23}" L"\lambda_{M52}" L" " L" "]
-#
-# actual_labels = [L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}", L"\lambda_{M52}"]
-# f_corner(input) = nlogL_Jones!(workspace, problem_definition, input)
-# @elapsed corner_plot(f_corner, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/corner_$kernel_name.png"; input_labels=actual_labels)
+################
+# Corner plots #
+################
+
+if called_from_terminal
+    possible_labels = [
+        [L"\lambda_{pp}"],
+        [L"\lambda_{se}"],
+        [L"\lambda_{m52}"],
+        [L"\alpha" L"\mu"],
+        [L"\alpha" L"\mu"],
+        [L"\lambda_{se}" L"\lambda_{p}" L"\tau_p"],
+        [L"\lambda_{1}" L"\lambda_{2}" L"ratio"]]
+
+    actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
+    @elapsed corner_plot(f, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_corner.png"; input_labels=actual_labels)
+end
 
 if use_planet
 
@@ -312,7 +356,7 @@ if use_planet
         axhline(y=-nlogL_Jones(problem_definition, fit1_total_hyperparameters), color="k")
         title_string = @sprintf "%.0f day, %.2f m/s" convert_and_strip_units(u"d",P) K
         title(title_string, fontsize=30)
-        save_PyPlot_fig("figs/rv/$(kernel_name)_$(amount_of_periods).png")
+        save_PyPlot_fig("figs/rv/$(kernel_name)_seed$(seed)_id$(sim_id).png")
     end
 
     # three best periods
@@ -360,15 +404,21 @@ if use_planet
 
     function f(non_zero_hyper::Vector{T}) where {T<:Real}
         println(non_zero_hyper)
-        return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
+        # return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
+        return (nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
+            + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0))
     end
 
     function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-        G[:] = ∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
+        # G[:] = ∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
+        G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
+            + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
     end
 
     function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-        H[:, :] = ∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
+        # H[:, :] = ∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
+        H[:, :] = (∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
+         + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 2))
     end
 
     # second order
@@ -411,18 +461,20 @@ if use_planet
     # Evidence approximation #
     ##########################
 
-    # H1 = nlogprior_kernel_hyperparameters!(∇∇nlogL_Jones(problem_definition, fit1_total_hyperparameters), problem_definition.n_kern_hyper, fit1_total_hyperparameters)
-    H1 = ∇∇nlogL_Jones(problem_definition, fit1_total_hyperparameters)
-    nlogL_val1 = fit_nLogL  # + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters)
+    H1 = (∇∇nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
+        + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit1_total_hyperparameters), 2))
+    # H1 = ∇∇nlogL_Jones(problem_definition, fit1_total_hyperparameters)
+    nlogL_val1 = fit_nLogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters, 0)
     llH1 = log_laplace_approximation(H1, nlogL_val1, 0)
     println("evidence for Jones model: " * string(llH1))
 
-    # H2 = nlogprior_kernel_hyperparameters!(∇∇nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_period), problem_definition.n_kern_hyper, fit2_total_hyperparameters)
-    H2 = ∇∇nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_period)
-    nlogL_val2 = refit_nLogL  # + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit2_total_hyperparameters)
-    Σ_obs1 = Σ_observations(problem_definition, fit2_total_hyperparameters)
+    H2 = (∇∇nlogL_Jones!(workspace, problem_definition, fit2_total_hyperparameters; P=best_period)
+        + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit2_total_hyperparameters), 2))
+    # H2 = ∇∇nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_period)
+    nlogL_val2 = refit_nLogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit2_total_hyperparameters, 0)
+    Σ_obs_final = Σ_observations(problem_definition, fit2_total_hyperparameters)
     println("best fit keplerian")
-    K2, e2, M02, ω2, γ2 = fit_linear_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs1; return_params=true, print_params=true)[2:end]
+    K2, e2, M02, ω2, γ2 = fit_linear_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs_final; return_params=true, print_params=true)[2:end]
     println("\noriginial injected keplerian")
     println("K: $K, e: $e, M0: $M0, ω: $ω, γ: $γ")
 
@@ -430,10 +482,11 @@ if use_planet
     # nlogL_val2
 
     llH2 = log_laplace_approximation(H2, nlogL_val2, 0)
+    llH2_wp = llH2 + logprior_kepler(best_period, e2, M02, K2, ω2, γ2)
     println("evidence for Jones + planet model (no prior): " * string(llH2))
-    println("evidence for Jones + planet model: " * string(llH2 + logprior_kepler(best_period, e2, M02, K2, ω2, γ2)))
+    println("evidence for Jones + planet model: " * string(llH2_wp))
 
-    likelihoods = [-nlogL_val1, llH1, -nlogL_val2, llH2]
+    likelihoods = [-nlogL_val1, llH1, -nlogL_val2, llH2, llH2_wp]
     orbit_params = [K, e, M0, ω, γ, K2, e2, M02, ω2, γ2]
     if called_from_terminal
         save_nlogLs(seed, sim_id, likelihoods, append!(copy(fit1_total_hyperparameters), fit2_total_hyperparameters), orbit_params, kernel_name)

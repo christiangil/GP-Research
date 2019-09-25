@@ -92,8 +92,8 @@ function corner_plot(
 
             holder = copy(input)
 
-            xspread = max(min_spread, abs(input[k]) / 10)
-            yspread = max(min_spread, abs(input[l]) / 10)
+            xspread = max(min_spread, abs(input[k]) / 4)
+            yspread = max(min_spread, abs(input[l]) / 4)
 
             # create function profiles on diagonals
             if k == l
