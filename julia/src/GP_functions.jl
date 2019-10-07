@@ -1126,7 +1126,7 @@ function save_nlogLs(
     for i in 1:(length(likelihoods) - 1)
         df[!, Symbol(string(likelihood_strs[(i-1)%num_likelihoods + 1]) * string(Int(1 + floor((i-1)//num_likelihoods))))] .= likelihoods[i]
     end
-    df[!, Symbol("E_wp")] .= likelihoods[i]
+    df[!, Symbol("E_wp")] .= likelihoods[end]
     for i in 1:length(hyperparameters)
         df[!, Symbol("H" * string(((i-1)%num_hyperparameters) + 1) * "_" * string(Int(1 + floor((i-1)//num_hyperparameters))))] .= hyperparameters[i]
     end

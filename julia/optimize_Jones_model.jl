@@ -1,5 +1,6 @@
-# adding in custom functions
-include("src/setup.jl")
+called_from_terminal = length(ARGS) > 0
+
+# include("src/setup.jl")
 # include("test/runtests.jl")
 include("src/all_functions.jl")
 
@@ -11,20 +12,17 @@ kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp_periodic", "m52x2"]
 initial_hypers = [[12.], [12], [12], [4, 12], [4, 12], [1, 20, 40], [12, 24, 1]]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
-called_from_terminal = length(ARGS) > 0
 sample_size = 100
 if called_from_terminal
     kernel_choice = parse(Int, ARGS[1])
     kernel_name = kernel_names[kernel_choice]
     seed = parse(Int, ARGS[2])
-    if isfile("csv_files/$(kernel_name)_logL_$seed.csv")
-        println("results aleady calculated")
-        exit()
-    end
+    # if isfile("csv_files/$(kernel_name)_logL_$seed.csv")
+    #     println("results aleady calculated")
+    #     exit()
+    # end
     use_planet = length(ARGS) > 2
     rng = MersenneTwister(seed)
-    # sim_id = sample(rng, 1:50)
-    # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$sim_id"; save_prob_def=false, sub_sample=100, on_off=14, rng=rng)
     sim_id = sample(rng, 6:20)
     filename = "res-1000-1years_full_id$sim_id"
     problem_def_base = init_problem_definition("jld2_files/" * filename; save_prob_def=false, sub_sample=sample_size, on_off=14, rng=rng)
@@ -220,11 +218,15 @@ end
 # storing initial hyperparameters
 initial_x = remove_zeros(total_hyperparameters)
 
-function f(non_zero_hyper::Vector{T}) where {T<:Real}
-    # println(non_zero_hyper)
+function f_no_print(non_zero_hyper::Vector{T}) where {T<:Real}
     # return nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
     return (nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
         + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0))
+end
+
+function f(non_zero_hyper::Vector{T}) where {T<:Real}
+    println(non_zero_hyper)
+    return f_no_print(non_zero_hyper)
 end
 
 function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
@@ -305,19 +307,19 @@ end
 # Corner plots #
 ################
 
-if called_from_terminal
-    possible_labels = [
-        [L"\lambda_{pp}"],
-        [L"\lambda_{se}"],
-        [L"\lambda_{m52}"],
-        [L"\alpha" L"\mu"],
-        [L"\alpha" L"\mu"],
-        [L"\lambda_{se}" L"\lambda_{p}" L"\tau_p"],
-        [L"\lambda_{1}" L"\lambda_{2}" L"ratio"]]
-
-    actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
-    @elapsed corner_plot(f, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_corner.png"; input_labels=actual_labels)
-end
+# if called_from_terminal
+#     possible_labels = [
+#         [L"\lambda_{pp}"],
+#         [L"\lambda_{se}"],
+#         [L"\lambda_{m52}"],
+#         [L"\alpha" L"\mu"],
+#         [L"\alpha" L"\mu"],
+#         [L"\lambda_{p}" L"\tau_p" L"\lambda_{se}"],
+#         [L"\lambda_{1}" L"\lambda_{2}" L"\sqrt{ratio}"]]
+#
+#     actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
+#     @elapsed corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_corner.png"; input_labels=actual_labels)
+# end
 
 if use_planet
 
@@ -466,7 +468,6 @@ if use_planet
     # H1 = ∇∇nlogL_Jones(problem_definition, fit1_total_hyperparameters)
     nlogL_val1 = fit_nLogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters, 0)
     llH1 = log_laplace_approximation(H1, nlogL_val1, 0)
-    println("evidence for Jones model: " * string(llH1))
 
     H2 = (∇∇nlogL_Jones!(workspace, problem_definition, fit2_total_hyperparameters; P=best_period)
         + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit2_total_hyperparameters), 2))
@@ -475,7 +476,7 @@ if use_planet
     Σ_obs_final = Σ_observations(problem_definition, fit2_total_hyperparameters)
     println("best fit keplerian")
     K2, e2, M02, ω2, γ2 = fit_linear_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs_final; return_params=true, print_params=true)[2:end]
-    println("\noriginial injected keplerian")
+    println("originial injected keplerian")
     println("K: $K, e: $e, M0: $M0, ω: $ω, γ: $γ")
 
     # diag(H2)
@@ -483,6 +484,7 @@ if use_planet
 
     llH2 = log_laplace_approximation(H2, nlogL_val2, 0)
     llH2_wp = llH2 + logprior_kepler(best_period, e2, M02, K2, ω2, γ2)
+    println("\nevidence for Jones model: " * string(llH1))
     println("evidence for Jones + planet model (no prior): " * string(llH2))
     println("evidence for Jones + planet model: " * string(llH2_wp))
 

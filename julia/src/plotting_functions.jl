@@ -117,8 +117,8 @@ function corner_plot(
                 Z = zeros((steps,steps))
                 for i in 1:steps
                     for j in 1:steps
-                        holder[k] = x[i]
-                        holder[l] = y[j]
+                        holder[l] = x[i]
+                        holder[k] = y[j]
                         Z[i,j] = f(holder)
                     end
                 end
