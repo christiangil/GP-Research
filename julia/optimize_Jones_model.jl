@@ -17,27 +17,24 @@ if called_from_terminal
     kernel_choice = parse(Int, ARGS[1])
     kernel_name = kernel_names[kernel_choice]
     seed = parse(Int, ARGS[2])
+    use_planet = length(ARGS) > 2
     # if isfile("csv_files/$(kernel_name)_logL_$seed.csv")
     #     println("results aleady calculated")
     #     exit()
     # end
-    use_planet = length(ARGS) > 2
-    rng = MersenneTwister(seed)
-    sim_id = sample(rng, 6:20)
-    filename = "res-1000-1years_full_id$sim_id"
-    problem_def_base = init_problem_definition("jld2_files/" * filename; save_prob_def=false, sub_sample=sample_size, on_off=14, rng=rng)
-    println("optimizing on " * filename * " using the $kernel_name")
 else
-    use_planet = true
-    kernel_choice = 7
+    kernel_choice = 3
     kernel_name = kernel_names[kernel_choice]
-    # sim_id = 41; problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$sim_id"; save_prob_def=false, sub_sample=100)
-    sim_id = 10
-    seed = 0
-    problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=sample_size)
-    # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_long_id$sim_id"; save_prob_def=false, sub_sample=100, on_off=14)
-    # problem_def_base = init_problem_definition("jld2_files/res-1000-1years_full_id$id"; save_prob_def=false)
+    seed = 7
+    use_planet = true
 end
+
+rng = MersenneTwister(seed)
+sim_id = sample(rng, 6:20)
+filename = "res-1000-1years_long_id$sim_id"
+problem_def_base = init_problem_definition("jld2_files/" * filename; save_prob_def=false, sub_sample=sample_size, on_off=14, rng=rng)
+# problem_def_base = init_problem_definition("jld2_files/" * filename; save_prob_def=false, sub_sample=sample_size)
+println("optimizing on " * filename * " using the $kernel_name")
 
 kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
 problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
@@ -139,10 +136,8 @@ total_hyperparameters = append!(coeff_hyperparameters, initial_hypers[kernel_cho
 # how finely to sample the domain (for plotting)
 amount_of_samp_points = convert(Int64, max(500, round(2 * sqrt(2) * length(problem_definition.x_obs))))
 
-if !called_from_terminal
-    Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, "figs/gp/$kernel_name/initial_gp"; find_post=false)  # , plot_Σ=true, plot_Σ_profile=true)
-    Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, "figs/gp/$kernel_name/post_gp")  # ; plot_Σ=true, plot_Σ_profile=true)
-end
+Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_initial_gp"; find_post=false)  # , plot_Σ=true, plot_Σ_profile=true)
+Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_post_gp")  # ; plot_Σ=true, plot_Σ_profile=true)
 
 #######################
 # Jones model fitting #
@@ -220,8 +215,12 @@ initial_x = remove_zeros(total_hyperparameters)
 
 function f_no_print(non_zero_hyper::Vector{T}) where {T<:Real}
     # return nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
-    return (nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
-        + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0))
+    prior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
+    if prior == Inf
+        return prior
+    else
+        return nlogL_Jones!(workspace, problem_definition, non_zero_hyper) + prior
+    end
 end
 
 function f(non_zero_hyper::Vector{T}) where {T<:Real}
@@ -258,7 +257,7 @@ end
 
 # # second order
 # @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, iterations=1)) # 27s
-@elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=1e-6, iterations=50)) # 27s
+@elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=1e-6, iterations=200)) # 27s
 
 # # # first order
 # # @elapsed result = optimize(f, g!, initial_x, ConjugateGradient(), Optim.Options(callback=optim_cb))  # 44s
@@ -294,11 +293,7 @@ println(fit1_total_hyperparameters)
 fit_nLogL = nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
 println(fit_nLogL, "\n")
 
-if !called_from_terminal
-    Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_id$(sim_id)_fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
-end
-#     save_nlogLs!(fit_nLogL, sim_id, seed, fit1_total_hyperparameters, kernel_name)
-# else
+Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_id$(sim_id)_fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
 
 # # coeffs = fit1_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
 # # coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)
@@ -307,19 +302,20 @@ end
 # Corner plots #
 ################
 
-# if called_from_terminal
-#     possible_labels = [
-#         [L"\lambda_{pp}"],
-#         [L"\lambda_{se}"],
-#         [L"\lambda_{m52}"],
-#         [L"\alpha" L"\mu"],
-#         [L"\alpha" L"\mu"],
-#         [L"\lambda_{p}" L"\tau_p" L"\lambda_{se}"],
-#         [L"\lambda_{1}" L"\lambda_{2}" L"\sqrt{ratio}"]]
-#
-#     actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
-#     @elapsed corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_corner.png"; input_labels=actual_labels)
-# end
+if called_from_terminal
+    possible_labels = [
+        [L"\lambda_{pp}"],
+        [L"\lambda_{se}"],
+        [L"\lambda_{m52}"],
+        [L"\alpha" L"\mu"],
+        [L"\alpha" L"\mu"],
+        [L"\lambda_{p}" L"\tau_p" L"\lambda_{se}"],
+        [L"\lambda_{1}" L"\lambda_{2}" L"\sqrt{ratio}"]]
+
+    actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
+    corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_corner.png"; input_labels=actual_labels)
+    # corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_corner.png"; input_labels=actual_labels, steps=3)
+end
 
 if use_planet
 
@@ -406,9 +402,13 @@ if use_planet
 
     function f(non_zero_hyper::Vector{T}) where {T<:Real}
         println(non_zero_hyper)
+        prior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
         # return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
-        return (nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
-            + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0))
+        if prior == Inf
+            return prior
+        else
+            return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period) + prior
+        end
     end
 
     function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
@@ -424,7 +424,7 @@ if use_planet
     end
 
     # second order
-    @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol = 1e-6, iterations=50)) # 27s
+    @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol = 1e-6, iterations=200)) # 27s
 
     # # using preconditioning
     # try
@@ -454,9 +454,9 @@ if use_planet
 
     hold = copy(problem_definition.y_obs)
     problem_definition.y_obs[:] = remove_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs)
-    if !called_from_terminal
-        Jones_line_plots(amount_of_samp_points, problem_definition, fit2_total_hyperparameters, "figs/gp/$kernel_name/after")
-    end
+
+    Jones_line_plots(amount_of_samp_points, problem_definition, fit2_total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_post_planet")
+
     problem_definition.y_obs[:] = hold
 
     ##########################
