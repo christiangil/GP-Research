@@ -225,6 +225,7 @@ end
 
 function f(non_zero_hyper::Vector{T}) where {T<:Real}
     println(non_zero_hyper)
+    global current_hyper = copy(non_zero_hyper)
     return f_no_print(non_zero_hyper)
 end
 
@@ -257,7 +258,12 @@ end
 
 # # second order
 # @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, iterations=1)) # 27s
-@elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=1e-6, iterations=200)) # 27s
+try
+    result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=1e-6, iterations=200)) # 27s
+catch
+    println("retrying fit")
+    result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=1e-6, iterations=200))
+end
 
 # # # first order
 # # @elapsed result = optimize(f, g!, initial_x, ConjugateGradient(), Optim.Options(callback=optim_cb))  # 44s

@@ -73,11 +73,11 @@ should scale as steps^2*n(n-1)/2 in time
 """
 function corner_plot(
     f::Function,
-    input::Vector{<:Real},
+    input::Vector{<:AbstractFloat},
     filename::AbstractString;
     steps::Integer=15+1,
     min_spread::Real=1/2,
-    input_labels::Vector{<:AbstractString}=repeat([L" "],length(input)),
+    input_labels::Vector{<:AbstractString}=repeat([" "],length(input)),
     n::Integer=length(input))
 
     assert_positive(min_spread, steps, n)
@@ -117,18 +117,20 @@ function corner_plot(
                 Z = zeros((steps,steps))
                 for i in 1:steps
                     for j in 1:steps
-                        holder[l] = x[i]
-                        holder[k] = y[j]
-                        Z[i,j] = f(holder)
+                        holder[k] = x[i]
+                        holder[l] = y[j]
+                        Z[j,i] = f(holder)
                     end
                 end
                 X = repeat(x', length(y), 1)
                 Y = repeat(y, 1, length(x))
                 axs[l, k].contour(X, Y, Z, colors="k", linewidths=16/n)
+                # thing = axs[l, k].contour(X, Y, Z, colors="k", linewidths=16/n)
+                # axs[l, k].clabel(thing, inline=1, fontsize=10)
                 axs[l, k].imshow(Z, interpolation="bilinear", origin="lower", extent=(xmin, xmax, ymin, ymax))
                 axs[l, k].scatter(input[k], input[l], marker="X", c="k", s=1200/n)
-                if abs(input[k]) < xspread; axs[l, k].axvline(x=0, color="grey", linewidth=32/n) end
-                if abs(input[l]) < yspread; axs[l, k].axhline(y=0, color="grey", linewidth=32/n) end
+                if abs(input[k]) < xspread; axs[l, k].axvline(x=0, color="grey", linewidth=24/n) end
+                if abs(input[l]) < yspread; axs[l, k].axhline(y=0, color="grey", linewidth=24/n) end
 
                 # setting image aspect ratio to make it square
                 # xleft, xright = axs[l, k].get_xlim()
