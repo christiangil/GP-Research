@@ -126,15 +126,22 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
         show_curves_o = show_curves[:, sample_output_indices]
         σ_o = σ[sample_output_indices]
         mean_o = mean[sample_output_indices]
+        if find_post
+            mean_obs_o = mean_obs[obs_output_indices]
+        end
+
         if output==1
             y_o ./= prob_def.normals[output]
             obs_noise_o ./= prob_def.normals[output]
             show_curves_o ./= prob_def.normals[output]
             σ_o ./= prob_def.normals[output]
             mean_o ./= prob_def.normals[output]
+            if find_post
+                mean_obs_o ./= prob_def.normals[output]
+            end
         end
 
-        show_resids ? axs = custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o, mean_obs=mean_obs[obs_output_indices]) : axs = custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o)
+        show_resids ? axs = custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o, mean_obs=mean_obs_o) : axs = custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o)
 
         if output==1
             y_str = "RVs (" * string(prob_def.y_obs_units) * ")"
