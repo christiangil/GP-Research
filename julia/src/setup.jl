@@ -18,6 +18,7 @@ Pkg.add("Unitful")
 Pkg.add("UnitfulAstro")
 Pkg.add("CSV")
 Pkg.add("DataFrames")
+Pkg.add("FITSIO")
 Pkg.API.precompile()
 
 # Pkg.add("CUDAdrv")

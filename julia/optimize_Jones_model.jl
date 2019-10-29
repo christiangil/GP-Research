@@ -1,7 +1,5 @@
 called_from_terminal = length(ARGS) > 0
 
-# include("src/setup.jl")
-# include("test/runtests.jl")
 include("src/all_functions.jl")
 
 ###################################
@@ -25,7 +23,7 @@ if called_from_terminal
 else
     kernel_choice = 3
     kernel_name = kernel_names[kernel_choice]
-    seed = 7
+    seed = 3
     use_planet = true
 end
 
@@ -40,20 +38,20 @@ kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
 problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
 println("id: ", sim_id)
 
-if kernel_choice < 4
+if kernel_name in ["pp", "se", "m52"]
     # normals
     parameters = gamma_mode_std_2_alpha_theta(10, 10)
     function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
         return [log_gamma(hps[1], parameters; d=d)]
     end
-elseif kernel_choice < 6
+elseif kernel_name in ["rq", "rm52"]
     # rationals
     paramsα = gamma_mode_std_2_alpha_theta(4, 10)
     paramsμ = gamma_mode_std_2_alpha_theta(10, 10)
     function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
         return [log_gamma(hps[1], paramsα; d=d), log_gamma(hps[2], paramsμ; d=d)]
     end
-elseif kernel_choice == 6
+elseif  kernel_name == "qp_periodic"
     # qp
     paramsλp = gamma_mode_std_2_alpha_theta(1, 1)
     paramsP = gamma_mode_std_2_alpha_theta(20, 10)
@@ -61,7 +59,7 @@ elseif kernel_choice == 6
     function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
         return [log_gamma(hps[1], paramsλp; d=d), log_gamma(hps[2], paramsP; d=d), log_gamma(hps[3], paramsλse; d=d)]
     end
-elseif kernel_choice == 7
+elseif kernel_name == "m52x2"
     # m52x2
     paramsλ1 = gamma_mode_std_2_alpha_theta(10, 10)
     paramsλ2 = gamma_mode_std_2_alpha_theta(20, 10)
@@ -103,7 +101,7 @@ if use_planet
     P = (8 + 1 * randn())u"d"  # draw over more periods?
     e = rand() / 5
     M0 = 2 * π * rand()
-    length(ARGS) > 1 ? K = parse(Float64, ARGS[3]) : K = 1  # m/s
+    length(ARGS) > 1 ? K = parse(Float64, ARGS[3]) : K = 0.2  # m/s
     ω = 2 * π * rand()
     γ = 0
     problem_definition.y_obs[:] = add_kepler_to_Jones_problem_definition(
@@ -247,7 +245,7 @@ function optim_cb(x::OptimizationState)
     if x.iteration > 0
         println("Iteration:     ", x.iteration)
         println("Time so far:   ", x.metadata["time"], " s")
-        println("nLogL:         ", x.value)
+        println("nlogL:         ", x.value)
         println("Gradient Norm: ", x.g_norm)
         println()
         # update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
@@ -260,29 +258,27 @@ end
 # @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, iterations=1)) # 27s
 
 try
-    global result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=1e-6, iterations=200)) # 27s
+    global result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol = 1e-6, iterations=200)) # 27s
+    # global result = optimize(f, g!, initial_x, LBFGS(), Optim.Options(callback=optim_cb, g_tol = 1e-6, iterations=200)) # 27s
 catch
     println("retrying fit")
-    global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=1e-6, iterations=200))
+    global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol = 1e-6, iterations=200))
+    # global result = optimize(f, g!, current_hyper, LBFGS(), Optim.Options(callback=optim_cb, g_tol = 1e-6, iterations=200)) # 27s
 end
 
-# # # first order
-# # @elapsed result = optimize(f, g!, initial_x, ConjugateGradient(), Optim.Options(callback=optim_cb))  # 44s
+# # second order
+# @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb))  # 44s
+
+# # first order
+# @elapsed result = optimize(f, g!, initial_x, ConjugateGradient(), Optim.Options(callback=optim_cb))  # 44s
 # @elapsed result = optimize(f, g!, initial_x, LBFGS(), Optim.Options(callback=optim_cb))  # 34s
-#
-# # # constrained second order
-# # lx = append!(-10 * ones(length(remove_zeros(total_hyperparameters)) - problem_definition.n_kern_hyper), zeros(problem_definition.n_kern_hyper))
-# # ux = append!(10 * ones(length(remove_zeros(total_hyperparameters)) - problem_definition.n_kern_hyper), time_span * ones(problem_definition.n_kern_hyper))
-# # @elapsed result = optimize(TwiceDifferentiable(f, g!, h!, initial_x), TwiceDifferentiableConstraints(lx, ux), initial_x, IPNewton(), Optim.Options(callback=optim_cb)) # 50s
-#
-# # using preconditioning
-# preconditioner = Diagonal(diag(∇∇nlogL_Jones!(workspace, problem_definition, initial_x)))
-# preconditioner = precond(length(initial_x))
-# @elapsed try
-#     result = optimize(f, g!, initial_x, LBFGS(P=preconditioner), Optim.Options(callback=optim_cb))  # 21s
-# catch
-#     result = optimize(f, g!, initial_x, ConjugateGradient(P=preconditioner), Optim.Options(callback=optim_cb))  # 25s
-# end
+
+# # constrained second order
+# lx = append!(-10 * ones(length(remove_zeros(total_hyperparameters)) - problem_definition.n_kern_hyper), zeros(problem_definition.n_kern_hyper))
+# ux = append!(10 * ones(length(remove_zeros(total_hyperparameters)) - problem_definition.n_kern_hyper), time_span * ones(problem_definition.n_kern_hyper))
+# @elapsed result = optimize(TwiceDifferentiable(f, g!, h!, initial_x), TwiceDifferentiableConstraints(lx, ux), initial_x, IPNewton(), Optim.Options(callback=optim_cb)) # 50s
+
+println(result)
 
 fit1_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, result.minimizer)
 
@@ -292,13 +288,13 @@ fit1_total_hyperparameters = reconstruct_total_hyperparameters(problem_definitio
 
 println("starting hyperparameters")
 println(total_hyperparameters)
-initial_nLogL = nlogL_Jones(problem_definition, total_hyperparameters)
-println(initial_nLogL, "\n")
+initial_nlogL = nlogL_Jones(problem_definition, total_hyperparameters)
+println(initial_nlogL, "\n")
 
 println("ending hyperparameters")
 println(fit1_total_hyperparameters)
-fit_nLogL = nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
-println(fit_nLogL, "\n")
+fit_nlogL = nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
+println(fit_nlogL, "\n")
 
 Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_id$(sim_id)_fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
 
@@ -407,15 +403,20 @@ if use_planet
     # storing initial hyperparameters
     initial_x = remove_zeros(fit1_total_hyperparameters)
 
-    function f(non_zero_hyper::Vector{T}) where {T<:Real}
-        println(non_zero_hyper)
-        prior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
+    function f_no_print(non_zero_hyper::Vector{T}) where {T<:Real}
         # return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period)
+        prior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
         if prior == Inf
             return prior
         else
             return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; P=best_period) + prior
         end
+    end
+
+    function f(non_zero_hyper::Vector{T}) where {T<:Real}
+        println(non_zero_hyper)
+        global current_hyper = copy(non_zero_hyper)
+        return f_no_print(non_zero_hyper)
     end
 
     function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
@@ -431,14 +432,14 @@ if use_planet
     end
 
     # second order
-    @elapsed result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol = 1e-6, iterations=200)) # 27s
+    try
+        global result = optimize(f, g!, h!, initial_x, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol = 1e-6, iterations=200)) # 27s
+    catch
+        println("retrying fit")
+        global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol = 1e-6, iterations=200))
+    end
 
-    # # using preconditioning
-    # try
-    #     result = optimize(f, g!, initial_x, LBFGS(P = precond(length(initial_x))), Optim.Options(callback=optim_cb))  # 21s
-    # catch
-    #     result = optimize(f, g!, initial_x, ConjugateGradient(P = precond(length(initial_x))), Optim.Options(callback=optim_cb))  # 25s
-    # end
+    println(result)
 
     fit2_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, result.minimizer)
 
@@ -448,16 +449,16 @@ if use_planet
 
     println("starting hyperparameters")
     println(total_hyperparameters)
-    println(initial_nLogL, "\n")
+    println(initial_nlogL, "\n")
 
     println("fit hyperparameters")
     println(fit1_total_hyperparameters)
-    println(fit_nLogL, "\n")
+    println(fit_nlogL, "\n")
 
     println("refit hyperparameters")
     println(fit2_total_hyperparameters)
-    refit_nLogL = nlogL_Jones!(workspace, problem_definition, fit2_total_hyperparameters; P=best_period)
-    println(refit_nLogL, "\n")
+    refit_nlogL = nlogL_Jones!(workspace, problem_definition, fit2_total_hyperparameters; P=best_period)
+    println(refit_nlogL, "\n")
 
     hold = copy(problem_definition.y_obs)
     problem_definition.y_obs[:] = remove_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs)
@@ -466,6 +467,21 @@ if use_planet
 
     problem_definition.y_obs[:] = hold
 
+    if called_from_terminal
+        possible_labels = [
+            [L"\lambda_{pp}"],
+            [L"\lambda_{se}"],
+            [L"\lambda_{m52}"],
+            [L"\alpha" L"\mu"],
+            [L"\alpha" L"\mu"],
+            [L"\lambda_{p}" L"\tau_p" L"\lambda_{se}"],
+            [L"\lambda_{1}" L"\lambda_{2}" L"\sqrt{ratio}"]]
+
+        actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
+        corner_plot(f_no_print, remove_zeros(fit2_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_planet_corner.png"; input_labels=actual_labels)
+        # corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_corner.png"; input_labels=actual_labels, steps=3)
+    end
+
     ##########################
     # Evidence approximation #
     ##########################
@@ -473,13 +489,13 @@ if use_planet
     H1 = (∇∇nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
         + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit1_total_hyperparameters), 2))
     # H1 = ∇∇nlogL_Jones(problem_definition, fit1_total_hyperparameters)
-    nlogL_val1 = fit_nLogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters, 0)
+    nlogL_val1 = fit_nlogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters, 0)
     llH1 = log_laplace_approximation(H1, nlogL_val1, 0)
 
     H2 = (∇∇nlogL_Jones!(workspace, problem_definition, fit2_total_hyperparameters; P=best_period)
         + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit2_total_hyperparameters), 2))
     # H2 = ∇∇nlogL_Jones(problem_definition, fit2_total_hyperparameters; P=best_period)
-    nlogL_val2 = refit_nLogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit2_total_hyperparameters, 0)
+    nlogL_val2 = refit_nlogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit2_total_hyperparameters, 0)
     Σ_obs_final = Σ_observations(problem_definition, fit2_total_hyperparameters)
     println("best fit keplerian")
     K2, e2, M02, ω2, γ2 = fit_linear_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs_final; return_params=true, print_params=true)[2:end]

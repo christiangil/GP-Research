@@ -20,9 +20,29 @@ for i in kernel_names
     println(i * ": ", length(df[!, 1]))
 end
 
+df = get_df(kernel_names[2])
+mean(df.E1 - df.E2)
+mean(df.L1)
+
+df = get_df(kernel_names[3])
+mean(df.E1 - df.E2)
+mean(df.L1)
+# df.E_wp
+# df.L1 - df.L2
+df = get_df(kernel_names[6])
+mean(df.E1 - df.E2)
+mean(df.L1)
+
+df = get_df(kernel_names[7])
+mean(df.E1 - df.E2)
+mean(df.L1)
+
+
+
+
 function return_logL(kernel_name; filter::Bool=true)
     df = get_df(kernel_name)
-    logL = -df.nLogL
+    logL = -df.nlogL
     if filter; logL = logL[logL .> -600] end
     if filter; logL = logL[logL .< -200] end
     return logL
@@ -49,16 +69,16 @@ begin
     qp_df = get_df("qp_periodic")
     for i in 1:kernel_amount
         if kernel_names[i] != "qp_periodic"
-            LogL1 = Float64[]
-            LogL2 = Float64[]
+            logL1 = Float64[]
+            logL2 = Float64[]
             kernel_df = get_df(kernel_names[i])
             for j in 1:length(kernel_df[!, 1])
                 if kernel_df.seed[j] in qp_df.seed
-                    append!(LogL1, [kernel_df.nLogL[j]])
-                    append!(LogL2, qp_df.nLogL[qp_df.seed .== kernel_df.seed[j]])
+                    append!(logL1, [kernel_df.nlogL[j]])
+                    append!(logL2, qp_df.nlogL[qp_df.seed .== kernel_df.seed[j]])
                 end
             end
-            hist(LogL2-LogL1; density=true, bins=convert(Int64, floor(length(LogL2)/10)), label=nice_kernel_names[i], alpha=1/(kernel_amount-1))
+            hist(logL2-logL1; density=true, bins=convert(Int64, floor(length(logL2)/10)), label=nice_kernel_names[i], alpha=1/(kernel_amount-1))
         end
     end
     l_act_theta = L"\ell_{act}(\theta|t,s)"
@@ -107,3 +127,5 @@ begin
         end
     end
 end
+
+println(get_df(kernel_names[1])[1, :])

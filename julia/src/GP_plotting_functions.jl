@@ -155,9 +155,9 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
 
         if find_post
             # put log likelihood on plot
-            LogL = -nlogL_Jones(prob_def, total_hyperparameters)
+            logL = -nlogL_Jones(prob_def, total_hyperparameters)
             show > 0 ? max_val = maximum([maximum(y_o + obs_noise_o), maximum(show_curves_o), maximum(mean_o + σ_o)]) : max_val = maximum([maximum(y_o + obs_noise_o), maximum(mean_o + σ_o)])
-            axs[1].text(minimum(prob_def.x_obs), 0.9 * max_val, L"\ell_{act}(\theta|t,s): " * string(convert(Int64, round(LogL))), fontsize=30)
+            axs[1].text(minimum(prob_def.x_obs), 0.9 * max_val, L"\ell_{act}(\theta|t,s): " * string(convert(Int64, round(logL))), fontsize=30)
         end
 
         # put kernel lengths on plot

@@ -1119,7 +1119,9 @@ function save_nlogLs(
     @assert length(hyperparameters)%2 == 0
     num_hyperparameters = Int(length(hyperparameters) / 2)
     # file_name = "csv_files/$(kernel_name)_logLs.csv"
-    file_name = "csv_files/$(kernel_name)_logL_$seed.csv"
+    file_dir = "csv_files/$(kernel_name)/K_$(string(orbit_params[i]))/"
+    mkdir(file_dir)
+    file_name = file_dir * "seed_$(seed)_logL.csv"
 
     df = DataFrame(seed=seed, sim_id=sim_id, date=today())
 

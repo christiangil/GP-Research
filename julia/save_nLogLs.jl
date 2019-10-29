@@ -6,11 +6,11 @@ kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp_periodic", "m52x2"]
 for j in 1:length(kernel_names)
     # kernel_name = kernel_names[parse(Int, ARGS[1])]
     kernel_name = kernel_names[j]
-    LogLs = sort(filter(s->occursin(Regex("^$(kernel_name)_logL_"), s), readdir(dir)))
+    logLs = sort(filter(s->occursin(Regex("^$(kernel_name)_logL_"), s), readdir(dir)))
 
     df = DataFrame()
-    for i in 1:length(LogLs)
-        append!(df, CSV.read(dir * LogLs[i]))
+    for i in 1:length(logLs)
+        append!(df, CSV.read(dir * logLs[i]))
     end
 
     sort!(df, :seed)
