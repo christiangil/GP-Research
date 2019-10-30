@@ -1106,7 +1106,7 @@ function save_nlogLs(
     likelihoods::Vector{T},
     hyperparameters::Vector{T},
     orbit_params::Vector{T},
-    kernel_name::String
+    save_loc::String
     ) where {T<:Real}
 
 
@@ -1119,9 +1119,7 @@ function save_nlogLs(
     @assert length(hyperparameters)%2 == 0
     num_hyperparameters = Int(length(hyperparameters) / 2)
     # file_name = "csv_files/$(kernel_name)_logLs.csv"
-    file_dir = "csv_files/$(kernel_name)/K_$(string(orbit_params[i]))/"
-    mkdir(file_dir)
-    file_name = file_dir * "seed_$(seed)_logL.csv"
+    file_name = save_loc * "logL.csv"
 
     df = DataFrame(seed=seed, sim_id=sim_id, date=today())
 

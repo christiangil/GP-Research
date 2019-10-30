@@ -131,13 +131,13 @@ function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_proble
         end
 
         if output==1
-            y_o ./= prob_def.normals[output]
-            obs_noise_o ./= prob_def.normals[output]
-            show_curves_o ./= prob_def.normals[output]
-            σ_o ./= prob_def.normals[output]
-            mean_o ./= prob_def.normals[output]
+            y_o .*= prob_def.normals[output]
+            obs_noise_o .*= prob_def.normals[output]
+            show_curves_o .*= prob_def.normals[output]
+            σ_o .*= prob_def.normals[output]
+            mean_o .*= prob_def.normals[output]
             if find_post
-                mean_obs_o ./= prob_def.normals[output]
+                mean_obs_o .*= prob_def.normals[output]
             end
         end
 

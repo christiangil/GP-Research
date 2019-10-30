@@ -1,7 +1,7 @@
 include("src/all_functions.jl")
 
 dir = "csv_files/"
-kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp_periodic", "m52x2"]
+kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp", "m52x2"]
 
 for j in 1:length(kernel_names)
     # kernel_name = kernel_names[parse(Int, ARGS[1])]

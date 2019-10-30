@@ -1,11 +1,11 @@
 
 
 """
-qp_periodic_kernel function created by kernel_coder(). Requires 3 hyperparameters. Likely created using qp_periodic_kernel_base() as an input. 
-Use with include("src/kernels/qp_periodic_kernel.jl").
+qp_kernel function created by kernel_coder(). Requires 3 hyperparameters. Likely created using qp_kernel_base() as an input. 
+Use with include("src/kernels/qp_kernel.jl").
 hyperparameters == ["p_λ", "qp_P", "se_λ"]
 """
-function qp_periodic_kernel(
+function qp_kernel(
     hyperparameters::Vector{<:Real}, 
     δ::Real; 
     dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))
@@ -226,4 +226,4 @@ function qp_periodic_kernel(
 end
 
 
-return qp_periodic_kernel, 3  # the function handle and the number of kernel hyperparameters
+return qp_kernel, 3  # the function handle and the number of kernel hyperparameters

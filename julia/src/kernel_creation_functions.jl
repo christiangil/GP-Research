@@ -48,7 +48,7 @@ function kernel_coder(
         #     append!(symbols_str, [P_sym_str])
         #     symbolic_kernel_original = subs(symbolic_kernel_original, periodic_vars[i]=>2*sin(π*δ/P_sym))
         # end
-        kernel_name *= "_periodic"
+        # kernel_name *= "_periodic"
     end
     # get the symbols of the passed function
     symbs = free_symbols(symbolic_kernel_original)

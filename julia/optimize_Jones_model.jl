@@ -6,7 +6,7 @@ include("src/all_functions.jl")
 # Loading data and setting kernel #
 ###################################
 
-kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp_periodic", "m52x2"]
+kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp", "m52x2"]
 initial_hypers = [[12.], [12], [12], [4, 12], [4, 12], [1, 20, 40], [12, 24, 1]]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
@@ -23,7 +23,7 @@ if called_from_terminal
 else
     kernel_choice = 3
     kernel_name = kernel_names[kernel_choice]
-    seed = 3
+    seed = 2
     use_planet = true
 end
 
@@ -38,6 +38,47 @@ kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
 problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
 println("id: ", sim_id)
 
+# allowing covariance matrix to be calculated in parallel
+if !called_from_terminal
+    try
+        prep_parallel_covariance(kernel_name)
+    catch
+        prep_parallel_covariance(kernel_name)
+    end
+end
+
+########################################
+# Adding planet and normalizing scores #
+########################################
+
+if use_planet
+    P = (8 + 1 * randn())u"d"  # draw over more periods?
+    e = rand() / 5
+    M0 = 2 * π * rand()
+    length(ARGS) > 1 ? K = parse(Float64, ARGS[3]) : K = 0.2  # m/s
+    ω = 2 * π * rand()
+    γ = 0
+    problem_definition.y_obs[:] = add_kepler_to_Jones_problem_definition(
+        problem_definition, P, e, M0, K, ω; γ = γ,
+        normalization=problem_definition.normals[1])
+    results_dir = "results/$(kernel_name)/K_$(string(K))/seed_$(seed)/"
+else
+    results_dir = "results/$(kernel_name)/K_0.0/seed_$(seed)/"
+end
+
+begin
+    mkpath(results_dir)
+    normalize_problem_definition!(problem_definition)
+    println("Score errors:")
+    println(mean(problem_definition.noise[1:sample_size]) * problem_definition.normals[1], " m/s")
+    for i in 1:problem_definition.n_out
+        println(mean(problem_definition.noise[(i-1)*sample_size+1:i*sample_size]))
+        @assert mean(problem_definition.noise[(i-1)*sample_size+1:i*sample_size]) < 2
+    end
+    println()
+end
+
+
 if kernel_name in ["pp", "se", "m52"]
     # normals
     parameters = gamma_mode_std_2_alpha_theta(10, 10)
@@ -51,7 +92,7 @@ elseif kernel_name in ["rq", "rm52"]
     function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
         return [log_gamma(hps[1], paramsα; d=d), log_gamma(hps[2], paramsμ; d=d)]
     end
-elseif  kernel_name == "qp_periodic"
+elseif  kernel_name == "qp"
     # qp
     paramsλp = gamma_mode_std_2_alpha_theta(1, 1)
     paramsP = gamma_mode_std_2_alpha_theta(20, 10)
@@ -81,43 +122,6 @@ function nlogprior_kernel_hyperparameters(n_kern_hyper::Integer, total_hyperpara
     end
 end
 
-# creating path to save figures
-mkpath("figs/gp/$kernel_name/training")
-
-# allowing covariance matrix to be calculated in parallel
-if !called_from_terminal
-    try
-        prep_parallel_covariance(kernel_name)
-    catch
-        prep_parallel_covariance(kernel_name)
-    end
-end
-
-########################################
-# Adding planet and normalizing scores #
-########################################
-
-if use_planet
-    P = (8 + 1 * randn())u"d"  # draw over more periods?
-    e = rand() / 5
-    M0 = 2 * π * rand()
-    length(ARGS) > 1 ? K = parse(Float64, ARGS[3]) : K = 0.2  # m/s
-    ω = 2 * π * rand()
-    γ = 0
-    problem_definition.y_obs[:] = add_kepler_to_Jones_problem_definition(
-        problem_definition, P, e, M0, K, ω; γ = γ,
-        normalization=problem_definition.normals[1])
-end
-
-begin
-    normalize_problem_definition!(problem_definition)
-    println("Score errors:")
-    for i in 1:problem_definition.n_out
-        println(mean(problem_definition.noise[(i-1)*sample_size+1:i*sample_size]))
-        @assert mean(problem_definition.noise[(i-1)*sample_size+1:i*sample_size]) < 2
-    end
-    println()
-end
 
 #####################################
 # Initial hyperparameters and plots #
@@ -134,8 +138,8 @@ total_hyperparameters = append!(coeff_hyperparameters, initial_hypers[kernel_cho
 # how finely to sample the domain (for plotting)
 amount_of_samp_points = convert(Int64, max(500, round(2 * sqrt(2) * length(problem_definition.x_obs))))
 
-Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_initial_gp"; find_post=false)  # , plot_Σ=true, plot_Σ_profile=true)
-Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_post_gp")  # ; plot_Σ=true, plot_Σ_profile=true)
+# Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_initial_gp"; find_post=false)  # , plot_Σ=true, plot_Σ_profile=true)
+Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, results_dir * "init")  # ; plot_Σ=true, plot_Σ_profile=true)
 
 #######################
 # Jones model fitting #
@@ -239,6 +243,9 @@ function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
      + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 2))
 end
 
+# # creating path to save training figures
+# mkpath("figs/gp/$kernel_name/training")
+
 # ends optimization if true
 function optim_cb(x::OptimizationState)
     println()
@@ -296,7 +303,7 @@ println(fit1_total_hyperparameters)
 fit_nlogL = nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
 println(fit_nlogL, "\n")
 
-Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_id$(sim_id)_fit_gp")  # , plot_Σ=true, plot_Σ_profile=true)
+Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, results_dir * "fit")  # , plot_Σ=true, plot_Σ_profile=true)
 
 # # coeffs = fit1_total_hyperparameters[1:end - problem_definition.n_kern_hyper]
 # # coeff_array = reconstruct_array(coeffs[findall(!iszero, coeffs)], problem_definition.a0)
@@ -316,7 +323,7 @@ if called_from_terminal
         [L"\lambda_{1}" L"\lambda_{2}" L"\sqrt{ratio}"]]
 
     actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
-    corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_corner.png"; input_labels=actual_labels)
+    corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), results_dir * "corner.png"; input_labels=actual_labels)
     # corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_corner.png"; input_labels=actual_labels, steps=3)
 end
 
@@ -355,9 +362,10 @@ if use_planet
         ylabel("GP log likelihoods")
         axvline(x=convert_and_strip_units(u"d", P))
         axhline(y=-nlogL_Jones(problem_definition, fit1_total_hyperparameters), color="k")
-        title_string = @sprintf "%.0f day, %.2f m/s" convert_and_strip_units(u"d",P) K
+        title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d",P) K
         title(title_string, fontsize=30)
-        save_PyPlot_fig("figs/rv/$(kernel_name)_seed$(seed)_id$(sim_id).png")
+
+        save_PyPlot_fig(results_dir * "periodogram.png")
     end
 
     # three best periods
@@ -463,7 +471,7 @@ if use_planet
     hold = copy(problem_definition.y_obs)
     problem_definition.y_obs[:] = remove_kepler(problem_definition.y_obs, problem_definition.x_obs, best_period, Σ_obs)
 
-    Jones_line_plots(amount_of_samp_points, problem_definition, fit2_total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_post_planet")
+    Jones_line_plots(amount_of_samp_points, problem_definition, fit2_total_hyperparameters, results_dir * "fit_planet")
 
     problem_definition.y_obs[:] = hold
 
@@ -478,8 +486,7 @@ if use_planet
             [L"\lambda_{1}" L"\lambda_{2}" L"\sqrt{ratio}"]]
 
         actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
-        corner_plot(f_no_print, remove_zeros(fit2_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_planet_corner.png"; input_labels=actual_labels)
-        # corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), "figs/gp/$kernel_name/seed$(seed)_corner.png"; input_labels=actual_labels, steps=3)
+        corner_plot(f_no_print, remove_zeros(fit2_total_hyperparameters), results_dir * "corner_planet.png"; input_labels=actual_labels)
     end
 
     ##########################
@@ -513,7 +520,5 @@ if use_planet
 
     likelihoods = [-nlogL_val1, llH1, -nlogL_val2, llH2, llH2_wp]
     orbit_params = [K, e, M0, ω, γ, K2, e2, M02, ω2, γ2]
-    if called_from_terminal
-        save_nlogLs(seed, sim_id, likelihoods, append!(copy(fit1_total_hyperparameters), fit2_total_hyperparameters), orbit_params, kernel_name)
-    end
+    save_nlogLs(seed, sim_id, likelihoods, append!(copy(fit1_total_hyperparameters), fit2_total_hyperparameters), orbit_params, results_dir)
 end

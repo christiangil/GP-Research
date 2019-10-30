@@ -2,9 +2,9 @@
 # include("src/setup.jl")
 include("src/all_functions.jl")
 
-kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp_periodic", "m52x2"]
+kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp", "m52x2"]
 nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Rational Quadratic", "Rational Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
-# kernel_names = ["pp", "se", "m52", "rm52", "qp_periodic"]
+# kernel_names = ["pp", "se", "m52", "rm52", "qp"]
 # nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Rational Matérn " * L"^5/_2", "Quasi-Periodic"]
 
 kernel_amount = length(kernel_names)
@@ -66,9 +66,9 @@ end
 # plot differences from qp
 begin
     ax = init_plot()
-    qp_df = get_df("qp_periodic")
+    qp_df = get_df("qp")
     for i in 1:kernel_amount
-        if kernel_names[i] != "qp_periodic"
+        if kernel_names[i] != "qp"
             logL1 = Float64[]
             logL2 = Float64[]
             kernel_df = get_df(kernel_names[i])
@@ -106,7 +106,7 @@ end
 
 using KernelDensity
 begin
-    df = get_df("qp_periodic")
+    df = get_df("qp")
     init_plot()
     # hist(df[!, end-1]; density=true, bins=convert(Int64, floor(length(df[!, end-1])/4)))
     x = collect(linspace(10, 35, 1000))
@@ -119,7 +119,7 @@ begin
 end
 
 begin
-    kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp_periodic", "m52x2"]
+    kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp", "m52x2"]
     df = get_df(kernel_names[3])
     for i in 1:100
         if !(i in df.seed)
