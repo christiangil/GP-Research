@@ -23,7 +23,7 @@ function custom_GP_plot(x_samp::Vector{T}, show_curves::Matrix{T}, x_obs::Vector
             plot(x_samp, show_curves[i, :], alpha=0.5, zorder=1)
         end
 
-        scatter(x_obs, y_obs, color="black", zorder=2)
+        scatter(x_obs, y_obs, color="black", zorder=2) # could comment out?
         errorbar(x_obs, y_obs, yerr=[errors';errors'], fmt="o", color="black", zorder=2)
 
         return [ax]
