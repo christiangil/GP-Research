@@ -646,7 +646,7 @@ Parameters:
 Σ_obs (Cholesky factorized object): The covariance matrix constructed by
     evaulating the kernel at each pair of observations and adding measurement
     noise.
-y_obs (vector): The observations at each time point
+y (vector): The observations at each time point
 α (vector): inv(Σ_obs) * y_obs
 
 Returns:
@@ -655,35 +655,36 @@ float: the negative log marginal likelihood
 """
 function nlogL(
     Σ_obs::Cholesky{T,Matrix{T}},
-    y_obs::Vector{T},
+    y::Vector{T},
     α::Vector{T}
     ) where {T<:Real}
 
-    n = length(y_obs)
+    n = length(y)
 
     # 2 times negative goodness of fit term
-    data_fit = transpose(y_obs) * α
+    data_fit = transpose(y) * α
     # 2 times negative complexity penalization term
     # complexity_penalty = log(det(Σ_obs))
     complexity_penalty = logdet(Σ_obs)  # half memory but twice the time
     # 2 times negative normalization term (doesn't affect fitting)
     normalization = n * log(2 * π)
 
-    return 0.5 * (data_fit + complexity_penalty + normalization)
+    return (data_fit + complexity_penalty + normalization) / 2
 
 end
 
-nlogL(Σ_obs, y_obs) = nlogL(Σ_obs, y_obs, Σ_obs \ y_obs)
+nlogL(Σ_obs, y) = nlogL(Σ_obs, y, Σ_obs \ y)
 
 
 """
-First partial derivative of the GP negative log marginal likelihood
+First partial derivative of the GP negative log marginal likelihood w.r.t. GP
+hyperparameters
 (see eq. 5.9 in Rasmussen and Williams 2006)
 
 Parameters:
 
-y_obs (vector): The observations at each time point
-α (vector): inv(Σ_obs) * y_obs
+y (vector): The observations at each time point
+α (vector): inv(Σ_obs) * y
 β (matrix): inv(Σ_obs) * dΣ_dθ where dΣ_dθ is the partial derivative of the
     covariance matrix Σ_obs w.r.t. a hyperparameter
 
@@ -693,35 +694,61 @@ float: the partial derivative of the negative log marginal likelihood w.r.t. the
 
 """
 function dnlogLdθ(
-    y_obs::Vector{T},
+    y::Vector{T},
     α::Vector{T},
     β::Matrix{T}
     ) where {T<:Real}
 
     # 2 times negative derivative of goodness of fit term
-    data_fit = -(transpose(y_obs) * β * α)
+    data_fit = -(transpose(y) * β * α)
     # 2 times negative derivative of complexity penalization term
     complexity_penalty = tr(β)
 
     # return -1 / 2 * tr((α * transpose(α) - inv(Σ_obs)) * dΣ_dθj)
-    return 0.5 * (data_fit + complexity_penalty)
+    return (data_fit + complexity_penalty) / 2
 
 end
 
 
-"Returns gradient of nlogL"
-∇nlogL(y_obs::Vector{T}, α::Vector{T}, βs::Vector{Matrix{T}}) where {T<:Real} = [dnlogLdθ(y_obs, α, β) for β in βs]
+"""
+First partial derivative of the GP negative log marginal likelihood w.r.t.
+parameters that affect y
+
+Parameters:
+
+y1 (vector): The derivative of observations at each time point
+α (vector): inv(Σ_obs) * y
+
+Returns:
+float: the partial derivative of the negative log marginal likelihood w.r.t. the
+    parameter used in the calculation of y1
+
+"""
+function dnlogLdθ(
+    y1::Vector{T},
+    α::Vector{T}
+    ) where {T<:Real}
+
+    return transpose(y1) * α
+    # return transpose(y) * α1
+    # return (transpose(y1) * Σ^-1 * y + transpose(y) * Σ^-1 * y1) / 2
+end
+
+
+"Returns gradient of nlogL in GP hyperparameters"
+∇nlogL(y::Vector{T}, α::Vector{T}, βs::Vector{Matrix{T}}) where {T<:Real} = [dnlogLdθ(y, α, β) for β in βs]
 
 
 """
-Second partial derivative of the GP negative log marginal likelihood.
+Second partial derivative of the GP negative log marginal likelihood w.r.t. two
+GP hyperparameters.
 Calculated with help from rules found on page 7 of the matrix cookbook
 (https://www.ics.uci.edu/~welling/teaching/KernelsICS273B/MatrixCookBook.pdf)
 
 Parameters:
 
-y_obs (vector): The observations at each time point
-α (vector): inv(Σ_obs) * y_obs
+y (vector): The observations at each time point
+α (vector): inv(Σ_obs) * y
 β1 (matrix): inv(Σ_obs) * dΣ_dθ1 where dΣ_dθ1 is the partial derivative of the
     covariance matrix Σ_obs w.r.t. a hyperparameter
 β2 (matrix): inv(Σ_obs) * dΣ_dθ2 where dΣ_dθ2 is the partial derivative of the
@@ -732,11 +759,11 @@ y_obs (vector): The observations at each time point
 
 Returns:
 float: the partial derivative of the negative log marginal likelihood w.r.t. the
-    hyperparameters used in the calculation of β1, β2, and β12
+    hyperparameters used in the calculation of the inputs
 
 """
 function d2nlogLdθ(
-    y_obs::Vector{T},
+    y::Vector{T},
     α::Vector{T},
     β1::Matrix{T},
     β2::Matrix{T},
@@ -746,11 +773,78 @@ function d2nlogLdθ(
     β12mβ2β1 = β12 - β2 * β1
 
     # 2 times negative second derivative of goodness of fit term
-    data_fit = -(transpose(y_obs) * (β12mβ2β1 - β1 * β2) * α)
+    data_fit = -(transpose(y) * (β12mβ2β1 - β1 * β2) * α)
     # 2 times negative derivative of complexity penalization term
     complexity_penalty = tr(β12mβ2β1)
 
-    return 0.5 * (data_fit + complexity_penalty)
+    return (data_fit + complexity_penalty) / 2
+
+end
+
+
+"""
+Second partial derivative of the GP negative log marginal likelihood w.r.t. two
+parameters that affect y.
+Calculated with help from rules found on page 7 of the matrix cookbook
+(https://www.ics.uci.edu/~welling/teaching/KernelsICS273B/MatrixCookBook.pdf)
+
+Parameters:
+
+y2 (vector): The derivative of observations at each time point w.r.t. the second
+    relevant parameter
+y12 (vector): The derivative of observations at each time point w.r.t. the both
+    relevant parameters
+α (vector): inv(Σ_obs) * y
+α1 (vector): inv(Σ_obs) * y1
+
+Returns:
+float: the partial derivative of the negative log marginal likelihood w.r.t. the
+    hyperparameters used in the calculation of the inputs
+
+"""
+function d2nlogLdθ(
+    y2::Vector{T},
+    y12::Vector{T},
+    α::Vector{T},
+    α1::Vector{T}
+    ) where {T<:Real}
+
+    return transpose(y12) * α + transpose(y2) * α1
+    # return (transpose(y12) * α + transpose(y1) * α2 + transpose(y2) * α1 + transpose(y) * α12) / 2
+
+end
+
+
+"""
+Second partial derivative of the GP negative log marginal likelihood w.r.t. a
+GP hyperparameter and a parameter thats affect y.
+Calculated with help from rules found on page 7 of the matrix cookbook
+(https://www.ics.uci.edu/~welling/teaching/KernelsICS273B/MatrixCookBook.pdf)
+
+Parameters:
+
+y (vector): The observations at each time point
+y1 (vector): The derivative of observations at each time point w.r.t the
+    parameter that affects y
+α (vector): inv(Σ_obs) * y
+α1 (vector): inv(Σ_obs) * y1
+β2 (matrix): inv(Σ_obs) * dΣ_dθ2 where dΣ_dθ2 is the partial derivative of the
+    covariance matrix Σ_obs w.r.t. the desired GP hyperparameter
+
+Returns:
+float: the partial derivative of the negative log marginal likelihood w.r.t. the
+    hyperparameters used in the calculation of the inputs
+
+"""
+function d2nlogLdθ(
+    y::Vector{T},
+    y1::Vector{T},
+    α::Vector{T},
+    α1::Vector{T},
+    β2::Matrix{T}
+    ) where {T<:Real}
+
+    return -(transpose(y1) * β2 * α + transpose(y) * β2 * α1) / 2
 
 end
 
