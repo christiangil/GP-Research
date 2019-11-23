@@ -10,7 +10,7 @@ strip_units(quant::Quantity) = ustrip(float(quant))
 
 "Convert Unitful units from one to another and strip the final units"
 convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Quantity) = strip_units(uconvert(new_unit, quant))
-convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Real) = quant
+convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Number) = quant
 
 
 """
@@ -83,11 +83,11 @@ Loop to update the current estimate of the solution to Kepler's equation
 Julia function originally written by Eric Ford
 """
 function ecc_anomaly(
-    t::Real,
-    P::Union{Real, Quantity},
-    e::Real,
-    M0::Real;
-    tol::Real=1e-8,
+    t::Number,
+    P::Union{Number, Quantity},
+    e::Number,
+    M0::Number;
+    tol::Number=1e-8,
     max_its::Integer=200)
 
     P = convert_and_strip_units(u"yr", P)
@@ -178,8 +178,8 @@ function kepler_rv(t::Union{Real,Quantity}, P::Union{Real,Quantity}, e::Real, M0
     P = convert_and_strip_units(u"yr", P)
     t = convert_and_strip_units(u"yr", t)
     assert_positive(P)
-    return kepler_rv_andras(t, P, e, M0, K, ω; γ=γ)
-    # return kepler_rv_true_anomaly(t, P, e, M0, K, ω; γ=γ)
+    return kepler_rv_ecc_anom(t, P, e, M0, K, ω; γ=γ)
+    # return kepler_rv_true_anom(t, P, e, M0, K, ω; γ=γ)
 end
 
 function kepler_rv(
@@ -199,10 +199,10 @@ end
 
 
 """
-Intuitive radial velocity formula using true anomaly
+Simple radial velocity formula using true anomaly
 adapted from eq. 11 of (http://exoplanets.astro.yale.edu/workshop/EPRV/Bibliography_files/Radial_Velocity.pdf)
 """
-kepler_rv_true_anomaly(
+kepler_rv_true_anom(
     t::Real,
     P::Real,
     e::Real,
@@ -215,11 +215,11 @@ kepler_rv_true_anomaly(
 
 """
 Radial velocity formula directly using eccentric anomaly
-Based on "An analytical solution for Kepler's problem"
+Based on simplification of "An analytical solution for Kepler's problem"
 Pál, András, Monthly Notices of the Royal Astronomical Society, 396, 3, 1737-1742.  2009MNRAS.396.1737P
 see ηdot part of eq. 19
 """
-function kepler_rv_andras(
+function kepler_rv_ecc_anom(
     t::Real,
     P::Real,
     e::Real,
@@ -238,8 +238,7 @@ end
 
 
 """
-This differs from usual expressions so as to be differentiable, even at zero eccentricity.
-Done by replacing e and ω, with h and k
+Replacing e and ω, with h and k
 A uniform prior on h and k (on the unit circle) leads to a uniform prior on ω
 and a linearly increasing prior on e
 he = e * sin(ω)
@@ -270,8 +269,7 @@ end
 
 
 """
-This differs from usual expressions so as to be differentiable, even at zero eccentricity.
-Done by replacing e and ω, with h and k
+Replacing e and ω, with h and k
 A uniform prior on h and k (on the unit circle) leads to a uniform prior on e
 and ω
 hp = sqrt(e) * sin(ω)
@@ -399,6 +397,8 @@ K = sqrt(coefficients[1]^2 + coefficients[2]^2)
 function kepler_rv_linear_gen(
     t,
     P::Union{Real, Quantity},
+    e::Union{Real, Quantity},
+    M0::Union{Real, Quantity},
     coefficients::Vector{T}
     ) where {T<:Real}
 
@@ -411,7 +411,8 @@ function kepler_rv_linear_gen(
 end
 
 function kepler_rv_linear_gen_orbit_params(
-    coefficients::Vector{T};
+    coefficients::Vector{T},
+    e::Union{Real, Quantity},
     print_params::Bool=false
     ) where {T<:Real}
 

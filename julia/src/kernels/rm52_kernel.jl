@@ -1,13 +1,11 @@
-
-
 """
-rm52_kernel function created by kernel_coder(). Requires 2 hyperparameters. Likely created using rm52_kernel_base() as an input. 
+rm52_kernel function created by kernel_coder(). Requires 2 hyperparameters. Likely created using rm52_kernel_base() as an input.
 Use with include("src/kernels/rm52_kernel.jl").
 hyperparameters == ["α", "μ"]
 """
 function rm52_kernel(
-    hyperparameters::Vector{<:Real}, 
-    δ::Real; 
+    hyperparameters::Vector{<:Real},
+    δ::Real;
     dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))
 
     @assert length(hyperparameters)==2 "hyperparameters is the wrong length"

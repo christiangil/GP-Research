@@ -28,7 +28,6 @@ The function is saved in src/kernels/\$kernel_name.jl, so you can use it with a 
 function kernel_coder(
     symbolic_kernel_original::Basic,
     kernel_name::String;
-    manual_simplifications::Bool=true,
     periodic_var::String="",
     cutoff_var::String="")
 
@@ -37,9 +36,10 @@ function kernel_coder(
     if periodic
         P_sym_str = kernel_name * "_P"
         P_sym = symbols(P_sym_str)
+        π_sym = symbols("π_sym")
         @assert occursin(periodic_var, SymEngine.toString(symbolic_kernel_original)) "can't find periodic variable"
-        symbolic_kernel_original = subs(symbolic_kernel_original, abs(symbols(periodic_var))=>2*sin(π*abs(δ)/P_sym))
-        symbolic_kernel_original = subs(symbolic_kernel_original, symbols(periodic_var)=>2*sin(π*δ/P_sym))
+        symbolic_kernel_original = subs(symbolic_kernel_original, abs(symbols(periodic_var))=>2*sin(π_sym*abs(δ)/P_sym))
+        symbolic_kernel_original = subs(symbolic_kernel_original, symbols(periodic_var)=>2*sin(π_sym*δ/P_sym))
         # length(periodic_vars)==1 ? P_sym_str = kernel_name * "_P" : P_sym_str = kernel_name * "_P$i"
         # for i in 1:length(periodic_vars)
         #     length(periodic_vars)==1 ? P_sym_str = kernel_name * "_P" : P_sym_str = kernel_name * "_P$i"
@@ -52,9 +52,14 @@ function kernel_coder(
     end
     # get the symbols of the passed function
     symbs = free_symbols(symbolic_kernel_original)
+
     δ_inds = findall(x -> x==δ, symbs)
     @assert length(δ_inds) == 1
     deleteat!(symbs, δ_inds[1])
+    π_inds = findall(x -> x==symbols("π_sym"), symbs)
+    if length(π_inds) > 0
+        deleteat!(symbs, π_inds[1])
+    end
     symbs_str = [string(symb) for symb in symbs]
 
     hyper_amount = length(symbs)
@@ -65,13 +70,22 @@ function kernel_coder(
     io = open(file_loc, "w")
 
     # begin to write the function including assertions that the amount of hyperparameters are correct
-    write(io, "\n\n\"\"\"\n" * kernel_name * " function created by kernel_coder(). Requires $hyper_amount hyperparameters. Likely created using $kernel_name" * "_base() as an input. \nUse with include(\"src/kernels/$kernel_name.jl\").\nhyperparameters == $symbs_str\n\"\"\"\n")
-    write(io, "function " * kernel_name * "(\n    hyperparameters::Vector{<:Real}, \n    δ::Real; \n    dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))\n\n")
-    write(io, "    @assert length(hyperparameters)==$hyper_amount \"hyperparameters is the wrong length\"\n")
-    write(io, "    @assert length(dorder)==($hyper_amount + 2) \"dorder is the wrong length\"\n")
-    write(io, "    even_time_derivative = powers_of_negative_one(dorder[2])\n")
-    write(io, "    @assert maximum(dorder) < 3 \"No more than two time derivatives for either t1 or t2 can be calculated\"\n\n")
-    write(io, "    dorder = append!([sum(dorder[1:2])], dorder[3:end])\n\n")
+    write(io, """\"\"\"
+$kernel_name function created by kernel_coder(). Requires $hyper_amount hyperparameters. Likely created using $(kernel_name)_base() as an input.
+Use with include(\"src/kernels/$kernel_name.jl\").
+hyperparameters == $symbs_str
+\"\"\"
+function $kernel_name(
+    hyperparameters::Vector{<:Real},
+    δ::Real;
+    dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))
+
+    @assert length(hyperparameters)==$hyper_amount \"hyperparameters is the wrong length\"
+    @assert length(dorder)==($hyper_amount + 2) \"dorder is the wrong length\"
+    even_time_derivative = powers_of_negative_one(dorder[2])
+    @assert maximum(dorder) < 3 \"No more than two time derivatives for either t1 or t2 can be calculated\"
+
+    dorder = append!([sum(dorder[1:2])], dorder[3:end])\n\n""")
 
     # map the hyperparameters that will be passed to this function to the symbol names
     for i in 1:(hyper_amount)
@@ -89,9 +103,6 @@ function kernel_coder(
     abs_vars = String[]
     for i in append!(["δ"], symbs_str)
         println("abs($i)")
-        println(occursin(Regex("abs($i)"), "1*abs(δ)*abs(ratio)"))
-        println(occursin(Regex("abs($i)"), SymEngine.toString(symbolic_kernel_original)))
-        println(SymEngine.toString(symbolic_kernel_original))
         if occursin("abs($i)", SymEngine.toString(symbolic_kernel_original))
             append!(abs_vars, [i])
             println("found something")
@@ -133,8 +144,6 @@ function kernel_coder(
         if sum(dorder[2:end]) < max_hyper_derivs
             symbolic_kernel = copy(symbolic_kernel_original)
 
-            write(io, "    if dorder==" * string(dorder) * "\n")
-
             # performing the differentiations
             symbolic_kernel = diff(symbolic_kernel, δ, dorder[1])
             for j in 1:hyper_amount
@@ -155,20 +164,22 @@ function kernel_coder(
             end
 
             symbolic_kernel_str = SymEngine.toString(symbolic_kernel)
-            symbolic_kernel_str = string("        func = " * symbolic_kernel_str * "\n    end\n\n")
+            symbolic_kernel_str = replace(symbolic_kernel_str, "π_sym"=>"π")
+            symbolic_kernel_str = " " * symbolic_kernel_str
 
-            if manual_simplifications
-                # replacing equivalent expressions to increase readability and decrease useless computations
-                symbolic_kernel_str = replace(symbolic_kernel_str, "sqrt(δ^2)"=>"abs(δ)")
-                symbolic_kernel_str = replace(symbolic_kernel_str, " 0.0 - "=>" -")
-                symbolic_kernel_str = replace(symbolic_kernel_str, "(0.0 - "=>"(-")
-                symbolic_kernel_str = replace(symbolic_kernel_str, "(0.0 + "=>"(")
-                symbolic_kernel_str = replace(symbolic_kernel_str, " 0.0 + "=>" ")
-                symbolic_kernel_str = replace(symbolic_kernel_str, " 1.0*"=>" ")
-                symbolic_kernel_str = replace(symbolic_kernel_str, "-1.0*"=>"-")
-            end
+            # some simplifications
+            symbolic_kernel_str = replace(symbolic_kernel_str, "sqrt(δ^2)"=>"abs(δ)")
+            symbolic_kernel_str = replace(symbolic_kernel_str, " 0.0 - "=>" -")
+            symbolic_kernel_str = replace(symbolic_kernel_str, "(0.0 - "=>"(-")
+            symbolic_kernel_str = replace(symbolic_kernel_str, "(0.0 + "=>"(")
+            symbolic_kernel_str = replace(symbolic_kernel_str, " 0.0 + "=>" ")
+            symbolic_kernel_str = replace(symbolic_kernel_str, " 1.0*"=>" ")
+            symbolic_kernel_str = replace(symbolic_kernel_str, "-1.0*"=>"-")
 
-            write(io, symbolic_kernel_str)
+            println(symbolic_kernel_str)
+
+            write(io, "    if dorder==" * string(dorder) * "\n")
+            write(io, "        func =" * symbolic_kernel_str * "\n    end\n\n")
         end
 
     end

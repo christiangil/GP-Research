@@ -1,13 +1,11 @@
-
-
 """
-se_kernel function created by kernel_coder(). Requires 1 hyperparameters. Likely created using se_kernel_base() as an input. 
+se_kernel function created by kernel_coder(). Requires 1 hyperparameters. Likely created using se_kernel_base() as an input.
 Use with include("src/kernels/se_kernel.jl").
 hyperparameters == ["λ"]
 """
 function se_kernel(
-    hyperparameters::Vector{<:Real}, 
-    δ::Real; 
+    hyperparameters::Vector{<:Real},
+    δ::Real;
     dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))
 
     @assert length(hyperparameters)==1 "hyperparameters is the wrong length"

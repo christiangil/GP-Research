@@ -642,7 +642,6 @@ end
 GP negative log marginal likelihood (see Algorithm 2.1 in Rasmussen and Williams 2006)
 
 Parameters:
-
 Σ_obs (Cholesky factorized object): The covariance matrix constructed by
     evaulating the kernel at each pair of observations and adding measurement
     noise.
@@ -682,7 +681,6 @@ hyperparameters
 (see eq. 5.9 in Rasmussen and Williams 2006)
 
 Parameters:
-
 y (vector): The observations at each time point
 α (vector): inv(Σ_obs) * y
 β (matrix): inv(Σ_obs) * dΣ_dθ where dΣ_dθ is the partial derivative of the
@@ -715,7 +713,6 @@ First partial derivative of the GP negative log marginal likelihood w.r.t.
 parameters that affect y
 
 Parameters:
-
 y1 (vector): The derivative of observations at each time point
 α (vector): inv(Σ_obs) * y
 
@@ -746,7 +743,6 @@ Calculated with help from rules found on page 7 of the matrix cookbook
 (https://www.ics.uci.edu/~welling/teaching/KernelsICS273B/MatrixCookBook.pdf)
 
 Parameters:
-
 y (vector): The observations at each time point
 α (vector): inv(Σ_obs) * y
 β1 (matrix): inv(Σ_obs) * dΣ_dθ1 where dΣ_dθ1 is the partial derivative of the
@@ -789,7 +785,6 @@ Calculated with help from rules found on page 7 of the matrix cookbook
 (https://www.ics.uci.edu/~welling/teaching/KernelsICS273B/MatrixCookBook.pdf)
 
 Parameters:
-
 y2 (vector): The derivative of observations at each time point w.r.t. the second
     relevant parameter
 y12 (vector): The derivative of observations at each time point w.r.t. the both
@@ -822,7 +817,6 @@ Calculated with help from rules found on page 7 of the matrix cookbook
 (https://www.ics.uci.edu/~welling/teaching/KernelsICS273B/MatrixCookBook.pdf)
 
 Parameters:
-
 y (vector): The observations at each time point
 y1 (vector): The derivative of observations at each time point w.r.t the
     parameter that affects y

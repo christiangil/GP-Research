@@ -1,13 +1,11 @@
-
-
 """
-m52_kernel function created by kernel_coder(). Requires 1 hyperparameters. Likely created using m52_kernel_base() as an input. 
+m52_kernel function created by kernel_coder(). Requires 1 hyperparameters. Likely created using m52_kernel_base() as an input.
 Use with include("src/kernels/m52_kernel.jl").
 hyperparameters == ["λ"]
 """
 function m52_kernel(
-    hyperparameters::Vector{<:Real}, 
-    δ::Real; 
+    hyperparameters::Vector{<:Real},
+    δ::Real;
     dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))
 
     @assert length(hyperparameters)==1 "hyperparameters is the wrong length"

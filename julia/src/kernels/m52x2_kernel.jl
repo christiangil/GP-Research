@@ -1,13 +1,11 @@
-
-
 """
-m52x2_kernel function created by kernel_coder(). Requires 3 hyperparameters. Likely created using m52x2_kernel_base() as an input. 
+m52x2_kernel function created by kernel_coder(). Requires 3 hyperparameters. Likely created using m52x2_kernel_base() as an input.
 Use with include("src/kernels/m52x2_kernel.jl").
 hyperparameters == ["λ1", "λ2", "sratio"]
 """
 function m52x2_kernel(
-    hyperparameters::Vector{<:Real}, 
-    δ::Real; 
+    hyperparameters::Vector{<:Real},
+    δ::Real;
     dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))
 
     @assert length(hyperparameters)==3 "hyperparameters is the wrong length"
