@@ -1,12 +1,14 @@
 # these are all custom diagnostic functions. May help with debugging
 using ModelingToolkit
+using SymEngine
 
-differentiate(func, v) = MTKsimplify(expand_derivatives(Differential(v)(func)))
-function differentiate(func, v, n::Integer)
+_differentiate(O::Union{Operation,ModelingToolkit.Constant}, v::Operation) = expand_derivatives(Differential(v)(O))
+function differentiate(O::Union{Operation,ModelingToolkit.Constant}, v::Operation; n::Integer=1, simplify::Bool=false)
+    @assert typeof(v.op) == Variable
     n < 0 && throw(DomainError("n must be non-negative integer"))
-    n==0 && return func
-    n==1 && return differentiate(func, v)
-    n > 1 && return differentiate(differentiate(func, v), v, n-1)
+    n==0 && return O
+    n==1 && (simplify ? (return MTKsimplify(_differentiate(O, v))) : (return _differentiate(O, v)))
+    n > 1 && return differentiate(_differentiate(O, v), v, n=n-1, simplify=simplify)
 end
 
 
@@ -22,7 +24,7 @@ function get_params!(O::Operation, params::Vector{Variable})
         end
     end
 end
-function get_params(O::Operation; return_symbs::Bool=false, return_strings::Bool=false)
+function get_params(O::Union{Operation,ModelingToolkit.Constant}; return_symbs::Bool=false, return_strings::Bool=false)
     params = Variable[]
     get_params!(O, params)
     params = unique(params)
@@ -50,6 +52,7 @@ function MTKsimplify(O::Operation)
     end
     return eval(Meta.parse(SymEngine.toString(O)))
 end
+MTKsimplify(O::ModelingToolkit.Constant) = O
 
 
 # RANDOM USEFUL CODE TIDBITS
