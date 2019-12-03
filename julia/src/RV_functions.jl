@@ -18,9 +18,9 @@ Calculate velocity semi-amplitude for RV signal of planets in m/s
 adapted from eq. 12 of (http://exoplanets.astro.yale.edu/workshop/EPRV/Bibliography_files/Radial_Velocity.pdf)
 """
 function velocity_semi_amplitude(
-    P::Union{Real, Quantity},
-    m_star::Union{Real, Quantity},
-    m_planet::Union{Real, Quantity};
+    m_star::Union{Real, Unitful.Mass},
+    m_planet::Union{Real, Unitful.Mass},
+    P::Union{Real, Unitful.Time};
     e::Real=0.,
     i::Real=π/2)
 
@@ -29,8 +29,8 @@ function velocity_semi_amplitude(
     P = convert_and_strip_units(u"yr", P)
     assert_positive(P, m_star, m_planet)
     comb_mass = m_star + m_planet
-    K_au_yr = 2 * π * sin(i) * m_planet / (sqrt(1 - (e * e)) * cbrt(comb_mass * comb_mass * P))
-    return K_au_yr * convert_and_strip_units(u"m", 1u"AU") / convert_and_strip_units(u"s", 1u"yr")
+    K_au_yr = (2 * π * sin(i) * m_planet / (sqrt(1 - (e * e)) * cbrt(comb_mass * comb_mass * P)))u"AU/yr"
+    return uconvert(u"m/s", K_au_yr)
 end
 
 
@@ -528,21 +528,21 @@ function add_kepler_to_Jones_problem_definition(
     return y_obs_w_planet
 end
 
-function add_kepler_to_Jones_problem_definition(
-    prob_def::Jones_problem_definition,
-    P::Union{Real, Quantity},
-    e::Real,
-    M0::Real,
-    m_star::Union{Real, Quantity},
-    m_planet::Union{Real, Quantity},
-    ω::Real;
-    normalization::Real=1,
-    i::Real=π/2,
-    γ::Real=0.)
-
-    K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
-    return add_kepler_to_Jones_problem_definition(prob_def, P, e, M0, K, ω; normalization=normalization, γ=γ)
-end
+# function add_kepler_to_Jones_problem_definition(
+#     prob_def::Jones_problem_definition,
+#     P::Union{Real, Quantity},
+#     e::Real,
+#     M0::Real,
+#     m_star::Union{Real, Quantity},
+#     m_planet::Union{Real, Quantity},
+#     ω::Real;
+#     normalization::Real=1,
+#     i::Real=π/2,
+#     γ::Real=0.)
+#
+#     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
+#     return add_kepler_to_Jones_problem_definition(prob_def, P, e, M0, K, ω; normalization=normalization, γ=γ)
+# end
 
 
 struct kep_signal
@@ -560,7 +560,19 @@ struct kep_signal
     kep_signal(K, P, M0) = kep_signal(K, P, M0, 0, 0)
     kep_signal(K, P, M0, e, ω) = kep_signal(K, P, M0, e, ω, 0u"m/s")
     kep_signal(K, P, M0, e, ω, γ) = kep_signal(K, P, M0, e, ω, γ, e*cos(ω), e*sin(ω))
-    function kep_signal(K, P, M0, e, ω, γ, h, k)
+    function kep_signal(
+        K::Unitful.Velocity,
+        P::Unitful.Time,
+        M0::T,
+        e::T,
+        ω::T,
+        γ::Unitful.Velocity,
+        h::T,
+        k::T
+        ) where {T<:Real}
+
+
+        P = convert_and_strip_units(u"yr", )
         @assert 0 <= e < 1 "orbit needs to be bound"
         M0 = mod2pi(M0)
         ω = mod2pi(ω)
