@@ -85,8 +85,8 @@ Julia function originally written by Eric Ford
 function ecc_anomaly(
     t::Number,
     P::Union{Number, Quantity},
-    e::Number,
-    M0::Number;
+    M0::Number,
+    e::Number;
     tol::Number=1e-8,
     max_its::Integer=200)
 
@@ -131,9 +131,9 @@ from (https://en.wikipedia.org/wiki/True_anomaly#From_the_eccentric_anomaly)
 ϕ(
     t::Real,
     P::Union{Real,Quantity},
-    e::Real,
-    M0::Real
-    ) = 2 * atan(sqrt((1 + e) / (1 - e)) * tan(ecc_anomaly(t, convert_and_strip_units(u"yr", P), e, M0) / 2))
+    M0::Real,
+    e::Real
+    ) = 2 * atan(sqrt((1 + e) / (1 - e)) * tan(ecc_anomaly(t, convert_and_strip_units(u"yr", P), M0, e) / 2))
 
 
 # """
@@ -162,7 +162,7 @@ from (https://en.wikipedia.org/wiki/True_anomaly#From_the_eccentric_anomaly)
 
 
 """
-kepler_rv(t, P, e, M0, K, ω; γ)
+kepler_rv(t, K, P, M0, e, ω; γ)
 Calculate radial velocity of star due to planet following Keplerian orbit at specified time.
 Inputs:
 - time
@@ -174,29 +174,37 @@ Inputs:
 Optionally:
 - velocity offset
 """
-function kepler_rv(t::Union{Real,Quantity}, P::Union{Real,Quantity}, e::Real, M0::Real, K::Union{Real,Quantity}, ω::Real; γ::Union{Real,Quantity}=0.)
+function kepler_rv(
+    t::Union{Real,Quantity},
+    K::Union{Real,Quantity},
+    P::Union{Real,Quantity},
+    M0::Real,
+    e::Real,
+    ω::Real;
+    γ::Union{Real,Quantity}=0.)
+
     P = convert_and_strip_units(u"yr", P)
     t = convert_and_strip_units(u"yr", t)
     K = convert_and_strip_units(u"m/s", K)
     γ = convert_and_strip_units(u"m/s", γ)
     assert_positive(P)
-    return kepler_rv_ecc_anom(t, P, e, M0, K, ω; γ=γ)
-    # return kepler_rv_true_anom(t, P, e, M0, K, ω; γ=γ)
+    return kepler_rv_ecc_anom(t, K, P, M0, e, ω; γ=γ)
+    # return kepler_rv_true_anom(t, P, M0, e, K, ω; γ=γ)
 end
 
 function kepler_rv(
     t::Union{Real, Quantity},
-    P::Union{Real, Quantity},
-    e::Real,
-    M0::Real,
     m_star::Union{Real, Quantity},
     m_planet::Union{Real, Quantity},
+    P::Union{Real, Quantity},
+    M0::Real,
+    e::Real,
     ω::Real;
     i::Real=π/2,
     γ::Real=0.)
 
     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
-    return kepler_rv(t, P, e, M0, K, ω; γ=γ)
+    return kepler_rv(t, K, P, M0, e, ω; γ=γ)
 end
 
 
@@ -206,13 +214,13 @@ adapted from eq. 11 of (http://exoplanets.astro.yale.edu/workshop/EPRV/Bibliogra
 """
 kepler_rv_true_anom(
     t::Real,
-    P::Real,
-    e::Real,
-    M0::Real,
     K::Real,
+    P::Real,
+    M0::Real,
+    e::Real,
     ω::Real;
     γ::Real=0.
-    ) = K * (e * cos(ω) + cos(ω + ϕ(t, P, e, M0))) + γ
+    ) = K * (e * cos(ω) + cos(ω + ϕ(t, P, M0, e))) + γ
 
 
 """
@@ -223,15 +231,15 @@ see ηdot part of eq. 19
 """
 function kepler_rv_ecc_anom(
     t::Real,
-    P::Real,
-    e::Real,
-    M0::Real,
     K::Real,
+    P::Real,
+    M0::Real,
+    e::Real,
     ω::Real;
     γ::Real=0.)
 
     k = e * cos(ω)
-    E = ecc_anomaly(t, P, e, M0)
+    E = ecc_anomaly(t, P, M0, e)
     j = sqrt(1 - e*e)
     q = e * cos(E)
     # return K * j / (1 - q) * (cos(ω + E) - (1 - j) * cos(E) * cos(ω)) + γ  # equivalent
@@ -253,16 +261,16 @@ cos(ω) = k / e
 """
 function kepler_rv_hk1(
     t::Real,
+    K::Real,
     P::Real,
     M0::Real,
-    K::Real,
     h::Real,
     k::Real;
     γ::Real=0.)
 
     e_sq = h * h + k * k
     e = sqrt(e_sq)
-    E = ecc_anomaly(t, P, e, M0)
+    E = ecc_anomaly(t, P, M0, e)
     cosE = cos(E)
     j = sqrt(1 - e_sq)
 
@@ -284,15 +292,15 @@ cos(ω) = kp / sqrt(e)
 """
 function kepler_rv_hk2(
     t::Real,
+    K::Real,
     P::Real,
     M0::Real,
-    K::Real,
     hp::Real,
     kp::Real;
     γ::Real=0.)
 
     e = hp * hp + kp * kp
-    E = ecc_anomaly(t, P, e, M0)
+    E = ecc_anomaly(t, P, M0, e)
     cosE = cos(E)
     j = sqrt(1 - e * e)
 
@@ -399,8 +407,8 @@ K = sqrt(coefficients[1]^2 + coefficients[2]^2)
 function kepler_rv_linear_gen(
     t,
     P::Union{Real, Quantity},
-    e::Union{Real, Quantity},
     M0::Union{Real, Quantity},
+    e::Union{Real, Quantity},
     coefficients::Vector{T}
     ) where {T<:Real}
 
@@ -408,7 +416,7 @@ function kepler_rv_linear_gen(
     P = convert_and_strip_units(u"yr", P)
     assert_positive(P)
     t = convert_and_strip_units.(u"yr", t)
-    ϕ_t = ϕ.(t, P, e, M0)
+    ϕ_t = ϕ.(t, P, M0, e)
     return (coefficients[1] .* cos.(ϕ_t)) + (coefficients[2] .* sin.(ϕ_t)) + (coefficients[3] .* ones(length(t)))
 end
 
@@ -508,10 +516,10 @@ end
 
 function add_kepler_to_Jones_problem_definition(
     prob_def::Jones_problem_definition,
-    P::Union{Real, Quantity},
-    e::Real,
-    M0::Real,
     K::Real,
+    P::Union{Real, Quantity},
+    M0::Real,
+    e::Real,
     ω::Real;
     normalization::Real=1,
     γ::Real=0.)
@@ -582,4 +590,4 @@ struct kep_signal
 end
 
 
-(p::kep_signal)(t::Union{Real, Quantity}) = kepler_rv(t, p.P, p.e, p.M0, p.K, p.ω; γ=p.γ)
+(p::kep_signal)(t::Union{Real, Quantity}) = kepler_rv(t, p.K, p.P, p.M0, p.e, p.ω; γ=p.γ)

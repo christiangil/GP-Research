@@ -62,7 +62,7 @@ if use_planet
     ω = 2 * π * rand()
     γ = 0
     problem_definition.y_obs[:] = add_kepler_to_Jones_problem_definition(
-        problem_definition, P, e, M0, K, ω; γ = γ,
+        problem_definition, K, P, M0, e, ω; γ = γ,
         normalization=copy(problem_definition.normals[1]))
     results_dir = "results/$(kernel_name)/K_$(string(K))/seed_$(seed)/"
 else

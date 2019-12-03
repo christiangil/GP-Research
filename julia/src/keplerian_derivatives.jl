@@ -35,7 +35,7 @@ function kep_deriv(
 
 	esq = h * h + k * k
 	e = sqrt(esq)
-	EA = ecc_anomaly(t, P, e, M0)
+	EA = ecc_anomaly(t, P, M0, e)
 	q = e * cos(EA)
 	p = e * sin(EA)
 	# ω = atan(h, k)
