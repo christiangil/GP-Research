@@ -1,6 +1,6 @@
-called_from_terminal = length(ARGS) > 0
-
 include("src/all_functions.jl")
+
+called_from_terminal = length(ARGS) > 0
 
 ###################################
 # Loading data and setting kernel #
@@ -27,17 +27,6 @@ else
     use_planet = true
 end
 
-rng = MersenneTwister(seed)
-sim_id = sample(rng, 6:20)
-filename = "res-1000-1years_long_id$sim_id"
-problem_def_base = init_problem_definition("jld2_files/" * filename; save_prob_def=false, sub_sample=sample_size, on_off=14, rng=rng)
-# problem_def_base = init_problem_definition("jld2_files/" * filename; save_prob_def=false, sub_sample=sample_size)
-println("optimizing on " * filename * " using the $kernel_name")
-
-kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
-problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
-println("id: ", sim_id)
-
 # allowing covariance matrix to be calculated in parallel
 if !called_from_terminal
     try
@@ -47,6 +36,20 @@ if !called_from_terminal
     end
 end
 
+rng = MersenneTwister(seed)
+sim_id = sample(rng, 6:20)
+filename = "res-1000-1years_long_id$sim_id"
+println("optimizing on $filename using the $kernel_name")
+if called_from_terminal
+    problem_def_base = init_problem_definition("jld2_files/" * filename; save_prob_def=false, sub_sample=sample_size, on_off=14, rng=rng)
+else
+    problem_def_base = init_problem_definition("../../../OneDrive/Desktop/jld2_files/" * filename; save_prob_def=false, sub_sample=sample_size, on_off=14, rng=rng)
+    # problem_def_base = init_problem_definition("jld2_files/" * filename; save_prob_def=false, sub_sample=sample_size, on_off=14, rng=rng)
+end
+
+kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
+problem_definition = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
+
 ########################################
 # Adding planet and normalizing scores #
 ########################################
@@ -55,12 +58,12 @@ if use_planet
     P = (8 + 1 * randn())u"d"  # draw over more periods?
     e = rand() / 5
     M0 = 2 * π * rand()
-    length(ARGS) > 1 ? K = parse(Float64, ARGS[3]) : K = 0.2  # m/s
+    length(ARGS) > 1 ? K = parse(Float64, ARGS[3]) : K = 3.  # m/s
     ω = 2 * π * rand()
     γ = 0
     problem_definition.y_obs[:] = add_kepler_to_Jones_problem_definition(
         problem_definition, P, e, M0, K, ω; γ = γ,
-        normalization=problem_definition.normals[1])
+        normalization=copy(problem_definition.normals[1]))
     results_dir = "results/$(kernel_name)/K_$(string(K))/seed_$(seed)/"
 else
     results_dir = "results/$(kernel_name)/K_0.0/seed_$(seed)/"
@@ -71,7 +74,7 @@ begin
     normalize_problem_definition!(problem_definition)
     println("Score errors:")
     println(mean(problem_definition.noise[1:sample_size]) * problem_definition.normals[1], " m/s")
-    for i in 1:problem_definition.n_out
+    for i in 2:problem_definition.n_out
         println(mean(problem_definition.noise[(i-1)*sample_size+1:i*sample_size]))
         @assert mean(problem_definition.noise[(i-1)*sample_size+1:i*sample_size]) < 2
     end

@@ -185,8 +185,11 @@ function init_problem_definition(
 
     # a0 = ones(n_out, n_dif) / 20
     a0 = zeros(n_out, n_dif)
-	a0[1,1] = 0.03;
-	a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0
+	if n_dif == n_out == 3
+		a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075;
+	else
+		a0[:,:] = ones(n_out, n_dif) / 20
+	end
 
     problem_def_base = init_problem_definition(n_dif, n_out, x_obs, x_obs_units, a0; y_obs=y_obs, y_obs_units=y_obs_units, normals=normals, noise=measurement_noise)
 
@@ -200,13 +203,68 @@ function init_problem_definition(
 end
 
 
+# function init_problem_definition(
+# 	rvs::Vector{Real},
+# 	noises::Vector{Real},
+# 	rv_units::Unitful.FreeUnits,
+# 	phases::Vector{Real},
+# 	phase_units::Unitful.FreeUnits;
+# 	n_dif::Integer=3,
+# 	save_str::String="full",
+# 	rng::AbstractRNG=Random.GLOBAL_RNG)
+#
+#     assert_positive(n_out, n_dif)
+#
+# 	phases_days = convert_and_strip_units("days", phases * phase_units)
+#
+#     amount_of_measurements = length(rvs)
+#
+#     # getting proper slice of data and converting to days
+#     x_obs = convert_SOAP_phases_to_days.(phases[inds])
+#     x_obs_units = u"d"
+#     y_obs_hold = noisy_scores[1:n_out, inds]
+#     measurement_noise_hold = error_ests[1:n_out, inds]
+#     y_obs_hold[1, :] *= light_speed  # convert scores from redshifts to radial velocities in m/s
+#     measurement_noise_hold[1, :] *= light_speed  # convert score errors from redshifts to radial velocities in m/s
+#
+#     # rearranging the data into one column (not sure reshape() does what I want)
+#     # and normalizing the data (for numerical purposes)
+#     y_obs = zeros(amount_of_measurements)
+#     measurement_noise = zeros(amount_of_measurements)
+#
+#     normals = ones(n_out)
+#     for i in 1:n_out
+#         y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :]
+#         measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :]
+#     end
+#     y_obs_units = u"m / s"
+#
+#     # a0 = ones(n_out, n_dif) / 20
+#     a0 = zeros(n_out, n_dif)
+# 	a0[1,1] = 0.03;
+# 	a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0
+#
+#     problem_def_base = init_problem_definition(n_dif, n_out, x_obs, x_obs_units, a0; y_obs=y_obs, y_obs_units=y_obs_units, normals=normals, noise=measurement_noise)
+#
+# 	if save_prob_def; @save hdf5_filename * "_problem_def_" * save_str * "_base.jld2" problem_def_base end
+#
+# 	return problem_def_base
+#
+#     # kernel_function, num_kernel_hyperparameters = include("src/kernels/quasi_periodic_kernel.jl")
+#     # problem_def = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
+#     # @save "jld2_files/" * hdf5_filename * "_problem_def_" * save_str * ".jld2" problem_def
+# end
+
+
 function normalize_problem_definition!(prob_def::Jones_problem_definition)
     n_obs = length(prob_def.x_obs)
     for i in 1:prob_def.n_out
         inds = 1 + (i - 1) * n_obs : i * n_obs
         prob_def.y_obs[inds] .-= mean(prob_def.y_obs[inds])
-        prob_def.normals[i] = stdm(prob_def.y_obs[inds], 0)
-        prob_def.y_obs[inds] /= prob_def.normals[i]
-        prob_def.noise[inds] /= prob_def.normals[i]
+		renorm = std(prob_def.y_obs[inds])
+		# println(renorm)
+        prob_def.normals[i] *= renorm
+        prob_def.y_obs[inds] /= renorm
+        prob_def.noise[inds] /= renorm
     end
 end

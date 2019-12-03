@@ -6,7 +6,7 @@ Pkg.activate(".")
 
 # importing functions
 include("general_functions.jl")
-include("Problem_definition_functions.jl")
+include("problem_definition_functions.jl")
 include("GP_functions.jl")
 include("RV_functions.jl")
 include("prior_functions.jl")

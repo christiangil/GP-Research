@@ -66,7 +66,17 @@ function custom_GP_plot(x_samp::Vector{T}, show_curves::Matrix{T}, x_obs::Vector
 end
 
 
-function Jones_line_plots(amount_of_samp_points::Integer, prob_def::Jones_problem_definition, total_hyperparameters::Vector{T}, file::AbstractString; show::Integer=0, find_post::Bool=true, plot_Σ::Bool=false, plot_Σ_profile::Bool=false, filetype::AbstractString="png") where {T<:Real}
+function Jones_line_plots(
+    amount_of_samp_points::Integer,
+    prob_def::Jones_problem_definition,
+    total_hyperparameters::Vector{T},
+    file::AbstractString;
+    show::Integer=0,
+    find_post::Bool=true,
+    plot_Σ::Bool=false,
+    plot_Σ_profile::Bool=false,
+    filetype::AbstractString="png"
+    ) where {T<:Real}
 
     x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points))
     amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out

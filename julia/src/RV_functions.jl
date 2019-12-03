@@ -1,8 +1,8 @@
 # these functions are related to calculating RV quantities
 using UnitfulAstro
 using Unitful
+# using UnitfulAngles
 using LinearAlgebra
-
 
 "Strip Unitful units"
 strip_units(quant::Quantity) = ustrip(float(quant))
@@ -30,7 +30,7 @@ function velocity_semi_amplitude(
     assert_positive(P, m_star, m_planet)
     comb_mass = m_star + m_planet
     K_au_yr = 2 * π * sin(i) * m_planet / (sqrt(1 - (e * e)) * cbrt(comb_mass * comb_mass * P))
-    return K_au_yr * convert_and_strip_units(u"m", (1)u"AU") / convert_and_strip_units(u"s", (1)u"yr")
+    return K_au_yr * convert_and_strip_units(u"m", 1u"AU") / convert_and_strip_units(u"s", 1u"yr")
 end
 
 
@@ -174,9 +174,11 @@ Inputs:
 Optionally:
 - velocity offset
 """
-function kepler_rv(t::Union{Real,Quantity}, P::Union{Real,Quantity}, e::Real, M0::Real, K::Real, ω::Real; γ::Real=0.)
+function kepler_rv(t::Union{Real,Quantity}, P::Union{Real,Quantity}, e::Real, M0::Real, K::Union{Real,Quantity}, ω::Real; γ::Union{Real,Quantity}=0.)
     P = convert_and_strip_units(u"yr", P)
     t = convert_and_strip_units(u"yr", t)
+    K = convert_and_strip_units(u"m/s", K)
+    γ = convert_and_strip_units(u"m/s", γ)
     assert_positive(P)
     return kepler_rv_ecc_anom(t, P, e, M0, K, ω; γ=γ)
     # return kepler_rv_true_anom(t, P, e, M0, K, ω; γ=γ)
@@ -541,3 +543,31 @@ function add_kepler_to_Jones_problem_definition(
     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
     return add_kepler_to_Jones_problem_definition(prob_def, P, e, M0, K, ω; normalization=normalization, γ=γ)
 end
+
+
+struct kep_signal
+    K::Unitful.Velocity
+    P::Unitful.Time
+    M0::Real  # ::Unitful.NoDims
+    e::Real
+    ω::Real  # ::Unitful.NoDims
+
+    γ::Unitful.Velocity
+
+    h::Real  # ::Unitful.NoDims
+    k::Real  # ::Unitful.NoDims
+
+    kep_signal(K, P, M0) = kep_signal(K, P, M0, 0, 0)
+    kep_signal(K, P, M0, e, ω) = kep_signal(K, P, M0, e, ω, 0u"m/s")
+    kep_signal(K, P, M0, e, ω, γ) = kep_signal(K, P, M0, e, ω, γ, e*cos(ω), e*sin(ω))
+    function kep_signal(K, P, M0, e, ω, γ, h, k)
+        @assert 0 <= e < 1 "orbit needs to be bound"
+        M0 = mod2pi(M0)
+        ω = mod2pi(ω)
+        @assert strip_units(P) > 0 "period needs to be positive"
+        return new(K, e, M0, ω, P, γ, h, k)
+    end
+end
+
+
+(p::kep_signal)(t::Union{Real, Quantity}) = kepler_rv(t, p.P, p.e, p.M0, p.K, p.ω; γ=p.γ)

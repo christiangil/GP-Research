@@ -240,3 +240,109 @@ function test_hess(prob_def::Jones_problem_definition, kernel_hyperparameters::V
 
     return no_mismatch
 end
+
+
+function est_kep_grad(K1::T, h1::T, k1::T, M01::T, γ1::T, P1::T, t1::T; dif::Real=1e-6) where {T<:Real}
+
+    tester(parms) = kep_deriv(parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], t1, [0,0,0,0,0,0])
+    parms = [K1, h1, k1, M01, γ1, P1]
+    # original value
+    val = tester(parms)
+
+    #estimate gradient
+    grad = zeros(length(parms))
+    for i in 1:length(parms)
+        hold = copy(parms)
+        hold[i] += dif
+        grad[i] = (tester(hold) - val) / dif
+    end
+    return grad
+end
+
+
+function test_kep_grad(K1::T, h1::T, k1::T, M01::T, γ1::T, P1::T, t1::T; dif::Real=1e-6, print_stuff::Bool=true) where {T<:Real}
+
+    pamrs_str = ["K", "h", "k", "M0", "γ", "P"]
+    parms = [K1, h1, k1, M01, γ1, P1]
+    G = kep_grad(K1, h1, k1, M01, γ1, P1, t1)
+    est_G = est_kep_grad(K1, h1, k1, M01, γ1, P1, t1; dif=dif)
+
+    if print_stuff
+        println()
+        println("test_kep_grad: Check that our analytical kep_grad() is close to numerical estimates")
+        println("parameters: ", parms)
+        println("analytical: ", G)
+        println("numerical : ", est_G)
+    end
+
+    no_mismatch = true
+    for i in 1:length(G)
+        if !isapprox(G[i], est_G[i], rtol=5e-2)
+            println("mismatch dkep/d" * pamrs_str[i])
+            no_mismatch = false
+        end
+    end
+
+    return no_mismatch
+end
+
+
+function est_kep_hess(K1::T, h1::T, k1::T, M01::T, γ1::T, P1::T, t1::T; dif::Real=1e-8) where {T<:Real}
+
+    tester(parms) = kep_grad(parms[1], parms[2], parms[3], parms[4], parms[5], parms[6], t1)
+    parms = [K1, h1, k1, M01, γ1, P1]
+    # original value
+    val = tester(parms)
+
+    #estimate hessian
+    hess = zeros(length(parms), length(parms))
+    for i in 1:length(parms)
+        hold = copy(parms)
+        hold[i] += dif
+        hess[i, :] =  (tester(hold) - val) / dif
+    end
+    return hess
+end
+
+
+function test_kep_hess(K1::T, h1::T, k1::T, M01::T, γ1::T, P1::T, t1::T; dif::Real=1e-6, print_stuff::Bool=true) where {T<:Real}
+
+    parms = [K1, h1, k1, M01, γ1, P1]
+    H = kep_hess(K1, h1, k1, M01, γ1, P1, t1)
+    est_H = est_kep_hess(K1, h1, k1, M01, γ1, P1, t1; dif=dif)
+
+    if print_stuff
+        println()
+        println("test_kep_hess: Check that our analytical kep_hess() is close to numerical estimates")
+        println("parameters: ", parms)
+        println("analytical:")
+        for i in 1:size(H, 1)
+            println(H[i, :])
+        end
+        println("numerical:")
+        for i in 1:size(est_H, 1)
+            println(est_H[i, :])
+        end
+    end
+
+    no_mismatch = true
+    matches = fill(1, size(H))
+    for i in 1:size(H, 1)
+        for j in 1:size(H, 2)
+            if !(isapprox(H[i, j], est_H[i, j], rtol=5e-1))
+                # println("mismatch d2nlogL/dθ" * string(i) * "dθ" * string(j))
+                matches[i, j] = 0
+                no_mismatch = false
+            end
+        end
+    end
+
+    if !no_mismatch
+        println("mismatches at 0s")
+        for i in 1:size(H, 1)
+            println(matches[i, :])
+        end
+    end
+
+    return no_mismatch
+end

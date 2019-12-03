@@ -312,7 +312,7 @@ function planck(λÅ::Union{Quantity, Real}, TK::Union{Quantity, Real})
     h = u"h"
     c = (light_speed)u"m/s"
     k = u"k"
-    T = convert_and_strip_units(u"K", TK)u"K"
+    T = uconvert(u"K", TK)
     # W·sr−1·m−3
     return strip_units(2 * h * c ^ 2 / λ^5 / (exp(h * c / (λ * k * T)) - 1))
 end
