@@ -10,7 +10,7 @@ strip_units(quant::Quantity) = ustrip(float(quant))
 
 "Convert Unitful units from one to another and strip the final units"
 convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Quantity) = strip_units(uconvert(new_unit, quant))
-convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Number) = quant
+convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Unitful.Time) = quant
 
 
 """
@@ -18,15 +18,15 @@ Calculate velocity semi-amplitude for RV signal of planets in m/s
 adapted from eq. 12 of (http://exoplanets.astro.yale.edu/workshop/EPRV/Bibliography_files/Radial_Velocity.pdf)
 """
 function velocity_semi_amplitude(
-    m_star::Union{Real, Unitful.Mass},
-    m_planet::Union{Real, Unitful.Mass},
-    P::Union{Real, Unitful.Time};
+    m_star::Unitful.Mass,
+    m_planet::Unitful.Mass,
+    P::Unitful.Time;
     e::Real=0.,
     i::Real=π/2)
 
-    m_star = convert_and_strip_units(u"Msun", m_star)
-    m_planet = convert_and_strip_units(u"Msun", m_planet)
-    P = convert_and_strip_units(u"yr", P)
+    # m_star = convert_and_strip_units(u"Msun", m_star)
+    # m_planet = convert_and_strip_units(u"Msun", m_planet)
+    # P = convert_and_strip_units(u"yr", P)
     assert_positive(P, m_star, m_planet)
     comb_mass = m_star + m_planet
     K_au_yr = (2 * π * sin(i) * m_planet / (sqrt(1 - (e * e)) * cbrt(comb_mass * comb_mass * P)))u"AU/yr"
@@ -34,14 +34,14 @@ function velocity_semi_amplitude(
 end
 
 
-# unit_phase(t::Real, P::Real) = mod(t / P * 2 * π, 2 * π)
-unit_phase(t::Real, P::Real) = t / P * 2 * π
+# unit_phase(t::Unitful.Time, P::Unitful.Time) = mod(t / P * 2 * π, 2 * π)
+unit_phase(t::Unitful.Time, P::Unitful.Time) = t / P * 2 * π
 
 
 "calculate mean anomaly"
-mean_anomaly(t::Real, P::Real, M0::Real) = unit_phase(t, P) - M0
-# mean_anomaly(t::Real, P::Real, M0::Real) = mod(unit_phase(t, P) - M0, 2 * π)
-# mean_anomaly(t::Real, P::Real, M0::Real) = mod(t / P * 2 * π - M0, 2 * π)
+mean_anomaly(t::Unitful.Time, P::Unitful.Time, M0::Real) = unit_phase(t, P) - M0
+# mean_anomaly(t::Unitful.Time, P::Unitful.Time, M0::Real) = mod(unit_phase(t, P) - M0, 2 * π)
+# mean_anomaly(t::Unitful.Time, P::Unitful.Time, M0::Real) = mod(t / P * 2 * π - M0, 2 * π)
 
 
 """   ecc_anom_init_guess_danby(M, ecc)
@@ -83,14 +83,14 @@ Loop to update the current estimate of the solution to Kepler's equation
 Julia function originally written by Eric Ford
 """
 function ecc_anomaly(
-    t::Number,
-    P::Union{Number, Quantity},
+    t::Unitful.Time,
+    P::Unitful.Time,
     M0::Number,
     e::Number;
     tol::Number=1e-8,
     max_its::Integer=200)
 
-    P = convert_and_strip_units(u"yr", P)
+    # P = convert_and_strip_units(u"yr", P)
     @assert (0 <= e <= 1) "eccentricity has to be between 0 and 1"
     M = mean_anomaly(t, P, M0)
     E = ecc_anom_init_guess_danby(M, e)
@@ -109,7 +109,7 @@ end
 # could also implement third order method from
 # (http://alpheratz.net/dynamics/twobody/KeplerIterations_summary.pdf)
 # """
-# function ecc_anomaly(t::Real, P::Real, e::Real)
+# function ecc_anomaly(t::Unitful.Time, P::Unitful.Time, e::Real)
 #     @assert (0 <= e <= 1) "eccentricity has to be between 0 and 1"
 #     M = mean_anomaly(t, P)
 #     dif_thres = 1e-8
@@ -129,18 +129,18 @@ Solution for true anomaly from eccentric anomaly
 from (https://en.wikipedia.org/wiki/True_anomaly#From_the_eccentric_anomaly)
 """
 ϕ(
-    t::Real,
-    P::Union{Real,Quantity},
+    t::Unitful.Time,
+    P::Unitful.Time,
     M0::Real,
     e::Real
-    ) = 2 * atan(sqrt((1 + e) / (1 - e)) * tan(ecc_anomaly(t, convert_and_strip_units(u"yr", P), M0, e) / 2))
+    ) = 2 * atan(sqrt((1 + e) / (1 - e)) * tan(ecc_anomaly(t, P, M0, e) / 2))
 
 
 # """
 # Calculate true anomaly for small e using equation of center approximating true
 # anomaly from (https://en.wikipedia.org/wiki/Equation_of_the_center) O(e^8)
 # """
-# function ϕ_approx(t::Real, P::Real, e::Real)
+# function ϕ_approx(t::Unitful.Time, P::Unitful.Time, e::Real)
 #     @assert (0 <= e <= 1) "eccentricity has to be between 0 and 1"
 #     M = mean_anomaly(t, P)
 #
@@ -158,8 +158,7 @@ from (https://en.wikipedia.org/wiki/True_anomaly#From_the_eccentric_anomaly)
 #
 # end
 #
-# ϕ_approx(t::Real, P::Quantity, e::Real) = ϕ_approx(t, convert_and_strip_units(u"yr", P), e)
-
+# ϕ_approx(t::Unitful.Time, P::Unitful.Time, e::Real) = ϕ_approx(t, convert_and_strip_units(u"yr", P), e)
 
 """
 kepler_rv(t, K, P, M0, e, ω; γ)
@@ -175,33 +174,35 @@ Optionally:
 - velocity offset
 """
 function kepler_rv(
-    t::Union{Real,Quantity},
-    K::Union{Real,Quantity},
-    P::Union{Real,Quantity},
+    t::Unitful.Time,
+    K::Unitful.Velocity,
+    P::Unitful.Time,
     M0::Real,
     e::Real,
     ω::Real;
-    γ::Union{Real,Quantity}=0.)
+    γ::Unitful.Velocity=0.)
 
-    P = convert_and_strip_units(u"yr", P)
-    t = convert_and_strip_units(u"yr", t)
-    K = convert_and_strip_units(u"m/s", K)
-    γ = convert_and_strip_units(u"m/s", γ)
-    assert_positive(P)
+    # P = convert_and_strip_units(u"yr", P)
+    # t = convert_and_strip_units(u"yr", t)
+    # K = convert_and_strip_units(u"m/s", K)
+    # γ = convert_and_strip_units(u"m/s", γ)
+    # assert_positive(P)
     return kepler_rv_ecc_anom(t, K, P, M0, e, ω; γ=γ)
     # return kepler_rv_true_anom(t, P, M0, e, K, ω; γ=γ)
 end
+kepler_rv(t::Unitful.Time, ks::kep_signal) = kepler_rv(t, ks.K, ks.P, ks.M0, ks.e, ks.ω; γ=ks.γ)
+
 
 function kepler_rv(
-    t::Union{Real, Quantity},
-    m_star::Union{Real, Quantity},
-    m_planet::Union{Real, Quantity},
-    P::Union{Real, Quantity},
+    t::Unitful.Time,
+    m_star::Unitful.Mass,
+    m_planet::Unitful.Mass,
+    P::Unitful.Time,
     M0::Real,
     e::Real,
     ω::Real;
     i::Real=π/2,
-    γ::Real=0.)
+    γ::Unitful.Velocity=0.)
 
     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
     return kepler_rv(t, K, P, M0, e, ω; γ=γ)
@@ -213,13 +214,13 @@ Simple radial velocity formula using true anomaly
 adapted from eq. 11 of (http://exoplanets.astro.yale.edu/workshop/EPRV/Bibliography_files/Radial_Velocity.pdf)
 """
 kepler_rv_true_anom(
-    t::Real,
-    K::Real,
-    P::Real,
+    t::Unitful.Time,
+    K::Unitful.Velocity,
+    P::Unitful.Time,
     M0::Real,
     e::Real,
     ω::Real;
-    γ::Real=0.
+    γ::Unitful.Velocity=0.
     ) = K * (e * cos(ω) + cos(ω + ϕ(t, P, M0, e))) + γ
 
 
@@ -230,13 +231,13 @@ Pál, András, Monthly Notices of the Royal Astronomical Society, 396, 3, 1737-1
 see ηdot part of eq. 19
 """
 function kepler_rv_ecc_anom(
-    t::Real,
-    K::Real,
-    P::Real,
+    t::Unitful.Time,
+    K::Unitful.Velocity,
+    P::Unitful.Time,
     M0::Real,
     e::Real,
     ω::Real;
-    γ::Real=0.)
+    γ::Unitful.Velocity=0.)
 
     k = e * cos(ω)
     E = ecc_anomaly(t, P, M0, e)
@@ -260,13 +261,13 @@ sin(ω) = h / e
 cos(ω) = k / e
 """
 function kepler_rv_hk1(
-    t::Real,
-    K::Real,
-    P::Real,
+    t::Unitful.Time,
+    K::Unitful.Velocity,
+    P::Unitful.Time,
     M0::Real,
     h::Real,
     k::Real;
-    γ::Real=0.)
+    γ::Unitful.Velocity=0.)
 
     e_sq = h * h + k * k
     e = sqrt(e_sq)
@@ -291,13 +292,13 @@ sin(ω) = hp / sqrt(e)
 cos(ω) = kp / sqrt(e)
 """
 function kepler_rv_hk2(
-    t::Real,
-    K::Real,
-    P::Real,
+    t::Unitful.Time,
+    K::Unitful.Velocity,
+    P::Unitful.Time,
     M0::Real,
     hp::Real,
     kp::Real;
-    γ::Real=0.)
+    γ::Unitful.Velocity=0.)
 
     e = hp * hp + kp * kp
     E = ecc_anomaly(t, P, M0, e)
@@ -319,15 +320,15 @@ K = sqrt(coefficients[1]^2 + coefficients[2]^2)
 M0 - ω = atan(coefficients[2], coefficients[1])
 """
 function kepler_rv_circ(
-    t,
-    P::Union{Real, Quantity},
+    t::Unitful.Time,
+    P::Unitful.Time,
     coefficients::Vector{T}
     ) where {T<:Real}
 
     @assert length(coefficients) == 3 "wrong number of coefficients"
-    P = convert_and_strip_units(u"yr", P)
-    assert_positive(P)
-    t = convert_and_strip_units.(u"yr", t)
+    # P = convert_and_strip_units(u"yr", P)
+    # assert_positive(P)
+    # t = convert_and_strip_units.(u"yr", t)
     phase = unit_phase.(t, P)
     return (coefficients[1] .* cos.(phase)) + (coefficients[2] .* sin.(phase)) + (coefficients[3] .* ones(length(t)))
 end
@@ -362,8 +363,8 @@ M0 = atan(coefficients[4], coefficients[3]) - atan(coefficients[2], coefficients
 ω = atan(coefficients[4], coefficients[3]) - 2 * atan(coefficients[2], coefficients[1])
 """
 function kepler_rv_linear_e(
-    t,
-    P::Union{Real, Quantity},
+    t::Unitful.Time,
+    P::Unitful.Time,
     coefficients::Vector{T}
     ) where {T<:Real}
 
@@ -405,8 +406,8 @@ K = sqrt(coefficients[1]^2 + coefficients[2]^2)
 γ = coefficients[3] - K * e * cos(ω)
 """
 function kepler_rv_linear_gen(
-    t,
-    P::Union{Real, Quantity},
+    t::Unitful.Time,
+    P::Unitful.Time,
     M0::Union{Real, Quantity},
     e::Union{Real, Quantity},
     coefficients::Vector{T}
@@ -436,22 +437,28 @@ end
 
 
 "Convert the solar phase information from SOAP 2.0 into days"
-function convert_SOAP_phases_to_days(phase::Real; P_rot=25.05)
+function convert_SOAP_phases(new_unit::Unitful.FreeUnits, phase::Real; P_rot::Unitful.Time=25.05u"d")
     # default P_rot is the solar rotation period used by SOAP 2.0 in days
     assert_positive(P_rot)
-    return phase * P_rot
+    return uconvert(new_unit, phase * P_rot)
 end
 
-"Convert the solar phase information from SOAP 2.0 into years"
-function convert_SOAP_phases_to_years(phase::Real; P_rot = 25.05)
-    return convert_and_strip_units(u"yr", convert_SOAP_phases_to_days(phase; P_rot=P_rot)u"d")
-end
-
+# "Convert the solar phase information from SOAP 2.0 into days"
+# function convert_SOAP_phases_to_days(phase::Real; P_rot::Unitful.Time=25.05u"d")
+#     # default P_rot is the solar rotation period used by SOAP 2.0 in days
+#     assert_positive(P_rot)
+#     return phase * P_rot
+# end
+#
+# "Convert the solar phase information from SOAP 2.0 into years"
+# function convert_SOAP_phases_to_years(phase::Real; P_rot::Unitful.Time=25.05u"d")
+#     return convert_and_strip_units(u"yr", convert_SOAP_phases_to_days(phase; P_rot=P_rot)u"d")
+# end
 
 function fit_linear_kepler(
     data::Vector{T},
-    times::Vector{T},
-    P::Real,
+    times::Vector{T2} where T2<:Unitful.Time,
+    P::Unitful.Time,
     covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}};
     return_params::Bool=false,
     print_params::Bool=false
@@ -480,8 +487,8 @@ end
 "Remove the best-fit epicyclic (linearized in e) Keplerian signal from the data"
 function remove_kepler!(
     data::Vector{T},
-    times::Vector{T},
-    P::Real,
+    times::Vector{T2} where T2<:Unitful.Time,
+    P::Unitful.Time,
     covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}};
     return_params::Bool=false
     ) where {T<:Real}
@@ -497,8 +504,8 @@ end
 
 function remove_kepler(
     y_obs_w_planet::Vector{T},
-    times::Vector{T},
-    P::Real,
+    times::Vector{T2} where T2<:Unitful.Time,
+    P::Unitful.Time,
     covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}};
     return_params::Bool=false
     ) where {T<:Real}
@@ -516,54 +523,47 @@ end
 
 function add_kepler_to_Jones_problem_definition(
     prob_def::Jones_problem_definition,
-    K::Real,
-    P::Union{Real, Quantity},
-    M0::Real,
-    e::Real,
-    ω::Real;
-    normalization::Real=1,
-    γ::Real=0.)
+    ks::kep_signal)
 
-    if K == 0
+    if ustrip(ks.K) == 0
         return prob_def.y_obs
     end
 
     amount_of_samp_points = length(prob_def.x_obs)
-    times_obs = convert_and_strip_units.(u"yr", (prob_def.x_obs)prob_def.x_obs_units)
-    planet_rvs = kepler_rv.(times_obs, P, e, M0, K, ω; γ=γ)
+    planet_rvs = ks.(prob_def.x_obs)
     y_obs_w_planet = copy(prob_def.y_obs)
-    y_obs_w_planet[1:amount_of_samp_points] += planet_rvs / normalization
+    y_obs_w_planet[1:amount_of_samp_points] += planet_rvs / prob_def.normals[1]
     return y_obs_w_planet
 end
 
 # function add_kepler_to_Jones_problem_definition(
 #     prob_def::Jones_problem_definition,
-#     P::Union{Real, Quantity},
+#     P::Unitful.Time,
 #     e::Real,
 #     M0::Real,
 #     m_star::Union{Real, Quantity},
-#     m_planet::Union{Real, Quantity},
+#     m_planet::Unitful.Time,
 #     ω::Real;
 #     normalization::Real=1,
 #     i::Real=π/2,
-#     γ::Real=0.)
+#     γ::Unitful.Velocity=0.)
 #
 #     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
 #     return add_kepler_to_Jones_problem_definition(prob_def, P, e, M0, K, ω; normalization=normalization, γ=γ)
 # end
 
 
-struct kep_signal
+struct kep_signal{T<:Real}
     K::Unitful.Velocity
     P::Unitful.Time
-    M0::Real  # ::Unitful.NoDims
-    e::Real
-    ω::Real  # ::Unitful.NoDims
+    M0::T  # ::Unitful.NoDims
+    e::T
+    ω::T  # ::Unitful.NoDims
 
     γ::Unitful.Velocity
 
-    h::Real  # ::Unitful.NoDims
-    k::Real  # ::Unitful.NoDims
+    h::T  # ::Unitful.NoDims
+    k::T  # ::Unitful.NoDims
 
     kep_signal(K, P, M0) = kep_signal(K, P, M0, 0, 0)
     kep_signal(K, P, M0, e, ω) = kep_signal(K, P, M0, e, ω, 0u"m/s")
@@ -571,23 +571,21 @@ struct kep_signal
     function kep_signal(
         K::Unitful.Velocity,
         P::Unitful.Time,
-        M0::T,
-        e::T,
-        ω::T,
+        M0::T1,
+        e::T1,
+        ω::T1,
         γ::Unitful.Velocity,
-        h::T,
-        k::T
-        ) where {T<:Real}
+        h::T1,
+        k::T1
+        ) where {T1<:Real}
 
-
-        P = convert_and_strip_units(u"yr", )
         @assert 0 <= e < 1 "orbit needs to be bound"
         M0 = mod2pi(M0)
         ω = mod2pi(ω)
         @assert strip_units(P) > 0 "period needs to be positive"
-        return new(K, e, M0, ω, P, γ, h, k)
+        return new{typeof(M0)}(K, e, M0, ω, P, γ, h, k)
     end
 end
 
 
-(p::kep_signal)(t::Union{Real, Quantity}) = kepler_rv(t, p.K, p.P, p.M0, p.e, p.ω; γ=p.γ)
+(p::kep_signal)(t::Unitful.Time) = kepler_rv(t, p)
