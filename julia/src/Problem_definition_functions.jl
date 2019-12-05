@@ -21,7 +21,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
     x_obs_units::Unitful.FreeUnits  # the units of x_obs
     y_obs::Vector{T1}  # the flattened, observed data
     y_obs_units::Unitful.FreeUnits  # the units of the RV section of y_obs
-    noise::Vector{T} where T<:Unitful.Velocity  # the measurement noise at all observations
+    noise::Vector{T1}  # the measurement noise at all observations
     normals::Vector{T1}  # the normalization of each section of y_obs
     a0::Matrix{T1}  # the meta kernel coefficients
     # The powers that each a0 coefficient
@@ -86,8 +86,8 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 	        measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :]
 	    end
 	    y_obs_units = u"m/s"
-		y_obs *= y_obs_units
-		measurement_noise *= y_obs_units
+		# y_obs *= y_obs_units
+		# measurement_noise *= y_obs_units
 
 	    # a0 = ones(n_out, n_dif) / 20
 	    a0 = zeros(n_out, n_dif)
@@ -114,9 +114,9 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		n_out::T2,
 		x_obs::Vector{T} where T<:Unitful.Time,
 		x_obs_units::Unitful.FreeUnits,
-		y_obs::Vector{T} where T<:Unitful.Velocity,
+		y_obs::Vector{T1},
 		y_obs_units::Unitful.FreeUnits,
-		noise::Vector{T} where T<:Unitful.Velocity,
+		noise::Vector{T1},
 		normals::Vector{T1},
 		a0::Matrix{T1},
 		coeff_orders::AbstractArray{T2,6},
