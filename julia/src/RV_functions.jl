@@ -687,9 +687,9 @@ function add_kepler_to_Jones_problem_definition(
     end
 
     amount_of_samp_points = length(prob_def.x_obs)
-    planet_rvs = ks.(prob_def.x_obs)
+    planet_rvs = ks.(prob_def.time)
     y_obs_w_planet = copy(prob_def.y_obs)
-    y_obs_w_planet[1:amount_of_samp_points] += planet_rvs / (prob_def.normals[1] * prob_def.y_obs_units)
+    y_obs_w_planet[1:amount_of_samp_points] += planet_rvs / (prob_def.normals[1] * prob_def.rv_unit)
     return y_obs_w_planet
 end
 

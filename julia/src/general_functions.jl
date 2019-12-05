@@ -147,7 +147,10 @@ end
 "Return evenly spaced numbers over a specified interval. Equivalent to range but without the keywords"
 linspace(start::Real, stop::Real, length::Integer) = range(start, stop=stop, length=length)
 log_linspace(start::Real, stop::Real, length) = exp.(linspace(log(start), log(stop), length))
-
+function linspace(start::Quantity, stop::Quantity, length::Integer)
+    stop = uconvert(unit(start), stop)
+    return collect(linspace(ustrip(start), ustrip(stop), length)) * unit(start)
+end
 
 "Create a new array filling the non-zero entries of a template array with a vector of values"
 function reconstruct_array(non_zero_entries, template_array::Matrix{T}) where {T<:Real}
@@ -205,7 +208,7 @@ Nyquist frequency is half of the sampling rate of a discrete signal processing s
 (https://en.wikipedia.org/wiki/Nyquist_frequency)
 divide by another factor of 4 for uneven spacing
 """
-function nyquist_frequency(times::Vector{T}; scale::Real=1) where {T<:Real}
+function nyquist_frequency(times::Vector{T}; scale::Real=1) where {T<:Union{Real,Quantity}}
     time_span = times[end] - times[1]
     return amount_of_samp_points / time_span / 2 / scale
 end

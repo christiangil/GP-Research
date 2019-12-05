@@ -154,7 +154,7 @@ function Jones_line_plots(
         show_resids ? axs = custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o, mean_obs=mean_obs_o) : axs = custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o)
 
         if output==1
-            y_str = "RVs (" * string(prob_def.y_obs_units) * ")"
+            y_str = "RVs (" * string(prob_def.rv_unit) * ")"
             title_string = "Apparent RVs"
         else
             y_str = "Normalized scores"
@@ -177,7 +177,7 @@ function Jones_line_plots(
         # text(minimum(prob_def.x_obs), 1 *minimum(y_o), "Wavelengths: " * string(kernel_lengths), fontsize=30)
 
         @assert 0<length(axs)<3
-        axs[end].set_xlabel("Time (" * string(prob_def.x_obs_units) * ")")
+        axs[end].set_xlabel("Time (" * string(prob_def.time_unit) * ")")
         if length(axs)==2; axs[end].set_ylabel("Residuals") end
 
         save_PyPlot_fig(file * "_$output." * filetype)

@@ -843,13 +843,35 @@ function d2nlogLdθ(
 end
 
 
-struct nlogL_Jones_matrix_workspace{T<:Real}
-    nlogL_hyperparameters::Vector{T}
-    Σ_obs::Cholesky{T,Matrix{T}}
-    y_obs::Vector{T}
-    α::Vector{T}
-    ∇nlogL_hyperparameters::Vector{T}
-    βs::Vector{Matrix{T}}
+struct nlogL_Jones_matrix_workspace
+    nlogL_hyperparameters::Vector{Real}
+    Σ_obs::Cholesky{T,Matrix{T}} where T<:Real
+    y_obs::Real
+    α::Vector{Real}
+    ∇nlogL_hyperparameters::Vector{Real}
+    βs::Vector{Matrix{Real}}
+
+    function nlogL_Jones_matrix_workspace(prob_def::Jones_problem_definition,
+        total_hyperparameters::Vector{<:Real})
+
+        total_hyper = reconstruct_total_hyperparameters(prob_def::Jones_problem_definition, total_hyperparameters)
+        Σ_obs = Σ_observations(prob_def, total_hyper; ignore_asymmetry=true)
+        return nlogL_Jones_matrix_workspace(
+            total_hyper,
+            Σ_obs,
+            copy(prob_def.y_obs),
+            Σ_obs \ prob_def.y_obs,
+            copy(total_hyper),
+            [Σ_obs \ covariance(prob_def, total_hyper; dΣdθs_total=[i]) for i in findall(!iszero, total_hyper)])
+    end
+    nlogL_Jones_matrix_workspace(
+        nlogL_hyperparameters::Vector{Real},
+        Σ_obs::Cholesky{T,Matrix{T}} where T<:Real,
+        y_obs::Vector{Real},
+        α::Vector{Real},
+        ∇nlogL_hyperparameters::Vector{Real},
+        βs::Vector{Matrix{Real}}
+        ) = new(nlogL_hyperparameters, Σ_obs, y_obs, α, ∇nlogL_hyperparameters, βs)
 end
 
 
@@ -869,20 +891,20 @@ end
 # end
 
 
-function init_nlogL_Jones_matrix_workspace(
-    prob_def::Jones_problem_definition,
-    total_hyperparameters::Vector{<:Real})
-
-    total_hyper = reconstruct_total_hyperparameters(prob_def, total_hyperparameters)
-    Σ_obs = Σ_observations(prob_def, total_hyper; ignore_asymmetry=true)
-    return nlogL_Jones_matrix_workspace(
-        total_hyper,
-        Σ_obs,
-        copy(prob_def.y_obs),
-        Σ_obs \ prob_def.y_obs,
-        copy(total_hyper),
-        [Σ_obs \ covariance(prob_def, total_hyper; dΣdθs_total=[i]) for i in findall(!iszero, total_hyper)])
-end
+# function init_nlogL_Jones_matrix_workspace(
+#     prob_def::Jones_problem_definition,
+#     total_hyperparameters::Vector{Real})
+#
+#     total_hyper = reconstruct_total_hyperparameters(prob_def, total_hyperparameters)
+#     Σ_obs = Σ_observations(prob_def, total_hyper; ignore_asymmetry=true)
+#     return nlogL_Jones_matrix_workspace(
+#         total_hyper,
+#         Σ_obs,
+#         copy(prob_def.y_obs),
+#         Σ_obs \ prob_def.y_obs,
+#         copy(total_hyper),
+#         [Σ_obs \ covariance(prob_def, total_hyper; dΣdθs_total=[i]) for i in findall(!iszero, total_hyper)])
+# end
 
 
 "Calculates the quantities shared by the nlogL and ∇nlogL calculations"
@@ -890,7 +912,7 @@ function calculate_shared_nlogL_Jones(
     prob_def::Jones_problem_definition,
     non_zero_hyperparameters::Vector{<:Real};
     Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters); ignore_asymmetry=true),
-    P::Union{Real, Quantity}=0)
+    P::Unitful.Time=0u"d")
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
@@ -898,7 +920,7 @@ function calculate_shared_nlogL_Jones(
     y_obs = copy(prob_def.y_obs)
 
     if P!=0
-        y_obs = remove_kepler(y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), Σ_obs)
+        y_obs = remove_kepler(y_obs, prob_def.time, convert_and_strip_units(prob_def.x_obs_units, P), Σ_obs)
     end
 
     α = Σ_obs \ y_obs
@@ -912,7 +934,7 @@ function calculate_shared_nlogL_Jones!(
     workspace::nlogL_Jones_matrix_workspace,
     prob_def::Jones_problem_definition,
     non_zero_hyperparameters::Vector{<:Real};
-    P::Union{Real, Quantity}=0)
+    P::Unitful.Time=0u"d")
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
@@ -942,7 +964,7 @@ function calculate_shared_∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     non_zero_hyperparameters::Vector{<:Real};
     Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
-    P::Union{Real, Quantity}=0)
+    P::Unitful.Time=0u"d")
 
     total_hyperparameters, Σ_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters; Σ_obs=Σ_obs, P=P)
 
@@ -957,7 +979,7 @@ function calculate_shared_∇nlogL_Jones!(
     workspace::nlogL_Jones_matrix_workspace,
     prob_def::Jones_problem_definition,
     non_zero_hyperparameters::Vector{<:Real};
-    P::Union{Real, Quantity}=0)
+    P::Unitful.Time=0u"d")
 
     calculate_shared_nlogL_Jones!(workspace, prob_def, non_zero_hyperparameters; P=P)
 
@@ -974,7 +996,7 @@ function nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
     Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
-    P::Union{Real, Quantity}=0
+    P::Unitful.Time=0u"d"
     ) where {T<:Real}
 
     total_hyperparameters, Σ_obs, y_obs, α = calculate_shared_nlogL_Jones(
@@ -988,7 +1010,7 @@ function nlogL_Jones!(
     workspace::nlogL_Jones_matrix_workspace,
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
-    P::Union{Real, Quantity}=0
+    P::Unitful.Time=0u"d"
     ) where {T<:Real}
 
     calculate_shared_nlogL_Jones!(workspace, prob_def, total_hyperparameters; P=P)
@@ -1001,7 +1023,7 @@ function ∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
     Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
-    P::Union{Real, Quantity}=0
+    P::Unitful.Time=0u"d"
     ) where {T<:Real}
 
     total_hyperparameters, Σ_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
@@ -1017,7 +1039,7 @@ function ∇nlogL_Jones!(
     workspace::nlogL_Jones_matrix_workspace,
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
-    P::Union{Real, Quantity}=0
+    P::Unitful.Time=0u"d"
     ) where {T<:Real}
 
     calculate_shared_∇nlogL_Jones!(workspace, prob_def, total_hyperparameters; P=P)
@@ -1058,7 +1080,7 @@ function ∇∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
     Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
-    P::Union{Real, Quantity}=0
+    P::Unitful.Time=0u"d"
     ) where {T<:Real}
 
     total_hyperparameters, Σ_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
@@ -1074,7 +1096,7 @@ function ∇∇nlogL_Jones!(
     workspace::nlogL_Jones_matrix_workspace,
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
-    P::Union{Real, Quantity}=0
+    P::Unitful.Time=0u"d"
     ) where {T<:Real}
 
     calculate_shared_∇nlogL_Jones!(workspace, prob_def, total_hyperparameters; P=P)
