@@ -3,14 +3,12 @@ using UnitfulAstro
 using Unitful
 # using UnitfulAngles
 using LinearAlgebra
-
-"Strip Unitful units"
-strip_units(quant::Quantity) = ustrip(float(quant))
+using PyPlot
 
 
 "Convert Unitful units from one to another and strip the final units"
-convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Quantity) = strip_units(uconvert(new_unit, quant))
-convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Unitful.Time) = quant
+convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Quantity) = ustrip(uconvert(new_unit, quant))
+convert_and_strip_units(new_unit::Unitful.FreeUnits, quant) = quant
 
 
 """
@@ -53,7 +51,7 @@ Julia function originally written by Eric Ford
 function ecc_anom_init_guess_danby(M::Real, e::Real)
     k = convert(typeof(e), 0.85)
     if M < zero(M); M += 2 * π end
-    (M < π) ? M + k * e : M - k * e;
+    (M < π) ? M + k * e : M - k * e
 end
 
 
@@ -179,16 +177,17 @@ function kepler_rv(
     K::Unitful.Velocity,
     P::Unitful.Time,
     M0::Real,
-    e::Real,
-    ω::Real;
-    γ::Unitful.Velocity=0.)
+    e_or_h::Real,
+    ω_or_k::Real;
+    γ::Unitful.Velocity=0u"m/s",
+    use_hk::Bool=false)
 
     # P = convert_and_strip_units(u"yr", P)
     # t = convert_and_strip_units(u"yr", t)
     # K = convert_and_strip_units(u"m/s", K)
     # γ = convert_and_strip_units(u"m/s", γ)
     # assert_positive(P)
-    return kepler_rv_ecc_anom(t, K, P, M0, e, ω; γ=γ)
+    return kepler_rv_ecc_anom(t, K, P, M0, e_or_h, ω_or_k; γ=γ, use_hk=use_hk)
     # return kepler_rv_true_anom(t, P, M0, e, K, ω; γ=γ)
 end
 
@@ -202,7 +201,7 @@ function kepler_rv(
     e::Real,
     ω::Real;
     i::Real=π/2,
-    γ::Unitful.Velocity=0.)
+    γ::Unitful.Velocity=0u"m/s")
 
     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
     return kepler_rv(t, K, P, M0, e, ω; γ=γ)
@@ -221,9 +220,19 @@ struct kep_signal
     h::Real  # ::Unitful.NoDims
     k::Real  # ::Unitful.NoDims
 
-    kep_signal(K, P, M0) = kep_signal(K, P, M0, 0, 0)
-    kep_signal(K, P, M0, e, ω) = kep_signal(K, P, M0, e, ω, 0u"m/s")
-    kep_signal(K, P, M0, e, ω, γ) = kep_signal(K, P, M0, e, ω, γ, e*cos(ω), e*sin(ω))
+    kep_signal(; K=0u"m/s", P=1u"d", M0=0, e_or_h=0, ω_or_k=0, γ=0u"m/s", use_hk::Bool=false) = kep_signal(K, P, M0, e_or_h, ω_or_k, γ; use_hk=use_hk)
+    function kep_signal(K, P, M0, e_or_h, ω_or_k, γ; use_hk::Bool=false)
+        if use_hk
+            h = e_or_h
+            k = ω_or_k
+            e, ω = hk_2_eω(h, k)
+        else
+            e = e_or_h
+            ω = ω_or_k
+            h, k = eω_2_hk(e, ω)
+        end
+        return kep_signal(K, P, M0, e, ω, γ, h, k)
+    end
     function kep_signal(
         K::Unitful.Velocity,
         P::Unitful.Time,
@@ -243,6 +252,64 @@ struct kep_signal
 end
 kepler_rv(t::Unitful.Time, ks::kep_signal) = kepler_rv(t, ks.K, ks.P, ks.M0, ks.e, ks.ω; γ=ks.γ)
 (ks::kep_signal)(t::Unitful.Time) = kepler_rv(t, ks)
+function fit_kepler(
+    data::Vector{T},
+    times::Vector{T2} where T2<:Unitful.Time,
+    covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
+    ks::kep_signal;
+    data_unit::Unitful.Velocity=1u"m/s"
+    ) where T<:Real
+
+    # if P==0; return kep_signal_epicyclic(p, P, M0, e, ω, γ, coefficients) end
+    assert_positive(ks.P)
+    for i in 1:ndims(covariance)
+        @assert size(covariance,i)==length(data) "covariance incompatible with data"
+    end
+    amount_of_total_samp_points = length(data)
+    amount_of_samp_points = length(times)
+    normalization = logdet(covariance) + amount_of_total_samp_points * log(2 * π)
+    α = covariance \ data
+    K_u = unit(ks.K)
+    P_u = unit(ks.P)
+    γ_u = unit(ks.γ)
+
+    function f(parms::Vector{T}) where {T<:Real}
+        K, P, M0, h, k, γ = parms
+        K *= K_u
+        P *= P_u
+        γ *= γ_u
+        ks = kep_signal(K, P, M0, h, k, γ; use_hk=true)
+        prior = logprior_kepler(ks; use_hk=true)
+        if prior == Inf
+            return prior
+        else
+            return nlogL(covariance, remove_kepler(data, times, ks; data_unit=data_unit), nlogL_normalization=normalization) + prior
+        end
+    end
+
+    function g!(G::Vector{T}, parms::Vector{T}) where {T<:Real}
+        K, P, M0, h, k, γ = parms
+        K *= K_u
+        P *= P_u
+        γ *= γ_u
+        for i in 1:length(G)
+            d = zeros(Int64, length(G))
+            d[i] = 1
+            dy = zeros(length(data))
+            kep_deriv_simple(t) = kep_deriv(K, P, M0, h, k, γ, t, d)
+            dy[1:length(times)] -= ustrip.(kep_deriv_simple.(times)) ./ convert_and_strip_units(K_u, data_unit)
+            G[i] = dnlogLdθ(dy, α) + logprior_kepler(K, P, M0, h, k, γ; d=d, use_hk=true)
+        end
+    end
+
+    result = optimize(f, g!, ustrip.([ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ]), LBFGS()) # 27s
+    K, P, M0, h, k, γ = result.minimizer
+    K *= K_u
+    P *= P_u
+    γ *= γ_u
+    return kep_signal(K, P, M0, h, k, γ; use_hk=true)
+end
+
 
 """
 Simple radial velocity formula using true anomaly
@@ -255,8 +322,16 @@ kepler_rv_true_anom(
     M0::Real,
     e::Real,
     ω::Real;
-    γ::Unitful.Velocity=0.
+    γ::Unitful.Velocity=0u"m/s"
     ) = K * (e * cos(ω) + cos(ω + ϕ(t, P, M0, e))) + γ
+
+
+function eω_2_hk(e, ω)
+    return e * sin(ω), e * cos(ω)
+end
+function hk_2_eω(h, k)
+    return sqrt(h * h + k * k), atan(h, k)
+end
 
 
 """
@@ -270,9 +345,20 @@ function kepler_rv_ecc_anom(
     K::Unitful.Velocity,
     P::Unitful.Time,
     M0::Real,
-    e::Real,
-    ω::Real;
-    γ::Unitful.Velocity=0.)
+    e_or_h::Real,
+    ω_or_k::Real;
+    γ::Unitful.Velocity=0u"m/s",
+    use_hk::Bool=false)
+
+    if use_hk
+        h = e_or_h
+        k = ω_or_k
+        e, ω = hk_2_eω(h, k)
+    else
+        e = e_or_h
+        ω = ω_or_k
+        h, k = eω_2_hk(e, ω)
+    end
 
     k = e * cos(ω)
     E = ecc_anomaly(t, P, M0, e)
@@ -302,7 +388,7 @@ end
 #     M0::Real,
 #     h::Real,
 #     k::Real;
-#     γ::Unitful.Velocity=0.)
+#     γ::Unitful.Velocity=0u"m/s")
 #
 #     e_sq = h * h + k * k
 #     e = sqrt(e_sq)
@@ -333,7 +419,7 @@ end
 #     M0::Real,
 #     hp::Real,
 #     kp::Real;
-#     γ::Unitful.Velocity=0.)
+#     γ::Unitful.Velocity=0u"m/s")
 #
 #     e = hp * hp + kp * kp
 #     E = ecc_anomaly(t, P, M0, e)
@@ -357,7 +443,7 @@ end
 # function kepler_rv_circ(
 #     t::Unitful.Time,
 #     P::Unitful.Time,
-#     coefficients::Vector{Real}
+#     coefficients::Vector{<:Real}
 #     ) where
 #
 #     @assert length(coefficients) == 3 "wrong number of coefficients"
@@ -369,7 +455,7 @@ end
 # end
 
 # function kepler_rv_circ_orbit_params(
-#     coefficients::Vector{Real};
+#     coefficients::Vector{<:Real};
 #     print_params::Bool=false
 #     ) where
 #
@@ -389,8 +475,7 @@ struct kep_signal_circ
     γ::Unitful.Velocity
     coefficients::Vector{T} where T<:Unitful.Velocity
 
-    kep_signal_circ(K::Unitful.Velocity, P::Unitful.Time) = kep_signal_circ(K, P, 0)
-    kep_signal_circ(K, P, M0minusω) = kep_signal_circ(K, P, M0minusω, 0u"m/s")
+    kep_signal_circ(; K=0u"m/s", P=0u"d", M0minusω=0, γ=0u"m/s") = kep_signal_circ(K, P, M0minusω, γ)
     kep_signal_circ(K, P, M0minusω, γ) = kep_signal_circ(K, P, M0minusω, γ, [K * cos(M0minusω), K * sin(M0minusω), γ])
     function kep_signal_circ(
         P::Unitful.Time,
@@ -441,7 +526,7 @@ kepler_rv(t::Unitful.Time, ks::kep_signal_circ) = kepler_rv_circ(t, ks)
 # function kepler_rv_epicyclic(
 #     t::Unitful.Time,
 #     P::Unitful.Time,
-#     coefficients::Vector{Real}
+#     coefficients::Vector{<:Real}
 #     ) where
 #
 #     @assert length(coefficients) == 5 "wrong number of coefficients"
@@ -453,7 +538,7 @@ kepler_rv(t::Unitful.Time, ks::kep_signal_circ) = kepler_rv_circ(t, ks)
 # end
 
 # function kepler_rv_epicyclic_orbit_params(
-#     coefficients::Vector{Real};
+#     coefficients::Vector{<:Real};
 #     print_params::Bool=false
 #     ) where
 #
@@ -475,17 +560,32 @@ struct kep_signal_epicyclic
     M0::Real
     e::Real
     ω::Real  # ::Unitful.NoDims
+
     γ::Unitful.Velocity
+
+    h::Real
+    k::Real  # ::Unitful.NoDims
     coefficients::Vector{T} where T<:Unitful.Velocity
 
-    kep_signal_epicyclic(K, P, M0) = kep_signal_epicyclic(K, P, M0, 0, 0)
-    kep_signal_epicyclic(K, P, M0, e, ω) = kep_signal_epicyclic(K, P, M0, e, ω, 0u"m/s")
-    kep_signal_epicyclic(K, P, M0, e, ω, γ) = kep_signal_epicyclic(K, P, M0, e, ω, γ,
+    kep_signal_epicyclic(; K=0u"m/s", P=0u"d", M0=0, e_or_h=0, ω_or_k=0, γ=0u"m/s", use_hk::Bool=false) = kep_signal_epicyclic(K, P, M0, e, ω, γ; use_hk=use_hk)
+    function kep_signal_epicyclic(K, P, M0, e_or_h, ω_or_k, γ; use_hk::Bool=false)
+        if use_hk
+            h = e_or_h
+            k = ω_or_k
+            e, ω = hk_2_eω(h, k)
+        else
+            e = e_or_h
+            ω = ω_or_k
+            h, k = eω_2_hk(e, ω)
+        end
+        return kep_signal_epicyclic(K, P, M0, e, ω, γ, h, k)
+    end
+    kep_signal_epicyclic(K, P, M0, e, ω, γ, h, k) = kep_signal_epicyclic(K, P, M0, e, ω, γ, h, k,
         [K * cos(M0 - ω), K * sin(M0 - ω), e * K * cos(2 * M0 - ω), e * K * sin(2 * M0 - ω), γ])
     function kep_signal_epicyclic(P, coefficients)
         K = sqrt(coefficients[1]^2 + coefficients[2]^2)
         e = sqrt(coefficients[3]^2 + coefficients[4]^2) / K
-        if e > 0.35; @warn "an orbit with this eccentricity would be very different from the output of kepler_rv_epicyclic" end
+        # if e > 0.35; @warn "an orbit with this eccentricity would be very different from the output of kepler_rv_epicyclic" end
         M0 = mod2pi(atan(coefficients[4], coefficients[3]) - atan(coefficients[2], coefficients[1]))
         ω = mod2pi(atan(coefficients[4], coefficients[3]) - 2 * atan(coefficients[2], coefficients[1]))
         γ = coefficients[5]
@@ -504,7 +604,7 @@ struct kep_signal_epicyclic
         ω = mod2pi(ω)
         assert_positive(P)
         @assert length(coefficients) == 5 "wrong number of coefficients"
-        return new(K, P, M0, e, ω, γ, coefficients)
+        return new(K, P, M0, e, ω, γ, h, k, coefficients)
     end
 end
 function kepler_rv_epicyclic(t::Unitful.Time, ks::kep_signal_epicyclic)
@@ -513,6 +613,30 @@ function kepler_rv_epicyclic(t::Unitful.Time, ks::kep_signal_epicyclic)
 end
 kepler_rv(t::Unitful.Time, ks::kep_signal_epicyclic) = kepler_rv_epicyclic(t, ks)
 (ks::kep_signal_epicyclic)(t::Unitful.Time) = kepler_rv(t, ks)
+function fit_kepler_epicyclic(
+    data::Vector{T},
+    times::Vector{T2} where T2<:Unitful.Time,
+    covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
+    P::Unitful.Time;
+    data_unit::Unitful.Velocity=1u"m/s"
+    ) where T<:Real
+
+
+    # if P==0; return kep_signal_epicyclic(p, P, M0, e, ω, γ, coefficients) end
+    assert_positive(P)
+    for i in 1:ndims(covariance)
+        @assert size(covariance,i)==length(data) "covariance incompatible with data"
+    end
+    amount_of_total_samp_points = length(data)
+    amount_of_samp_points = length(times)
+    phases = unit_phase.(times, P)
+    design_matrix = hcat(cos.(phases), sin.(phases), cos.(2 .* phases), sin.(2 .* phases), ones(length(times)))
+    amount_of_total_samp_points > amount_of_samp_points ? design_matrix = vcat(design_matrix, zeros(amount_of_total_samp_points - amount_of_samp_points, size(design_matrix, 2))) : design_matrix = design_matrix
+    x = general_lst_sq(design_matrix, data; Σ=covariance)
+    return kep_signal_epicyclic(P, x .* data_unit)
+end
+fit_kepler(data, times, covariance, ks::kep_signal_epicyclic; data_unit=1u"m/s") = fit_kepler_epicyclic(data, times, covariance, ks.P; data_unit=data_unit)
+
 
 # """
 # A linear formulation of a Keplerian RV signal for a given eccentricity, period and initial mean anomaly
@@ -531,7 +655,7 @@ kepler_rv(t::Unitful.Time, ks::kep_signal_epicyclic) = kepler_rv_epicyclic(t, ks
 #     P::Unitful.Time,
 #     M0::Real,
 #     e::Real,
-#     coefficients::Vector{Real}
+#     coefficients::Vector{<:Real}
 #     ) where
 #
 #     @assert length(coefficients) == 3 "wrong number of coefficients"
@@ -543,7 +667,7 @@ kepler_rv(t::Unitful.Time, ks::kep_signal_epicyclic) = kepler_rv_epicyclic(t, ks
 # end
 
 # function kepler_rv_wright_orbit_params(
-#     coefficients::Vector{Real},
+#     coefficients::Vector{<:Real},
 #     e::Real,
 #     print_params::Bool=false
 #     ) where
@@ -566,8 +690,7 @@ struct kep_signal_wright
     γ::Unitful.Velocity
     coefficients::Vector{T} where T<:Unitful.Velocity
 
-    kep_signal_wright(K, P, M0) = kep_signal_wright(K, P, M0, 0, 0)
-    kep_signal_wright(K, P, M0, e, ω) = kep_signal_wright(K, P, M0, e, ω, 0u"m/s")
+    kep_signal_wright(; K=0u"m/s", P=0u"d", M0=0, e=0, ω=0, γ=0u"m/s") = kep_signal_wright(K, P, M0, e, ω, γ)
     kep_signal_wright(K, P, M0, e, ω, γ) = kep_signal_wright(K, P, M0, e, ω, γ,
         [K * cos(ω), -K * sin(ω), γ + K * e * cos(ω)])
     function kep_signal_wright(P, M0, e, coefficients)
@@ -619,34 +742,13 @@ end
 #     return convert_and_strip_units(u"yr", convert_SOAP_phases_to_days(phase; P_rot=P_rot)u"d")
 # end
 
-function fit_kepler_epicyclic(
-    data::Vector{Real},
-    times::Vector{T2} where T2<:Unitful.Time,
-    P::Unitful.Time,
-    covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}}
-    ) where T<:Real
-
-    # if P==0; return kep_signal_epicyclic(p, P, M0, e, ω, γ, coefficients) end
-    assert_positive(P)
-    for i in 1:ndims(covariance)
-        @assert size(covariance,i)==length(data) "covariance incompatible with data"
-    end
-    amount_of_total_samp_points = length(data)
-    amount_of_samp_points = length(times)
-    phases = unit_phase.(times, P)
-    kepler_epicyclic_terms = hcat(cos.(phases), sin.(phases), cos.(2 .* phases), sin.(2 .* phases), ones(length(times)))
-    amount_of_total_samp_points > amount_of_samp_points ? kepler_epicyclic_terms = vcat(kepler_rv_linear_terms, zeros(amount_of_total_samp_points - amount_of_samp_points, size(kepler_rv_linear_terms, 2))) : kepler_epicyclic_terms = kepler_rv_linear_terms
-    x = general_lst_sq(kepler_epicyclic_terms, data; Σ=covariance)
-    return kep_signal_epicyclic(P, x)
-end
-
 
 # "Remove the best-fit epicyclic (linearized in e) Keplerian signal from the data"
 # function remove_kepler!(
-#     data::Vector{Real},
+#     data::Vector{<:Real},
 #     times::Vector{T2} where T2<:Unitful.Time,
 #     P::Unitful.Time,
-#     covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{Real}};
+#     covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{<:Real}};
 #     return_params::Bool=false
 #     ) where
 #
@@ -660,10 +762,10 @@ end
 # end
 #
 # function remove_kepler(
-#     y_obs_w_planet::Vector{Real},
+#     y_obs_w_planet::Vector{<:Real},
 #     times::Vector{T2} where T2<:Unitful.Time,
 #     P::Unitful.Time,
-#     covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{Real}};
+#     covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{<:Real}};
 #     return_params::Bool=false
 #     ) where
 #
@@ -678,7 +780,7 @@ end
 # end
 
 
-function add_kepler_to_Jones_problem_definition(
+function add_kepler_to_Jones_problem_definition!(
     prob_def::Jones_problem_definition,
     ks::kep_signal)
 
@@ -688,9 +790,9 @@ function add_kepler_to_Jones_problem_definition(
 
     amount_of_samp_points = length(prob_def.x_obs)
     planet_rvs = ks.(prob_def.time)
-    y_obs_w_planet = copy(prob_def.y_obs)
-    y_obs_w_planet[1:amount_of_samp_points] += planet_rvs / (prob_def.normals[1] * prob_def.rv_unit)
-    return y_obs_w_planet
+    prob_def.y_obs[1:amount_of_samp_points] += planet_rvs / (prob_def.normals[1] * prob_def.rv_unit)
+    prob_def.rv[:] += planet_rvs
+    # return prob_def
 end
 
 # function add_kepler_to_Jones_problem_definition(
@@ -703,8 +805,92 @@ end
 #     ω::Real;
 #     normalization::Real=1,
 #     i::Real=π/2,
-#     γ::Unitful.Velocity=0.)
+#     γ::Unitful.Velocity=0u"m/s")
 #
 #     K = velocity_semi_amplitude(P, m_star, m_planet, e=e, i=i)
 #     return add_kepler_to_Jones_problem_definition(prob_def, P, e, M0, K, ω; normalization=normalization, γ=γ)
 # end
+
+
+function remove_kepler(
+    data::Vector{<:Real},
+    times::Vector{T2} where T2<:Unitful.Time,
+    ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ};
+    data_unit::Unitful.Velocity=1u"m/s")
+
+    y = copy(data)
+    if ustrip(ks.K) != 0; y[1:length(times)] -= uconvert.(unit(data_unit), ks.(times)) ./ data_unit end
+    return y
+end
+remove_kepler(
+    prob_def::Jones_problem_definition,
+    ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ}) =
+    remove_kepler(prob_def.y_obs, prob_def.time, ks; data_unit=prob_def.rv_unit*prob_def.normals[1])
+
+
+function add_kepler(
+    data::Vector{<:Real},
+    times::Vector{T2} where T2<:Unitful.Time,
+    ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ};
+    data_unit::Unitful.Velocity=1u"m/s")
+
+    y = copy(data)
+    if ustrip(ks.K) != 0; y[1:length(times)] += uconvert.(unit(data_unit), ks.(times)) ./ data_unit end
+    return y
+end
+add_kepler(
+    prob_def::Jones_problem_definition,
+    ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ}) =
+    add_kepler(prob_def.y_obs, prob_def.time, ks; data_unit=prob_def.rv_unit*prob_def.normals[1])
+
+
+# function fit_and_remove_kepler_epi(
+#     data::Vector{<:Real},
+#     times::Vector{T2} where T2<:Unitful.Time,
+#     Σ_obs::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
+#     P::Unitful.Time;
+#     data_unit::Unitful.Velocity=1u"m/s") where T<:Real
+#
+#     ks = fit_kepler_epicyclic(data, times, Σ_obs, P; data_unit=data_unit)
+#     return remove_kepler(data, times, ks; data_unit=data_unit)
+# end
+# function fit_and_remove_kepler_epi(
+#     prob_def::Jones_problem_definition,
+#     Σ_obs::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
+#     P::Unitful.Time;
+#     data_unit::Unitful.Velocity=1u"m/s") where T<:Real)
+#     return fit_and_remove_kepler_epi(prob_def.y_obs, prob_def.time, Σ_obs, P; data_unit=prob_def.rv_unit*prob_def.normals[1])
+# end
+
+
+function fit_and_remove_kepler(
+    data::Vector{<:Real},
+    times::Vector{T2} where T2<:Unitful.Time,
+    Σ_obs::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
+    ks::kep_signal;
+    data_unit::Unitful.Velocity=1u"m/s") where T<:Real
+
+    ks = fit_kepler(data, times, Σ_obs, ks; data_unit=data_unit)
+    return remove_kepler(data, times, ks; data_unit=data_unit)
+end
+fit_and_remove_kepler(
+    prob_def::Jones_problem_definition,
+    Σ_obs::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
+    ks::kep_signal) where T<:Real =
+    fit_and_remove_kepler(prob_def.y_obs, prob_def.time, Σ_obs, ks; data_unit=prob_def.rv_unit*prob_def.normals[1])
+
+fit_kepler(
+    prob_def::Jones_problem_definition,
+    covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
+    ks::kep_signal) where T<:Real =
+    fit_kepler(prob_def.y_obs, prob_def.time, covariance, ks; data_unit=prob_def.rv_unit*prob_def.normals[1])
+
+
+
+# TODO
+# add linear parts to GP fitting epicyclic and full kepler fitting
+
+kep_parms_str(ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright}) =
+    "K: $(round(convert_and_strip_units(u"m/s", ks.K), digits=2))" * L"^m/_s" * "  P: $(round(convert_and_strip_units(u"d", ks.P), digits=2))" * L"d" * "  M0: $(round(ks.M0,digits=2))  e: $(round(ks.e,digits=2))  ω: $(round(ks.ω,digits=2)) γ: $(round(convert_and_strip_units(u"m/s", ks.γ), digits=2))" * L"^m/_s"
+kep_parms_str_short(ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright}) =
+    "K: $(round(convert_and_strip_units(u"m/s", ks.K), digits=2))" * L"^m/_s" * "  P: $(round(convert_and_strip_units(u"d", ks.P), digits=2))" * L"d" * "  e: $(round(ks.e,digits=2))"

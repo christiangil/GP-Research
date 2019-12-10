@@ -19,15 +19,14 @@ float: The derivative specfied with dorder
 
 """
 function kep_deriv(
-	K::T,
-	h::T,
-	k::T,
-	M0::T,
-	γ::T,
-	P::T,
-	t::T,
-	dorder::Vector{<:Integer}
-	) where {T<:Real}
+	K::Unitful.Velocity,
+	P::Unitful.Time,
+	M0::Real,
+	h::Real,
+	k::Real,
+	γ::Unitful.Velocity,
+	t::Unitful.Time,
+	dorder::Vector{<:Integer})
 
 	@assert sum(dorder) < 3
 	@assert minimum(dorder) == 0
@@ -38,32 +37,34 @@ function kep_deriv(
 	EA = ecc_anomaly(t, P, M0, e)
 	q = e * cos(EA)
 	p = e * sin(EA)
-	# ω = atan(h, k)
-	λ = mean_anomaly(t, P, M0) + atan(h, k)
-	c = cos(λ + p)
-	s = sin(λ + p)
+	ω = atan(h, k)
+	# λ = mean_anomaly(t, P, M0) + atan(h, k)
+	# c = cos(λ + p)
+	# s = sin(λ + p)
+	c = cos(EA + ω)
+	s = sin(EA + ω)
 	jsq = 1 - esq
 	j = sqrt(jsq)
 	qmod = 1-q
 	jmod = 1+j
 
-	if dorder==[0, 0, 0, 0, 0, 2]
+	if dorder==[0, 2, 0, 0, 0, 0]
 		func = (1 / (jmod * P^4 * qmod^5)) * 4 * j * π * t * (-jmod * qmod * s * (P *
 			qmod^2 - 3 * p * π * t) + c * jmod * (-p * P * qmod^2 + 3 * p^2 * π *
 			t - π * qmod * t) + k * (p * P * qmod^2 - 3 * p^2 * π * t + π * q *
 			qmod * t)) * K
 	end
 
-	if dorder==[0, 0, 0, 0, 1, 1]
+	if dorder==[0, 1, 0, 0, 0, 1]
 		func = 0
 	end
 
-	if dorder==[0, 0, 0, 1, 0, 1]
+	if dorder==[0, 1, 1, 0, 0, 0]
 		func = (2 * j * π * (k * (-3 * p^2 + q - q^2) + c * jmod * (3 * p^2 -
 			qmod) + 3 * jmod * p * qmod * s) * t * K) / (jmod * P^2 * qmod^5)
 	end
 
-	if dorder==[0, 0, 1, 0, 0, 1]
+	if dorder==[0, 1, 0, 0, 1, 0]
 		func = (1 / (esq * jmod^2 * j * P^2 * qmod^5)) * 2 * π * (3 * c^2 * esq *
 			jmod^2 * jsq * p + c * jmod * (h * jmod * jsq * (3 * p^2 - qmod) -
 			esq * k * p * (6 * jsq + qmod^2 + j * (3 * jsq + qmod^2)) + 2 * esq *
@@ -74,7 +75,7 @@ function kep_deriv(
 			s^2))) * t * K
 	end
 
-	if dorder==[0, 1, 0, 0, 0, 1]
+	if dorder==[0, 1, 0, 1, 0, 0]
 		func = -(1 / (esq * jmod^2 * j * P^2 * qmod^5)) * 2 * π * (c^2 * esq *
 			jmod^2 * jsq * (2 - 3 * q + q^2) - jmod * jsq * k * (3 * k * p^2 -
 			k * q * qmod - 3 * jmod * p * qmod * s) + c * jmod * (esq * h * jmod *
@@ -85,46 +86,46 @@ function kep_deriv(
 			(jsq + qmod^2) * s))) * t * K
 	end
 
-	if dorder==[1, 0, 0, 0, 0, 1]
+	if dorder==[1, 1, 0, 0, 0, 0]
 		func = (2 * j * π * (c * jmod * p - k * p + jmod * qmod * s) * t) /
 			(jmod * P^2 * qmod^3)
 	end
 
-	if dorder==[0, 0, 0, 0, 0, 1]
+	if dorder==[0, 1, 0, 0, 0, 0]
 		func = (2 * j * π * (c * jmod * p - k * p - jmod * -qmod * s) *
 			t * K) / (jmod * P^2 * qmod^3)
 	end
 
-	if dorder==[0, 0, 0, 0, 2, 0]
+	if dorder==[0, 0, 0, 0, 0, 2]
 		func = 0
 	end
 
-	if dorder==[0, 0, 0, 1, 1, 0]
+	if dorder==[0, 0, 1, 0, 0, 1]
 		func = 0
 	end
 
-	if dorder==[0, 0, 1, 0, 1, 0]
+	if dorder==[0, 0, 0, 0, 1, 1]
 		func = 0
 	end
 
-	if dorder==[0, 1, 0, 0, 1, 0]
+	if dorder==[0, 0, 0, 1, 0, 1]
 		func = 0
 	end
 
-	if dorder==[1, 0, 0, 0, 1, 0]
+	if dorder==[1, 0, 0, 0, 0, 1]
 		func = 0
 	end
 
-	if dorder==[0, 0, 0, 0, 1, 0]
+	if dorder==[0, 0, 0, 0, 0, 1]
 		func = 1
 	end
 
-	if dorder==[0, 0, 0, 2, 0, 0]
+	if dorder==[0, 0, 2, 0, 0, 0]
 		func = (j * (k * (-3 * p^2 + q - q^2) + c * jmod * (3 * p^2 - qmod) + 3 *
 			jmod * p * qmod * s) * K) / (jmod * qmod^5)
 	end
 
-	if dorder==[0, 0, 1, 1, 0, 0]
+	if dorder==[0, 0, 1, 0, 1, 0]
 		func = (1 / (esq * jmod^2 * j * qmod^5)) * (3 * c^2 * esq * jmod^2 * jsq *
 			p + c * jmod * (h * jmod * jsq * (3 * p^2 - qmod) - esq * k * p * (6 *
 			jsq + qmod^2 + j * (3 * jsq + qmod^2)) + 2 * esq * jmod * jsq *
@@ -134,7 +135,7 @@ function kep_deriv(
 			p - (2 + j) * k * qmod * s - 2 * jmod * p * qmod * s^2))) * K
 	end
 
-	if dorder==[0, 1, 0, 1, 0, 0]
+	if dorder==[0, 0, 1, 1, 0, 0]
 		func = -(1 / (esq * jmod^2 * j * qmod^5)) * (c^2 * esq * jmod^2 * jsq *
 			(2 - 3 * q + q^2) - jmod * jsq * k * (3 * k * p^2 - k * q * qmod -
 			3 * jmod * p * qmod * s) + c * jmod * (esq * h * jmod * p * qmod^2 +
@@ -144,16 +145,16 @@ function kep_deriv(
 			qmod^2 + j * (3 * jsq + qmod^2)) - jmod^2 * qmod * (jsq + qmod^2) * s))) * K
 	end
 
-	if dorder==[1, 0, 0, 1, 0, 0]
+	if dorder==[1, 0, 1, 0, 0, 0]
 		func = -((j * (-c * jmod * p + k * p - jmod * qmod * s)) / (jmod * qmod^3))
 	end
 
-	if dorder==[0, 0, 0, 1, 0, 0]
+	if dorder==[0, 0, 1, 0, 0, 0]
 		func = -(j * (-c * jmod * p + k * p + jmod * -qmod * s) * K) / (jmod *
 			qmod^3)
 	end
 
-	if dorder==[0, 0, 2, 0, 0, 0]
+	if dorder==[0, 0, 0, 0, 2, 0]
 		func = -(((-jmod^2 * jsq^3 * (c * esq - esq * k + h * p)^2 * (c + c * j - k * q) -
 	   		esq * jmod^2 * jsq^2 * k * (-c * esq + esq * k - h * p) * (c + c * j -
 		  	k * q) * qmod^2 + esq^2 * jmod^2 * jsq^2 * (c + c * j - k * q) * qmod^4 -
@@ -184,7 +185,7 @@ function kep_deriv(
 			esq^2 * (-qmod - s^2)))) * K) / (jmod^3 * j^5 * (esq - esq * q)^2 * qmod^3))
 	end
 
-	if dorder==[0, 1, 1, 0, 0, 0]
+	if dorder==[0, 0, 0, 1, 1, 0]
 		func = -(((2 * jmod * jsq^2 * (c * esq - esq * k +
 			h * p) * (esq * h * jmod * (c + c * j - k * q) * qmod^2 +
           	jmod * jsq * (c + c * j - k * q) * (k * p + esq * (h - s)) +
@@ -296,21 +297,21 @@ function kep_deriv(
 	# 		(esq - esq * q)^2 * qmod^3))
 	# end
 
-	if dorder==[1, 0, 1, 0, 0, 0]
+	if dorder==[1, 0, 0, 0, 1, 0]
 		func = ((jsq * (c - k + (h * p) / esq) * (c - (k * q) / jmod)) / qmod -
 			(k * (c + c * j - k * q) * qmod) / jmod + jsq * qmod * (((-1 + h^2 -
 			j) * q) / (jmod^2 * j) - (k * (c * esq - esq * k + h * p)) / (esq *
 			jmod * qmod) - (s * (-h + esq * s)) / (esq * qmod))) / (j * qmod^2)
 	end
 
-	if dorder==[0, 0, 1, 0, 0, 0]
+	if dorder==[0, 0, 0, 0, 1, 0]
 		func = (((k * -qmod * (c + c * j - k * q)) / jmod + (jsq * (c - k +
 			(h * p) / esq) * (c - (k * q) / jmod)) / qmod + jsq * qmod * ((k *
 			(c - k + (h * p) / esq)) / (jmod * -qmod) + ((-1 + h^2 - j) * q)  /
 			(jmod^2 * j) - (s * (-(h / esq) + s)) / qmod)) * K) / (j * qmod^2)
 	end
 
-	if dorder==[0, 2, 0, 0, 0, 0]
+	if dorder==[0, 0, 0, 2, 0, 0]
 		func = -(((esq^2 * jmod^2 * jsq^2 * (c + c * j - k * q) * qmod^4 -
 			jmod^2 * jsq^3 * (c + c * j - k * q) * qmod * (2 * c * esq * k + esq^2 *
 			(-c^2 - qmod) - k * (k * q - 2 * h * p * qmod)) - esq * h * jmod^2 * jsq^2 *
@@ -336,14 +337,14 @@ function kep_deriv(
 			(esq - esq * q)^2 * qmod^3))
 	end
 
-	if dorder==[1, 1, 0, 0, 0, 0]
+	if dorder==[1, 0, 0, 1, 0, 0]
 		func = (-((h * (c + c * j - k * q) * qmod) / jmod) + (jsq * (c - (k * q)
 			/ jmod) * (-h - (k * p) / esq + s)) / qmod + (-jmod * jsq * k *
 			(-k * p + s + j * s) + esq * (h * jmod * jsq * k - h * j * k * q * qmod +
 			jmod * jsq * (c + c * j - k) * s)) / (esq * jmod^2)) / (j * qmod^2)
 	end
 
-	if dorder==[0, 1, 0, 0, 0, 0]
+	if dorder==[0, 0, 0, 1, 0, 0]
 		func = (((h * -qmod * (c + c * j - k * q)) / jmod + (jsq * (c -
 			(k * q) / jmod) * (-h - (k * p) / esq + s)) / qmod + jsq * qmod *
 			(-((h * k * q) / (jmod^2 * j)) + ((c - k / esq) * s) / qmod + (k *
@@ -367,7 +368,7 @@ function kep_deriv(
 end
 
 
-function kep_grad(K1::T, h1::T, k1::T, M01::T, γ1::T, P1::T, t1::T) where {T<:Real}
+function kep_grad(K1::T, P1::T, M01::T, h1::T, k1::T, γ1::T, t1::T) where {T<:Real}
 
     nparms = 6
     grad = zeros(nparms)

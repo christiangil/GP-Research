@@ -494,15 +494,16 @@ function GP_posteriors(
     total_hyperparameters::Vector{T};
     return_Σ::Bool=true,
     chol::Bool=false,
-    return_mean_obs::Bool=false
+    return_mean_obs::Bool=false,
+    y_obs::Vector{T}=prob_def.y_obs
     ) where {T<:Real}
 
     if return_mean_obs
         (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp, Σ_obs_raw) = covariance_permutations(prob_def, x_samp, total_hyperparameters; return_both=return_mean_obs)
-        return GP_posteriors_from_covariances(prob_def.y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp, Σ_obs_raw; return_Σ=return_Σ, chol=chol)
+        return GP_posteriors_from_covariances(y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp, Σ_obs_raw; return_Σ=return_Σ, chol=chol)
     else
         (Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp) = covariance_permutations(prob_def, x_samp, total_hyperparameters; return_both=return_mean_obs)
-        return GP_posteriors_from_covariances(prob_def.y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp; return_Σ=return_Σ, chol=chol)
+        return GP_posteriors_from_covariances(y_obs, Σ_samp, Σ_obs, Σ_samp_obs, Σ_obs_samp; return_Σ=return_Σ, chol=chol)
     end
 
 end
@@ -655,25 +656,26 @@ float: the negative log marginal likelihood
 function nlogL(
     Σ_obs::Cholesky{T,Matrix{T}},
     y::Vector{T},
-    α::Vector{T}
+    α::Vector{T};
+    nlogL_normalization::T=logdet(Σ_obs)+length(y)*log(2*π)
     ) where {T<:Real}
 
-    n = length(y)
+    # n = length(y)
 
     # 2 times negative goodness of fit term
     data_fit = transpose(y) * α
     # 2 times negative complexity penalization term
     # complexity_penalty = log(det(Σ_obs))
-    complexity_penalty = logdet(Σ_obs)  # half memory but twice the time
+    # complexity_penalty = logdet(Σ_obs)  # half memory but twice the time
     # 2 times negative normalization term (doesn't affect fitting)
-    normalization = n * log(2 * π)
+    # normalization = n * log(2 * π)
 
-    return (data_fit + complexity_penalty + normalization) / 2
+    return (data_fit + nlogL_normalization) / 2
 
 end
 
-nlogL(Σ_obs, y) = nlogL(Σ_obs, y, Σ_obs \ y)
-
+nlogL(Σ_obs, y; nlogL_normalization=logdet(Σ_obs)+length(y)*log(2*π)) =
+    nlogL(Σ_obs, y, Σ_obs \ y; nlogL_normalization=nlogL_normalization)
 
 """
 First partial derivative of the GP negative log marginal likelihood w.r.t. GP
@@ -843,35 +845,36 @@ function d2nlogLdθ(
 end
 
 
-struct nlogL_Jones_matrix_workspace
-    nlogL_hyperparameters::Vector{Real}
-    Σ_obs::Cholesky{T,Matrix{T}} where T<:Real
-    y_obs::Real
-    α::Vector{Real}
-    ∇nlogL_hyperparameters::Vector{Real}
-    βs::Vector{Matrix{Real}}
+# struct nlogL_matrix_workspace
+#     nlogL_hyperparameters::Vector{<:Real}
+#     Σ_obs::Cholesky{T,Matrix{T}} where T<:Real
+#     y_obs::Vector{<:Real}
+#     α::Vector{<:Real}
+#     ∇nlogL_hyperparameters::Vector{<:Real}
+#     βs::Vector{Matrix{<:Real}}
+struct nlogL_matrix_workspace{T<:Real}
+    nlogL_hyperparameters::Vector{T}
+    Σ_obs::Cholesky{T,Matrix{T}}
+    ∇nlogL_hyperparameters::Vector{T}
+    βs::Vector{Matrix{T}}
 
-    function nlogL_Jones_matrix_workspace(prob_def::Jones_problem_definition,
+    function nlogL_matrix_workspace(prob_def::Jones_problem_definition,
         total_hyperparameters::Vector{<:Real})
 
         total_hyper = reconstruct_total_hyperparameters(prob_def::Jones_problem_definition, total_hyperparameters)
         Σ_obs = Σ_observations(prob_def, total_hyper; ignore_asymmetry=true)
-        return nlogL_Jones_matrix_workspace(
+        return nlogL_matrix_workspace(
             total_hyper,
             Σ_obs,
-            copy(prob_def.y_obs),
-            Σ_obs \ prob_def.y_obs,
             copy(total_hyper),
             [Σ_obs \ covariance(prob_def, total_hyper; dΣdθs_total=[i]) for i in findall(!iszero, total_hyper)])
     end
-    nlogL_Jones_matrix_workspace(
-        nlogL_hyperparameters::Vector{Real},
-        Σ_obs::Cholesky{T,Matrix{T}} where T<:Real,
-        y_obs::Vector{Real},
-        α::Vector{Real},
-        ∇nlogL_hyperparameters::Vector{Real},
-        βs::Vector{Matrix{Real}}
-        ) = new(nlogL_hyperparameters, Σ_obs, y_obs, α, ∇nlogL_hyperparameters, βs)
+    nlogL_matrix_workspace(
+        nlogL_hyperparameters::Vector{T},
+        Σ_obs::Cholesky{T,Matrix{T}},
+        ∇nlogL_hyperparameters::Vector{T},
+        βs::Vector{Matrix{T}}
+        ) where T<:Real = new{typeof(nlogL_hyperparameters[1])}(nlogL_hyperparameters, Σ_obs, ∇nlogL_hyperparameters, βs)
 end
 
 
@@ -891,13 +894,13 @@ end
 # end
 
 
-# function init_nlogL_Jones_matrix_workspace(
+# function init_nlogL_matrix_workspace(
 #     prob_def::Jones_problem_definition,
-#     total_hyperparameters::Vector{Real})
+#     total_hyperparameters::Vector{<:Real})
 #
 #     total_hyper = reconstruct_total_hyperparameters(prob_def, total_hyperparameters)
 #     Σ_obs = Σ_observations(prob_def, total_hyper; ignore_asymmetry=true)
-#     return nlogL_Jones_matrix_workspace(
+#     return nlogL_matrix_workspace(
 #         total_hyper,
 #         Σ_obs,
 #         copy(prob_def.y_obs),
@@ -908,80 +911,56 @@ end
 
 
 "Calculates the quantities shared by the nlogL and ∇nlogL calculations"
-function calculate_shared_nlogL_Jones(
+function calculate_shared_nlogL_matrices(
     prob_def::Jones_problem_definition,
     non_zero_hyperparameters::Vector{<:Real};
-    Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters); ignore_asymmetry=true),
-    P::Unitful.Time=0u"d")
+    Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters); ignore_asymmetry=true))
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
 
-    y_obs = copy(prob_def.y_obs)
-
-    if P!=0
-        y_obs = remove_kepler(y_obs, prob_def.time, convert_and_strip_units(prob_def.x_obs_units, P), Σ_obs)
-    end
-
-    α = Σ_obs \ y_obs
-
-    return total_hyperparameters, Σ_obs, y_obs, α
+    return total_hyperparameters, Σ_obs
 
 end
 
 
-function calculate_shared_nlogL_Jones!(
-    workspace::nlogL_Jones_matrix_workspace,
+function calculate_shared_nlogL_matrices!(
+    workspace::nlogL_matrix_workspace,
     prob_def::Jones_problem_definition,
-    non_zero_hyperparameters::Vector{<:Real};
-    P::Unitful.Time=0u"d")
+    non_zero_hyperparameters::Vector{<:Real})
 
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
 
-    recalc_α = false
-
     if !isapprox(workspace.nlogL_hyperparameters, total_hyperparameters)
         workspace.nlogL_hyperparameters[:] = total_hyperparameters
         workspace.Σ_obs.factors[:,:] = Σ_observations(prob_def, total_hyperparameters).factors
-        recalc_α = true
     end
-
-    P != 0 ? y_obs = remove_kepler(prob_def.y_obs, prob_def.x_obs, convert_and_strip_units(prob_def.x_obs_units, P), workspace.Σ_obs) : y_obs = copy(prob_def.y_obs)
-
-    if !isapprox(workspace.y_obs, y_obs)
-        workspace.y_obs[:] = y_obs
-        recalc_α = true
-    end
-
-    if recalc_α; workspace.α[:] = workspace.Σ_obs \ workspace.y_obs end
 
 end
 
 
 "Calculates the quantities shared by the ∇nlogL and ∇∇nlogL calculations"
-function calculate_shared_∇nlogL_Jones(
+function calculate_shared_∇nlogL_matrices(
     prob_def::Jones_problem_definition,
     non_zero_hyperparameters::Vector{<:Real};
-    Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true),
-    P::Unitful.Time=0u"d")
+    Σ_obs::Cholesky{T,Matrix{T}} where T<:Real=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters), ignore_asymmetry=true))
 
-    total_hyperparameters, Σ_obs, y_obs, α = calculate_shared_nlogL_Jones(prob_def, non_zero_hyperparameters; Σ_obs=Σ_obs, P=P)
+    total_hyperparameters, Σ_obs, = calculate_shared_nlogL_matrices(prob_def, non_zero_hyperparameters; Σ_obs=Σ_obs)
 
     βs = [Σ_obs \ covariance(prob_def, total_hyperparameters; dΣdθs_total=[i]) for i in findall(!iszero, total_hyperparameters)]
 
-    return total_hyperparameters, Σ_obs, y_obs, α, βs
+    return total_hyperparameters, Σ_obs, βs
 
 end
 
 
-function calculate_shared_∇nlogL_Jones!(
-    workspace::nlogL_Jones_matrix_workspace,
+function calculate_shared_∇nlogL_matrices!(
+    workspace::nlogL_matrix_workspace,
     prob_def::Jones_problem_definition,
-    non_zero_hyperparameters::Vector{<:Real};
-    P::Unitful.Time=0u"d")
+    non_zero_hyperparameters::Vector{<:Real})
 
-    calculate_shared_nlogL_Jones!(workspace, prob_def, non_zero_hyperparameters; P=P)
+    calculate_shared_nlogL_matrices!(workspace, prob_def, non_zero_hyperparameters)
 
     if !isapprox(workspace.∇nlogL_hyperparameters, workspace.nlogL_hyperparameters)
         workspace.∇nlogL_hyperparameters[:] = workspace.nlogL_hyperparameters
@@ -991,30 +970,61 @@ function calculate_shared_∇nlogL_Jones!(
 end
 
 
+"""
+Tries to include the specified kernel from common directories
+Returns the number of hyperparameters it uses
+"""
+function include_kernel(kernel_name::AbstractString)
+    if !occursin("_kernel", kernel_name)
+        kernel_name *= "_kernel"
+    end
+    try
+        return include("src/kernels/$kernel_name.jl")
+    catch
+        return include("../src/kernels/$kernel_name.jl")
+    end
+end
+
+
+"""
+Make it easy to run the covariance calculations on many processors
+Makes sure every worker has access to kernel function
+"""
+function prep_parallel_covariance(
+    kernel_name::AbstractString;
+    add_procs::Integer=0)
+
+    prep_parallel(; add_procs=add_procs)
+    sendto(workers(), kernel_name=kernel_name)
+    @everywhere include_kernel(kernel_name)
+end
+
+
 "nlogL for Jones GP"
 function nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
     Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
-    P::Unitful.Time=0u"d"
+    y_obs::Vector{T}=copy(prob_def.y_obs)
     ) where {T<:Real}
 
-    total_hyperparameters, Σ_obs, y_obs, α = calculate_shared_nlogL_Jones(
-        prob_def, remove_zeros(total_hyperparameters); Σ_obs=Σ_obs, P=P)
-    return nlogL(Σ_obs, y_obs, α)
+    total_hyperparameters, Σ_obs = calculate_shared_nlogL_matrices(
+        prob_def, remove_zeros(total_hyperparameters); Σ_obs=Σ_obs)
+
+    return nlogL(Σ_obs, y_obs)
 end
 
 
 "nlogL for Jones GP"
 function nlogL_Jones!(
-    workspace::nlogL_Jones_matrix_workspace,
+    workspace::nlogL_matrix_workspace,
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
-    P::Unitful.Time=0u"d"
+    y_obs::Vector{T}=copy(prob_def.y_obs)
     ) where {T<:Real}
 
-    calculate_shared_nlogL_Jones!(workspace, prob_def, total_hyperparameters; P=P)
-    return nlogL(workspace.Σ_obs, workspace.y_obs, workspace.α)
+    calculate_shared_nlogL_matrices!(workspace, prob_def, total_hyperparameters)
+    return nlogL(workspace.Σ_obs, y_obs)
 end
 
 
@@ -1023,28 +1033,28 @@ function ∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
     Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
-    P::Unitful.Time=0u"d"
+    y_obs::Vector{T}=copy(prob_def.y_obs)
     ) where {T<:Real}
 
-    total_hyperparameters, Σ_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
-        prob_def, remove_zeros(total_hyperparameters); Σ_obs=Σ_obs, P=P)
+    total_hyperparameters, Σ_obs, βs = calculate_shared_∇nlogL_matrices(
+        prob_def, remove_zeros(total_hyperparameters); Σ_obs=Σ_obs)
 
-    return ∇nlogL(y_obs, α, βs)
+    return ∇nlogL(y_obs, Σ_obs \ y_obs, βs)
 
 end
 
 
 "Returns gradient of nlogL for non-zero hyperparameters"
 function ∇nlogL_Jones!(
-    workspace::nlogL_Jones_matrix_workspace,
+    workspace::nlogL_matrix_workspace,
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
-    P::Unitful.Time=0u"d"
+    y_obs::Vector{T}=copy(prob_def.y_obs)
     ) where {T<:Real}
 
-    calculate_shared_∇nlogL_Jones!(workspace, prob_def, total_hyperparameters; P=P)
+    calculate_shared_∇nlogL_matrices!(workspace, prob_def, total_hyperparameters)
 
-    return ∇nlogL(workspace.y_obs, workspace.α, workspace.βs)
+    return ∇nlogL(y_obs, workspace.Σ_obs \ y_obs, workspace.βs)
 
 end
 
@@ -1080,28 +1090,28 @@ function ∇∇nlogL_Jones(
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
     Σ_obs::Cholesky{T,Matrix{T}}=Σ_observations(prob_def, reconstruct_total_hyperparameters(prob_def, total_hyperparameters); ignore_asymmetry=true),
-    P::Unitful.Time=0u"d"
+    y_obs::Vector{T}=copy(prob_def.y_obs)
     ) where {T<:Real}
 
-    total_hyperparameters, Σ_obs, y_obs, α, βs = calculate_shared_∇nlogL_Jones(
-        prob_def, remove_zeros(total_hyperparameters); Σ_obs=Σ_obs, P=P)
+    total_hyperparameters, Σ_obs, βs = calculate_shared_∇nlogL_matrices(
+        prob_def, remove_zeros(total_hyperparameters); Σ_obs=Σ_obs)
 
-    return ∇∇nlogL_Jones(prob_def, total_hyperparameters, Σ_obs, y_obs, α, βs)
+    return ∇∇nlogL_Jones(prob_def, total_hyperparameters, Σ_obs, y_obs, Σ_obs \ y_obs, βs)
 
 end
 
 
 "Returns gradient of nlogL for non-zero hyperparameters"
 function ∇∇nlogL_Jones!(
-    workspace::nlogL_Jones_matrix_workspace,
+    workspace::nlogL_matrix_workspace,
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T};
-    P::Unitful.Time=0u"d"
+    y_obs::Vector{T}=copy(prob_def.y_obs)
     ) where {T<:Real}
 
-    calculate_shared_∇nlogL_Jones!(workspace, prob_def, total_hyperparameters; P=P)
+    calculate_shared_∇nlogL_matrices!(workspace, prob_def, total_hyperparameters)
 
-    return ∇∇nlogL_Jones(prob_def, workspace.nlogL_hyperparameters, workspace.Σ_obs, workspace.y_obs, workspace.α, workspace.βs)
+    return ∇∇nlogL_Jones(prob_def, workspace.nlogL_hyperparameters, workspace.Σ_obs, y_obs, workspace.Σ_obs \ y_obs, workspace.βs)
 
 end
 
@@ -1124,36 +1134,6 @@ function reconstruct_total_hyperparameters(
 
     return total_hyperparameters
 
-end
-
-
-"""
-Tries to include the specified kernel from common directories
-Returns the number of hyperparameters it uses
-"""
-function include_kernel(kernel_name::AbstractString)
-    if !occursin("_kernel", kernel_name)
-        kernel_name *= "_kernel"
-    end
-    try
-        return include("src/kernels/$kernel_name.jl")
-    catch
-        return include("../src/kernels/$kernel_name.jl")
-    end
-end
-
-
-"""
-Make it easy to run the covariance calculations on many processors
-Makes sure every worker has access to kernel function
-"""
-function prep_parallel_covariance(
-    kernel_name::AbstractString;
-    add_procs::Integer=0)
-
-    prep_parallel(; add_procs=add_procs)
-    sendto(workers(), kernel_name=kernel_name)
-    @everywhere include_kernel(kernel_name)
 end
 
 
@@ -1215,7 +1195,8 @@ function save_nlogLs(
     sim_id::Integer,
     likelihoods::Vector{T},
     hyperparameters::Vector{T},
-    orbit_params::Vector{T},
+    og_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright},
+    fit_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright},
     save_loc::String
     ) where {T<:Real}
 
@@ -1223,10 +1204,8 @@ function save_nlogLs(
     likelihood_strs = ["L", "E"]
     num_likelihoods= length(likelihood_strs)
     @assert length(likelihoods) == 2 * num_likelihoods + 1
-    orbit_params_strs = ["K", "e", "M0", "ω", "γ"]
-    num_orbit_params = length(orbit_params_strs)
-    @assert length(orbit_params) == 2 * num_orbit_params
-    @assert length(hyperparameters)%2 == 0
+    orbit_params_strs = ["K", "P", "M0", "e", "ω", "γ"]
+    orbit_params= [og_ks.K, og_ks.P, og_ks.M0, og_ks.e, og_ks.ω, og_ks.γ, fit_ks.K, fit_ks.P, fit_ks.M0, fit_ks.e, fit_ks.ω, fit_ks.γ]
     num_hyperparameters = Int(length(hyperparameters) / 2)
     # file_name = "csv_files/$(kernel_name)_logLs.csv"
     file_name = save_loc * "logL.csv"

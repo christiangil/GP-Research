@@ -78,8 +78,7 @@ end
     P = 1.
     M0 = pi / 2
     γ = 0.1
-    e = sqrt(h1 * h1 + k1 * k1)
-    ω = atan(h1, k1)
+    e, ω = hk_2_eω(h1, k1)
     h2 = sqrt(e) * sin(ω)
     k2 = sqrt(e) * cos(ω)
 

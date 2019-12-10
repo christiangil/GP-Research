@@ -165,7 +165,7 @@ end
 Solve a linear system of equations (optionally with variance values at each point or covariance array)
 see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
 """
-function general_lst_sq(design_matrix::Matrix{T}, data::Vector{T}; Σ::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}}=ones(1)) where {T<:Real}
+function general_lst_sq(design_matrix::Matrix{T}, data::Vector; Σ::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}}=ones(1)) where {T<:Real}
     @assert ndims(Σ) < 3 "the Σ variable needs to be a 1D or 2D array"
 
     if Σ == ones(1)

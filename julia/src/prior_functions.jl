@@ -72,8 +72,7 @@ end
 function log_uniform(x::Real, min_max::Vector{<:Real}=[0,1]; d::Integer=0)
     @assert 0 <= d <= 2
     @assert length(min_max) == 2
-    min = min_max[1]
-    max = min_max[2]
+    min, max = min_max
     @assert min < max
     if d == 0
         min <= x <= max ? -log(max - min) : -Inf
@@ -90,8 +89,7 @@ Also known as a (modified in shifted case) Jeffrey's prior
 function log_loguniform(x::Real, min_max::Vector{<:Real}; d::Integer=0, shift::Real=0)
     @assert 0 <= d <= 2
     @assert length(min_max) == 2
-    min = min_max[1]
-    max = min_max[2]
+    min, max = min_max
     @assert 0 < min + shift < max + shift
     xpshift = x + shift
     if d == 0
@@ -104,76 +102,114 @@ function log_loguniform(x::Real, min_max::Vector{<:Real}; d::Integer=0, shift::R
     return val
 end
 
+
+"""
+Log of the 2D circle PDF
+"""
+function log_circle(x::Vector{<:Real}, min_max_r::Vector{<:Real}; d::Vector{<:Integer}=[0,0])
+    @assert minimum(d) == 0
+    @assert maximum(d) <= 2
+    @assert sum(d) <= 2
+
+    @assert length(x) == length(min_max_r) == length(d) == 2
+    min_r, max_r = min_max_r
+
+    # @assert min_r < sqrt(dot(x, x)) < max_r
+    # @assert min_θ < atan(x[1], x[2]) < max_θ
+    if all(d .== 0)
+        min_r < sqrt(dot(x, x)) < max_r ? val = -log(2 * π * (max_r ^ 2 - min_r ^ 2)) : val = -Inf
+    else
+        return 0
+    end
+    return val
+end
+
+all([0,0.] .== 0)
 # Keplerian priors references
 # https://arxiv.org/abs/astro-ph/0608328
 # table 1
 
-const prior_K_min = 0  # m/s
-const prior_K_max = 2129  # m/s, corresponds to a maximum planet-star mass ratio of 0.01
+const prior_K_min = 0#u"m/s"  # m/s
+const prior_K_max = 2129#u"m/s"  # m/s, corresponds to a maximum planet-star mass ratio of 0.01
 const prior_γ_min = -prior_K_max  # m/s
 const prior_γ_max = prior_K_max  # m/s
-const prior_P_min = 1  # days
-const prior_P_max = 1e3 * convert_and_strip_units(u"d", (1)u"yr") # days
-const prior_K0 = 0.3  # * sqrt(50 / amount_of_measurements)  # m/s
+const prior_P_min = 1#u"d"  # days
+const prior_P_max = 1e3 * convert_and_strip_units(u"d", 1u"yr")#u"d"
+const prior_K0 = 0.3#u"m/s"  # * sqrt(50 / amount_of_measurements)  # m/s
 const prior_e_min = 0
 const prior_e_max = 1
 const prior_ω_min = 0  # radians
 const prior_ω_max = 2 * π  # radians
 const prior_M0_min = 0  # radians
 const prior_M0_max = 2 * π  # radians
+const characteristic_P = 10  # days
 
 
-
-function logprior_P(P::Real; d::Integer=0)
-    return log_loguniform(P, [prior_P_min, prior_P_max]; d=d)
+function logprior_K(K::Unitful.Velocity; d::Integer=0, P::Unitful.Time=characteristic_P * u"d")
+    return log_loguniform(convert_and_strip_units(u"m/s", K), [prior_K_min, cbrt(prior_P_min / convert_and_strip_units(u"d", P)) * prior_K_max]; d=d, shift=prior_K0)
 end
 
-function logprior_e(e::Real; d::Integer=0)
-    return log_uniform(e, [prior_e_min, prior_e_max]; d=d)
+function logprior_P(P::Unitful.Time; d::Integer=0)
+    return log_loguniform(convert_and_strip_units(u"d", P), [prior_P_min, prior_P_max]; d=d)
 end
 
 function logprior_M0(M0::Real; d::Integer=0)
     return log_uniform(M0, [prior_M0_min, prior_M0_max]; d=d)
 end
 
-function logprior_K(K::Real, P::Real; d::Integer=0)
-    return log_loguniform(K, [prior_K_min, cbrt(prior_P_min / P) * prior_K_max]; d=d, shift=prior_K0)
+function logprior_e(e::Real; d::Integer=0)
+    return log_uniform(e, [prior_e_min, prior_e_max]; d=d)
 end
 
 function logprior_ω(ω::Real; d::Integer=0)
     return log_uniform(ω, [prior_ω_min, prior_ω_max]; d=d)
 end
 
-function logprior_γ(γ::Real; d::Integer=0)
-    return log_uniform(γ, [prior_γ_min, prior_γ_max]; d=d)
+function logprior_hk(hk::Vector{<:Real}; d::Vector{<:Integer}=[0,0])
+    return log_circle(hk, [prior_e_min, prior_e_max]; d=d)
+end
+
+function logprior_γ(γ::Unitful.Velocity; d::Integer=0)
+    return log_uniform(convert_and_strip_units(u"m/s", γ), [prior_γ_min, prior_γ_max]; d=d)
 end
 
 function logprior_kepler(
-    P::Real,
-    e::Real,
+    K::Unitful.Velocity,
+    P::Unitful.Time,
     M0::Real,
-    K::Real,
-    ω::Real,
-    γ::Real)
+    e_or_h::Real,
+    ω_or_k::Real,
+    γ::Unitful.Velocity;
+    d::Vector{<:Integer}=[0,0,0,0,0,0],
+    use_hk::Bool=false)
 
-    logP = logprior_P(P)
-    logP += logprior_e(e)
+    @assert minimum(d) == 0
+    @assert maximum(d) <= 2
+    @assert sum(d) <= 2
+
+    if sum(d .!= 0) > 1; return 0 end
+    if d[1] != 0; return logprior_K(K; d=d[1]) end
+    if d[2] != 0; return logprior_P(P; d=d[2]) end
+    if d[3] != 0; return logprior_M0(M0; d=d[3]) end
+    if d[6] != 0; return logprior_γ(γ; d=d[6]) end
+    if use_hk
+        if any(d[4:5] .!= 0); return logprior_hk([e_or_h, ω_or_k]; d=d[4:5]) end
+    else
+        if d[4] != 0; return logprior_e(e_or_h; d=d[4]) end
+        if d[5] != 0; return logprior_ω(ω_or_k; d=d[5]) end
+    end
+    logP = logprior_K(K)
+    # logP += logprior_K(K; P=P)
+    logP += logprior_P(P)
     logP += logprior_M0(M0)
-    logP += logprior_K(K, P)
-    logP += logprior_ω(ω)
-    logP += logprior_γ(γ)
+    use_hk ? logP += logprior_hk([e_or_h, ω_or_k]) : logP += logprior_e(e_or_h; d=d[4]) + logprior_ω(ω_or_k; d=d[5])
+    logP += logprior_γ(γ; d=d[6])
 
     return logP
 
 end
-
-
-
-
-
-
-
-
+logprior_kepler(ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright}; d=[0,0,0,0,0,0], use_hk=false) =
+    use_hk ? logprior_kepler(ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ; d=d, use_hk=use_hk) : logprior_kepler(ks.K, ks.P, ks.M0, ks.e, ks.ω, ks.γ; d=d, use_hk=use_hk)
 
 
 

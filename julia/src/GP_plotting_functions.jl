@@ -5,7 +5,16 @@ using PyPlot
 
 
 # quick and dirty function for creating plots that show what I want
-function custom_GP_plot(x_samp::Vector{T}, show_curves::Matrix{T}, x_obs::Vector{T}, y_obs::Vector{T}, σ::Vector{T}, mean::Vector{T}; errors::Vector{T}=zero(x_obs), mean_obs::Vector{T}=zero(x_obs)) where {T<:Real}
+function custom_GP_plot(
+    x_samp::Vector{T},
+    show_curves::Matrix{T},
+    x_obs::Vector{T},
+    y_obs::Vector{T},
+    σ::Vector{T},
+    mean::Vector{T};
+    errors::Vector{T}=zero(x_obs),
+    mean_obs::Vector{T}=zero(x_obs)
+    ) where {T<:Real}
 
     @assert size(show_curves, 2)==length(x_samp)==length(mean)==length(σ)
     @assert length(x_obs)==length(y_obs)==length(errors)
@@ -72,10 +81,10 @@ function Jones_line_plots(
     total_hyperparameters::Vector{T},
     file::AbstractString;
     show::Integer=0,
-    find_post::Bool=true,
     plot_Σ::Bool=false,
     plot_Σ_profile::Bool=false,
-    filetype::AbstractString="png"
+    filetype::AbstractString="png",
+    fit_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ}=kep_signal(;K=0u"m/s")
     ) where {T<:Real}
 
     x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points))
@@ -85,34 +94,45 @@ function Jones_line_plots(
     show_curves = zeros(show, amount_of_total_samp_points)
 
     # calculate mean, σ, and show_curves
-    if find_post
-        show_resids = true
-        mean, σ, mean_obs, Σ = GP_posteriors(prob_def, x_samp, total_hyperparameters; return_mean_obs=true)
-        if plot_Σ; plot_im(Σ, file = file * "_K_post." * filetype) end
-        L = ridge_chol(Σ).L
-        for i in 1:show
-            show_curves[i,:] = L * randn(amount_of_total_samp_points) + mean
-        end
-    # if no posterior is being calculated, estimate σ with sampling
-    else
-        show_resids = false
-        mean = zeros(amount_of_total_samp_points)
-        Σ = covariance(prob_def, x_samp, x_samp, total_hyperparameters)
-        if plot_Σ
-            plot_im(Σ, file = file * "_K_prior." * filetype)
-        end
-        L = ridge_chol(Σ).L
+    # if find_post
+    show_resids = true
+    mean_GP, σ, mean_GP_obs, Σ = GP_posteriors(prob_def, x_samp, total_hyperparameters; return_mean_obs=true, y_obs=remove_kepler(prob_def, fit_ks))
 
-        # calculate a bunch of GP draws for a σ estimation
-        draws = 5000
-        storage = zeros((draws, amount_of_total_samp_points))
-        for i in 1:draws
-            storage[i, :] = (L * randn(amount_of_total_samp_points)) + mean
-        end
-        show_curves[:, :] = storage[1:show, :]
-        storage = sort(storage, dims=1)
-        σ = storage[Int(round(0.84135 * draws)), :] - storage[Int(round(0.15865 * draws)), :] ./ 2
+    # init_plot()
+    # plot(x_samp, mean_GP[1:amount_of_samp_points])
+    # plot(prob_def.x_obs, mean_GP_obs[1:amount_of_obs])
+    # save_PyPlot_fig("test.png")
+
+    if plot_Σ; plot_im(Σ, file = file * "_K_post." * filetype) end
+    L = ridge_chol(Σ).L
+    for i in 1:show
+        show_curves[i,:] = L * randn(amount_of_total_samp_points) + mean_GP
     end
+    # if no posterior is being calculated, estimate σ with sampling
+    # else
+    #     show_resids = false
+    #     mean_GP = zeros(amount_of_total_samp_points)
+    #     Σ = covariance(prob_def, x_samp, x_samp, total_hyperparameters)
+    #     if plot_Σ
+    #         plot_im(Σ, file = file * "_K_prior." * filetype)
+    #     end
+    #     L = ridge_chol(Σ).L
+    #
+    #     # calculate a bunch of GP draws for a σ estimation
+    #     draws = 5000
+    #     storage = zeros((draws, amount_of_total_samp_points))
+    #     for i in 1:draws
+    #         storage[i, :] = (L * randn(amount_of_total_samp_points)) + mean
+    #     end
+    #     show_curves[:, :] = storage[1:show, :]
+    #     storage = sort(storage, dims=1)
+    #     σ = storage[Int(round(0.84135 * draws)), :] - storage[Int(round(0.15865 * draws)), :] ./ 2
+    # end
+
+    mean = add_kepler(mean_GP, x_samp .* prob_def.time_unit, fit_ks; data_unit=prob_def.rv_unit*prob_def.normals[1])
+    # mean = copy(mean_GP)
+    mean_obs = add_kepler(mean_GP_obs, prob_def.time, fit_ks; data_unit=prob_def.rv_unit*prob_def.normals[1])
+    # mean_obs = copy(mean_GP_obs)
 
     for output in 1:prob_def.n_out
 
@@ -136,9 +156,9 @@ function Jones_line_plots(
         show_curves_o = show_curves[:, sample_output_indices]
         σ_o = σ[sample_output_indices]
         mean_o = mean[sample_output_indices]
-        if find_post
-            mean_obs_o = mean_obs[obs_output_indices]
-        end
+        # if find_post
+        mean_obs_o = mean_obs[obs_output_indices]
+        # end
 
         if output==1
             y_o .*= prob_def.normals[output]
@@ -146,9 +166,9 @@ function Jones_line_plots(
             show_curves_o .*= prob_def.normals[output]
             σ_o .*= prob_def.normals[output]
             mean_o .*= prob_def.normals[output]
-            if find_post
-                mean_obs_o .*= prob_def.normals[output]
-            end
+            # if find_post
+            mean_obs_o .*= prob_def.normals[output]
+            # end
         end
 
         show_resids ? axs = custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o, mean_obs=mean_obs_o) : axs = custom_GP_plot(x_samp, show_curves_o, prob_def.x_obs, y_o, σ_o, mean_o; errors=obs_noise_o)
@@ -163,12 +183,12 @@ function Jones_line_plots(
         axs[1].set_ylabel(y_str)
         axs[1].set_title(title_string, fontsize=45)
 
-        if find_post
-            # put log likelihood on plot
-            logL = -nlogL_Jones(prob_def, total_hyperparameters)
-            show > 0 ? max_val = maximum([maximum(y_o + obs_noise_o), maximum(show_curves_o), maximum(mean_o + σ_o)]) : max_val = maximum([maximum(y_o + obs_noise_o), maximum(mean_o + σ_o)])
-            axs[1].text(minimum(prob_def.x_obs), 0.9 * max_val, L"\ell_{act}(\theta|t,s): " * string(convert(Int64, round(logL))), fontsize=30)
-        end
+        # if find_post
+        # put log likelihood on plot
+        logL = -nlogL_Jones(prob_def, total_hyperparameters; y_obs=remove_kepler(prob_def, fit_ks))
+        show > 0 ? max_val = maximum([maximum(y_o + obs_noise_o), maximum(show_curves_o), maximum(mean_o + σ_o)]) : max_val = maximum([maximum(y_o + obs_noise_o), maximum(mean_o + σ_o)])
+        axs[1].text(minimum(prob_def.x_obs), 0.9 * max_val, L"\ell_{act}(\theta|t,s): " * string(convert(Int64, round(logL))), fontsize=30)
+        # end
 
         # put kernel lengths on plot
         kernel_lengths = total_hyperparameters[end-prob_def.n_kern_hyper+1:end]
@@ -182,6 +202,24 @@ function Jones_line_plots(
 
         save_PyPlot_fig(file * "_$output." * filetype)
 
+    end
+
+    if ustrip(fit_ks.K) != 0
+        mod_x_obs = convert_and_strip_units.(u"d", mod.(prob_def.time, fit_ks.P))
+        samp_x = collect(linspace(0, ustrip(fit_ks.P), 1000)) * unit(fit_ks.P)
+        keps = fit_ks.(samp_x)
+        ys = ustrip.(prob_def.rv)  - mean_GP_obs[1:amount_of_obs] .* prob_def.normals[1]
+        noises = convert_and_strip_units.(unit(prob_def.rv[1]), prob_def.rv_noise)
+
+        init_plot()
+        plot(convert_and_strip_units.(u"d", samp_x), ustrip.(keps), linewidth=4)
+        scatter(mod_x_obs, ys, color="black")
+        errorbar(mod_x_obs, ys, yerr=[noises';noises'], fmt="o", color="black")
+        xlabel("Time (" * string(prob_def.time_unit) * ")")
+        ylabel("RVs (" * string(prob_def.rv_unit) * ")")
+        title("Folded (GP subtracted) apparent RVs", fontsize=45)
+        text(0, 0.9 * maximum([maximum(ys + noises), maximum(ustrip.(keps))]), kep_parms_str_short(fit_ks), fontsize=30)
+        save_PyPlot_fig(file * "_planet." * filetype)
     end
 
     PyPlot.close("all")
