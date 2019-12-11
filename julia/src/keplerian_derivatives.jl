@@ -1,3 +1,9 @@
+function validate_kepler_dorder(d::Vector{<:Integer})
+	@assert sum(d) < 3
+	@assert minimum(d) == 0
+	@assert length(d) == 6
+end
+
 """
 Derivative of transformed Keplerian parameters defined in Pal 2019
 "An analytical solution for Kepler's problem"
@@ -28,9 +34,7 @@ function kep_deriv(
 	t::Unitful.Time,
 	dorder::Vector{<:Integer})
 
-	@assert sum(dorder) < 3
-	@assert minimum(dorder) == 0
-	@assert length(dorder) == 6
+	validate_kepler_dorder(dorder)
 
 	esq = h * h + k * k
 	e = sqrt(esq)
@@ -399,3 +403,7 @@ function kep_hess(K1::T, h1::T, k1::T, M01::T, γ1::T, P1::T, t1::T) where {T<:R
     return hess
 
 end
+
+
+kep_deriv(ks::kep_signal, t::Unitful.Time, dorder::Vector{<:Integer}) =
+	kep_deriv(ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ, t, dorder)

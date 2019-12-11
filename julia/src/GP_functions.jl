@@ -1085,6 +1085,8 @@ function ∇∇nlogL_Jones(
 end
 
 
+
+
 "Replaces H with Hessian of nlogL for non-zero hyperparameters"
 function ∇∇nlogL_Jones(
     prob_def::Jones_problem_definition,
@@ -1184,47 +1186,4 @@ function initialize_optimize_Jones_model_jld2!(
         @save "jld2_files/optimize_Jones_model_$kernel_name.jld2" initial_time current_fit_time total_fit_time current_params
     end
     return current_params
-end
-
-
-using DataFrames, CSV
-
-
-function save_nlogLs(
-    seed::Integer,
-    sim_id::Integer,
-    likelihoods::Vector{T},
-    hyperparameters::Vector{T},
-    og_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright},
-    fit_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright},
-    save_loc::String
-    ) where {T<:Real}
-
-
-    likelihood_strs = ["L", "E"]
-    num_likelihoods= length(likelihood_strs)
-    @assert length(likelihoods) == 2 * num_likelihoods + 1
-    orbit_params_strs = ["K", "P", "M0", "e", "ω", "γ"]
-    orbit_params= [og_ks.K, og_ks.P, og_ks.M0, og_ks.e, og_ks.ω, og_ks.γ, fit_ks.K, fit_ks.P, fit_ks.M0, fit_ks.e, fit_ks.ω, fit_ks.γ]
-    num_hyperparameters = Int(length(hyperparameters) / 2)
-    # file_name = "csv_files/$(kernel_name)_logLs.csv"
-    file_name = save_loc * "logL.csv"
-
-    df = DataFrame(seed=seed, sim_id=sim_id, date=today())
-
-    for i in 1:(length(likelihoods) - 1)
-        df[!, Symbol(string(likelihood_strs[(i-1)%num_likelihoods + 1]) * string(Int(1 + floor((i-1)//num_likelihoods))))] .= likelihoods[i]
-    end
-    df[!, Symbol("E_wp")] .= likelihoods[end]
-    for i in 1:length(hyperparameters)
-        df[!, Symbol("H" * string(((i-1)%num_hyperparameters) + 1) * "_" * string(Int(1 + floor((i-1)//num_hyperparameters))))] .= hyperparameters[i]
-    end
-    for i in 1:length(orbit_params)
-        df[!, Symbol(string(orbit_params_strs[(i-1)%num_orbit_params + 1]) * string(Int(1 + floor((i-1)//num_orbit_params))))] .= orbit_params[i]
-    end
-
-    # if isfile(file_name); append!(df, CSV.read(file_name)) end
-
-    CSV.write(file_name, df)
-
 end

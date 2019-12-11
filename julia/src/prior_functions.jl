@@ -203,14 +203,41 @@ function logprior_kepler(
     logP += logprior_P(P)
     logP += logprior_M0(M0)
     use_hk ? logP += logprior_hk([e_or_h, ω_or_k]) : logP += logprior_e(e_or_h; d=d[4]) + logprior_ω(ω_or_k; d=d[5])
-    logP += logprior_γ(γ; d=d[6])
+    logP += logprior_γ(γ)
 
     return logP
 
 end
-logprior_kepler(ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright}; d=[0,0,0,0,0,0], use_hk=false) =
+logprior_kepler(ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright}; d::Vector{<:Integer}=zeros(Int64, n_kep_parms), use_hk::Bool=false) =
     use_hk ? logprior_kepler(ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ; d=d, use_hk=use_hk) : logprior_kepler(ks.K, ks.P, ks.M0, ks.e, ks.ω, ks.γ; d=d, use_hk=use_hk)
-
+function logprior_kepler_tot(ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright}; d_tot::Integer=0, use_hk::Bool=false)
+    @assert 0 <= d_tot <= 2
+    if d_tot == 0
+        return logprior_kepler(ks; d=zeros(Int64,n_kep_parms), use_hk=use_hk)
+    elseif d_tot == 1
+        G = zeros(n_kep_parms)
+        for i in 1:n_kep_parms
+            d = zeros(Int64,n_kep_parms)
+            d[i] = 1
+            G[i] = logprior_kepler(ks; use_hk=use_hk, d=d)
+        end
+        return grad
+    else
+        H = zeros(n_kep_parms, n_kep_parms)
+        for i in 1:n_kep_parms
+            for j in 1:n_kep_parms
+                if i <= j
+                    d = zeros(Int64,n_kep_parms)
+                    d[i] += 1
+                    d[j] += 1
+                    # println(typeof(d))
+                    H[i, j] = logprior_kepler(ks; d=d, use_hk=use_hk)
+                end
+            end
+        end
+        return Symmetric(H)
+    end
+end
 
 
 # const prior_α = 1

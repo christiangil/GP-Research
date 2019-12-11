@@ -21,3 +21,4 @@ include("prior_functions.jl")
 using UnitfulAstro
 using Unitful
 const light_speed = convert_and_strip_units(u"m/s",1u"c")
+const n_kep_parms = 6

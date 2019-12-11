@@ -4,7 +4,7 @@ using Unitful
 # using UnitfulAngles
 using LinearAlgebra
 using PyPlot
-
+# using LineSearches
 
 "Convert Unitful units from one to another and strip the final units"
 convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Quantity) = ustrip(uconvert(new_unit, quant))
@@ -51,7 +51,7 @@ Julia function originally written by Eric Ford
 function ecc_anom_init_guess_danby(M::Real, e::Real)
     k = convert(typeof(e), 0.85)
     if M < zero(M); M += 2 * π end
-    (M < π) ? M + k * e : M - k * e
+    (M < π) ? M + k * e : M - k * e;
 end
 
 
@@ -243,15 +243,17 @@ struct kep_signal
         h::Real,
         k::Real)
 
-        @assert 0 <= e < 1 "orbit needs to be bound"
+        # @assert 0 <= e < 1 "orbit needs to be bound"
         M0 = mod2pi(M0)
         ω = mod2pi(ω)
-        assert_positive(P)
+        # assert_positive(P)
         return new(K, P, M0, e, ω, γ, h, k)
     end
 end
 kepler_rv(t::Unitful.Time, ks::kep_signal) = kepler_rv(t, ks.K, ks.P, ks.M0, ks.e, ks.ω; γ=ks.γ)
 (ks::kep_signal)(t::Unitful.Time) = kepler_rv(t, ks)
+
+
 function fit_kepler(
     data::Vector{T},
     times::Vector{T2} where T2<:Unitful.Time,
@@ -268,7 +270,6 @@ function fit_kepler(
     amount_of_total_samp_points = length(data)
     amount_of_samp_points = length(times)
     normalization = logdet(covariance) + amount_of_total_samp_points * log(2 * π)
-    α = covariance \ data
     K_u = unit(ks.K)
     P_u = unit(ks.P)
     γ_u = unit(ks.γ)
@@ -280,6 +281,8 @@ function fit_kepler(
         γ *= γ_u
         ks = kep_signal(K, P, M0, h, k, γ; use_hk=true)
         prior = logprior_kepler(ks; use_hk=true)
+        # println(kep_parms_str(ks))
+        # println(prior)
         if prior == Inf
             return prior
         else
@@ -292,17 +295,18 @@ function fit_kepler(
         K *= K_u
         P *= P_u
         γ *= γ_u
+        # println(parms)
+        α = covariance \ remove_kepler(data, times, ks; data_unit=data_unit)
         for i in 1:length(G)
             d = zeros(Int64, length(G))
             d[i] = 1
-            dy = zeros(length(data))
-            kep_deriv_simple(t) = kep_deriv(K, P, M0, h, k, γ, t, d)
-            dy[1:length(times)] -= ustrip.(kep_deriv_simple.(times)) ./ convert_and_strip_units(K_u, data_unit)
-            G[i] = dnlogLdθ(dy, α) + logprior_kepler(K, P, M0, h, k, γ; d=d, use_hk=true)
+            G[i] = dnlogLdθ(remove_kepler(data, times, ks; data_unit=data_unit, d=d), α) + logprior_kepler(K, P, M0, h, k, γ; d=d, use_hk=true)
         end
+        # println(G)
     end
 
-    result = optimize(f, g!, ustrip.([ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ]), LBFGS()) # 27s
+    # result = optimize(f, g!, ustrip.([ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ]), MomentumGradientDescent(alphaguess=LineSearches.InitialStatic(alpha=1e-3))) # 3x slower
+    result = optimize(f, g!, ustrip.([ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ]), LBFGS(alphaguess=LineSearches.InitialStatic(alpha=1e-3))) # 27s
     K, P, M0, h, k, γ = result.minimizer
     K *= K_u
     P *= P_u
@@ -567,7 +571,7 @@ struct kep_signal_epicyclic
     k::Real  # ::Unitful.NoDims
     coefficients::Vector{T} where T<:Unitful.Velocity
 
-    kep_signal_epicyclic(; K=0u"m/s", P=0u"d", M0=0, e_or_h=0, ω_or_k=0, γ=0u"m/s", use_hk::Bool=false) = kep_signal_epicyclic(K, P, M0, e, ω, γ; use_hk=use_hk)
+    kep_signal_epicyclic(; K=0u"m/s", P=1u"d", M0=0, e_or_h=0, ω_or_k=0, γ=0u"m/s", use_hk::Bool=false) = kep_signal_epicyclic(K, P, M0, e_or_h, ω_or_k, γ; use_hk=use_hk)
     function kep_signal_epicyclic(K, P, M0, e_or_h, ω_or_k, γ; use_hk::Bool=false)
         if use_hk
             h = e_or_h
@@ -589,7 +593,8 @@ struct kep_signal_epicyclic
         M0 = mod2pi(atan(coefficients[4], coefficients[3]) - atan(coefficients[2], coefficients[1]))
         ω = mod2pi(atan(coefficients[4], coefficients[3]) - 2 * atan(coefficients[2], coefficients[1]))
         γ = coefficients[5]
-        return kep_signal_epicyclic(K, P, M0, e, ω, γ, coefficients)
+        h, k = eω_2_hk(e, ω)
+        return kep_signal_epicyclic(K, P, M0, e, ω, γ, h, k, coefficients)
     end
     function kep_signal_epicyclic(
         K::Unitful.Velocity,
@@ -598,6 +603,8 @@ struct kep_signal_epicyclic
         e::Real,
         ω::Real,  # ::Unitful.NoDims
         γ::Unitful.Velocity,
+        h::Real,
+        k::Real,
         coefficients::Vector{T} where T<:Unitful.Velocity)
 
         M0 = mod2pi(M0)
@@ -816,16 +823,28 @@ function remove_kepler(
     data::Vector{<:Real},
     times::Vector{T2} where T2<:Unitful.Time,
     ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ};
-    data_unit::Unitful.Velocity=1u"m/s")
+    data_unit::Unitful.Velocity=1u"m/s",
+    d::Vector{<:Integer}=zeros(Int64,n_kep_parms))
 
-    y = copy(data)
-    if ustrip(ks.K) != 0; y[1:length(times)] -= uconvert.(unit(data_unit), ks.(times)) ./ data_unit end
+    validate_kepler_dorder(d)
+
+    if sum(d) == 0
+        y = copy(data)
+        if ustrip(ks.K) != 0; y[1:length(times)] -= uconvert.(unit(data_unit), ks.(times)) ./ data_unit end
+    else
+        @assert typeof(ks) == kep_signal
+        y = zeros(length(data))
+        kep_deriv_simple(t) = kep_deriv(ks, t, d)
+        y[1:length(times)] -= ustrip.(kep_deriv_simple.(times)) ./ convert_and_strip_units(unit(ks.K), data_unit)
+    end
     return y
+
 end
 remove_kepler(
     prob_def::Jones_problem_definition,
-    ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ}) =
-    remove_kepler(prob_def.y_obs, prob_def.time, ks; data_unit=prob_def.rv_unit*prob_def.normals[1])
+    ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ};
+    d::Vector{<:Integer}=zeros(Int64,n_kep_parms)) =
+    remove_kepler(prob_def.y_obs, prob_def.time, ks; data_unit=prob_def.rv_unit*prob_def.normals[1], d=d)
 
 
 function add_kepler(
@@ -867,7 +886,7 @@ function fit_and_remove_kepler(
     data::Vector{<:Real},
     times::Vector{T2} where T2<:Unitful.Time,
     Σ_obs::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
-    ks::kep_signal;
+    ks::Union{kep_signal, kep_signal_epicyclic};
     data_unit::Unitful.Velocity=1u"m/s") where T<:Real
 
     ks = fit_kepler(data, times, Σ_obs, ks; data_unit=data_unit)
@@ -876,13 +895,13 @@ end
 fit_and_remove_kepler(
     prob_def::Jones_problem_definition,
     Σ_obs::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
-    ks::kep_signal) where T<:Real =
+    ks::Union{kep_signal, kep_signal_epicyclic}) where T<:Real =
     fit_and_remove_kepler(prob_def.y_obs, prob_def.time, Σ_obs, ks; data_unit=prob_def.rv_unit*prob_def.normals[1])
 
 fit_kepler(
     prob_def::Jones_problem_definition,
     covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
-    ks::kep_signal) where T<:Real =
+    ks::Union{kep_signal, kep_signal_epicyclic}) where T<:Real =
     fit_kepler(prob_def.y_obs, prob_def.time, covariance, ks; data_unit=prob_def.rv_unit*prob_def.normals[1])
 
 
@@ -894,3 +913,90 @@ kep_parms_str(ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright}) =
     "K: $(round(convert_and_strip_units(u"m/s", ks.K), digits=2))" * L"^m/_s" * "  P: $(round(convert_and_strip_units(u"d", ks.P), digits=2))" * L"d" * "  M0: $(round(ks.M0,digits=2))  e: $(round(ks.e,digits=2))  ω: $(round(ks.ω,digits=2)) γ: $(round(convert_and_strip_units(u"m/s", ks.γ), digits=2))" * L"^m/_s"
 kep_parms_str_short(ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright}) =
     "K: $(round(convert_and_strip_units(u"m/s", ks.K), digits=2))" * L"^m/_s" * "  P: $(round(convert_and_strip_units(u"d", ks.P), digits=2))" * L"d" * "  e: $(round(ks.e,digits=2))"
+
+
+using DataFrames, CSV
+
+
+function save_nlogLs(
+    seed::Integer,
+    sim_id::Integer,
+    likelihoods::Vector{T},
+    hyperparameters::Vector{T},
+    og_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright},
+    fit_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright},
+    save_loc::String
+    ) where {T<:Real}
+
+
+    likelihood_strs = ["L", "E"]
+    num_likelihoods= length(likelihood_strs)
+    @assert length(likelihoods) == 2 * num_likelihoods
+    orbit_params_strs = ["K", "P", "M0", "e", "ω", "γ"]
+    orbit_params= [og_ks.K, og_ks.P, og_ks.M0, og_ks.e, og_ks.ω, og_ks.γ, fit_ks.K, fit_ks.P, fit_ks.M0, fit_ks.e, fit_ks.ω, fit_ks.γ]
+    num_hyperparameters = Int(length(hyperparameters) / 2)
+    # file_name = "csv_files/$(kernel_name)_logLs.csv"
+    file_name = save_loc * "logL.csv"
+
+    df = DataFrame(seed=seed, sim_id=sim_id, date=today())
+
+    for i in 1:length(likelihoods)
+        df[!, Symbol(string(likelihood_strs[(i-1)%num_likelihoods + 1]) * string(Int(1 + floor((i-1)//num_likelihoods))))] .= likelihoods[i]
+    end
+    # df[!, Symbol("E_wp")] .= likelihoods[end]
+    for i in 1:length(hyperparameters)
+        df[!, Symbol("H" * string(((i-1)%num_hyperparameters) + 1) * "_" * string(Int(1 + floor((i-1)//num_hyperparameters))))] .= hyperparameters[i]
+    end
+    for i in 1:length(orbit_params)
+        df[!, Symbol(string(orbit_params_strs[(i-1)%n_kep_parms + 1]) * string(Int(1 + floor((i-1)//n_kep_parms))))] .= orbit_params[i]
+    end
+
+    # if isfile(file_name); append!(df, CSV.read(file_name)) end
+
+    CSV.write(file_name, df)
+
+end
+
+
+function ∇∇nlogL_Jones_and_planet!(
+    workspace::nlogL_matrix_workspace,
+    prob_def::Jones_problem_definition,
+    total_hyperparameters::Vector{<:Real},
+    ks::kep_signal)
+
+    calculate_shared_∇nlogL_matrices!(workspace, prob_def, total_hyperparameters)
+
+    non_zero_inds = findall(!iszero, total_hyperparameters)
+    n_hyper = length(non_zero_inds)
+    full_H = zeros(n_kep_parms + n_hyper, n_kep_parms + n_hyper)
+    full_H[1:length(non_zero_inds), 1:length(non_zero_inds)] = ∇∇nlogL_Jones(
+        prob_def, total_hyperparameters; Σ_obs=workspace.Σ_obs, y_obs=remove_kepler(prob_def, ks))
+
+    y = remove_kepler(prob_def, ks)
+    α = workspace.Σ_obs \ y
+    for i in 1:n_kep_parms
+        for j in 1:n_kep_parms
+            if i <= j
+                d = zeros(Int64, n_kep_parms)
+                d[j] += 1
+                y2 = remove_kepler(prob_def, ks; d=d)
+                d[i] += 1
+                y12 = remove_kepler(prob_def, ks; d=d)
+                d[j] -= 1
+                y1 = remove_kepler(prob_def, ks; d=d)
+                full_H[i + n_hyper, j + n_hyper] = d2nlogLdθ(y2, y12, α, workspace.Σ_obs \ y1)
+            end
+        end
+    end
+
+    for (i, nzind1) in enumerate(non_zero_inds)
+        for j in 1:n_kep_parms
+            d = zeros(Int64, n_kep_parms)
+            d[j] += 1
+            y1 = remove_kepler(prob_def, ks; d=d)
+            full_H[i, j + n_hyper] = d2nlogLdθ(y, y1, α, workspace.Σ_obs \ y1, workspace.βs[i])
+        end
+    end
+
+    return Symmetric(full_H)
+end
