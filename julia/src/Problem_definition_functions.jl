@@ -52,13 +52,14 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 
 		noisy_scores = noisy_scores_from_covariance(scores, scores_tot)
 
-		phases_days = convert_SOAP_phases.(u"d", phases)
+		time_unit = u"d"
+		time = convert_SOAP_phases.(time_unit, phases)
 		inds = collect(1:size(noisy_scores, 2))
 		if sub_sample !=0
 			# if a on-off cadence is specified, remove all observations during the
 			# off-phase and shift by a random phase
 			if on_off != 0u"d"
-				inds = findall(iseven, convert.(Int64, floor.((phases_days / on_off) .- rand(rng))))
+				inds = findall(iseven, convert.(Int64, floor.((time / on_off) .- rand(rng))))
 				inds = sort(sample(rng, inds, sub_sample; replace=false))
 				println(inds[1:10])
 			else
@@ -71,8 +72,9 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		total_amount_of_measurements = amount_of_measurements * n_out
 
 		# getting proper slice of data and converting to days
-		time_unit = u"d"
-		time = convert_SOAP_phases.(time_unit, phases[inds])
+
+		time = time[inds]
+		time .-= mean(time)  # minimizing period derivatives
 		x_obs = ustrip.(time)
 		y_obs_hold = noisy_scores[1:n_out, inds]
 		measurement_noise_hold = error_ests[1:n_out, inds]

@@ -24,8 +24,8 @@ kernel_coder(matern52_kernel_base(λ1, δ) + sratio * sratio * matern52_kernel_b
 # process for quasi_periodic_kernel_base
 # @vars δ se_λ qp_P p_λ
 # kernel_coder(quasi_periodic_kernel_base([se_λ, qp_P, p_λ], δ), "quasi_periodic")
-@vars δ δp se_λ p_λ
-kernel_coder(se_kernel_base(se_λ, δ) * se_kernel_base(p_λ, δp), "qp"; periodic_var="δp")
+@vars δ δp se_λ p_amp
+kernel_coder(se_kernel_base(se_λ, δ) * se_kernel_base(1 / p_amp, δp), "qp"; periodic_var="δp")
 
 
 

@@ -1,9 +1,3 @@
-function validate_kepler_dorder(d::Vector{<:Integer})
-	@assert sum(d) < 3
-	@assert minimum(d) == 0
-	@assert length(d) == 6
-end
-
 """
 Derivative of transformed Keplerian parameters defined in Pal 2019
 "An analytical solution for Kepler's problem"

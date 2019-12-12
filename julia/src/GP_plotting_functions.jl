@@ -84,7 +84,8 @@ function Jones_line_plots(
     plot_Σ::Bool=false,
     plot_Σ_profile::Bool=false,
     filetype::AbstractString="png",
-    fit_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ}=kep_signal(;K=0u"m/s")
+    fit_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ}=kep_signal(;K=0u"m/s"),
+    hyper_param_string::String=""
     ) where {T<:Real}
 
     x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points))
@@ -191,9 +192,10 @@ function Jones_line_plots(
         # end
 
         # put kernel lengths on plot
-        kernel_lengths = total_hyperparameters[end-prob_def.n_kern_hyper+1:end]
+        # kernel_lengths = total_hyperparameters[end-prob_def.n_kern_hyper+1:end]
         show > 0 ? min_val = minimum([minimum(y_o - obs_noise_o), minimum(show_curves_o), minimum(mean_o - σ_o)]) : min_val = minimum([minimum(y_o - obs_noise_o), minimum(mean_o - σ_o)])
-        axs[1].text(minimum(prob_def.x_obs), 1 * min_val, "Hyperparameters: " * string(kernel_lengths), fontsize=30)
+
+        axs[1].text(minimum(prob_def.x_obs), 1 * min_val, hyper_param_string, fontsize=30)
         # text(minimum(prob_def.x_obs), 1 *minimum(y_o), "Wavelengths: " * string(kernel_lengths), fontsize=30)
 
         @assert 0<length(axs)<3

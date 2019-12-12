@@ -176,7 +176,7 @@ function $kernel_name(
             symbolic_kernel_str = replace(symbolic_kernel_str, " 1.0*"=>" ")
             symbolic_kernel_str = replace(symbolic_kernel_str, "-1.0*"=>"-")
 
-            println(symbolic_kernel_str)
+            # println(symbolic_kernel_str)
 
             write(io, "    if dorder==" * string(dorder) * "\n")
             write(io, "        func =" * symbolic_kernel_str * "\n    end\n\n")

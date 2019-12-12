@@ -4,7 +4,7 @@ using Unitful
 # using UnitfulAngles
 using LinearAlgebra
 using PyPlot
-# using LineSearches
+using LineSearches
 
 "Convert Unitful units from one to another and strip the final units"
 convert_and_strip_units(new_unit::Unitful.FreeUnits, quant::Quantity) = ustrip(uconvert(new_unit, quant))
@@ -89,7 +89,7 @@ function ecc_anomaly(
     max_its::Integer=200)
 
     # P = convert_and_strip_units(u"yr", P)
-    @assert (0 <= e <= 1) "eccentricity has to be between 0 and 1"
+    # @assert (0 <= e <= 1) "eccentricity has to be between 0 and 1"
     M = mean_anomaly(t, P, M0)
     E = ecc_anom_init_guess_danby(M, e)
     for i in 1:max_its
@@ -306,7 +306,7 @@ function fit_kepler(
     end
 
     # result = optimize(f, g!, ustrip.([ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ]), MomentumGradientDescent(alphaguess=LineSearches.InitialStatic(alpha=1e-3))) # 3x slower
-    result = optimize(f, g!, ustrip.([ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ]), LBFGS(alphaguess=LineSearches.InitialStatic(alpha=1e-3))) # 27s
+    result = optimize(f, g!, ustrip.([ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ]), LBFGS(alphaguess=LineSearches.InitialStatic(alpha=1e-2))) # 27s
     K, P, M0, h, k, γ = result.minimizer
     K *= K_u
     P *= P_u
@@ -931,7 +931,7 @@ function save_nlogLs(
 
     likelihood_strs = ["L", "E"]
     num_likelihoods= length(likelihood_strs)
-    @assert length(likelihoods) == 2 * num_likelihoods
+    @assert length(likelihoods) == 3 * num_likelihoods
     orbit_params_strs = ["K", "P", "M0", "e", "ω", "γ"]
     orbit_params= [og_ks.K, og_ks.P, og_ks.M0, og_ks.e, og_ks.ω, og_ks.γ, fit_ks.K, fit_ks.P, fit_ks.M0, fit_ks.e, fit_ks.ω, fit_ks.γ]
     num_hyperparameters = Int(length(hyperparameters) / 2)
@@ -999,4 +999,11 @@ function ∇∇nlogL_Jones_and_planet!(
     end
 
     return Symmetric(full_H)
+end
+
+
+function validate_kepler_dorder(d::Vector{<:Integer})
+	@assert sum(d) < 3
+	@assert minimum(d) == 0
+	@assert length(d) == 6
 end
