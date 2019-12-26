@@ -6,8 +6,8 @@ called_from_terminal = length(ARGS) > 0
 # Loading data and setting kernel #
 ###################################
 
-kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp", "m52x2"]
-initial_hypers = [[12.], [12], [12], [4, 12], [4, 12], [20, 40, 1], [12, 24, 1]]
+kernel_names = ["pp", "se", "m52", "qp", "m52x2", "rq", "rm52"]
+initial_hypers = [[12.], [12], [12], [20, 40, 1], [12, 24, 1], [4, 12], [4, 12]]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
 sample_size = 100
@@ -16,9 +16,9 @@ if called_from_terminal
     kernel_name = kernel_names[kernel_choice]
     seed = parse(Int, ARGS[2])
 else
-    kernel_choice = 6
+    kernel_choice = 3
     kernel_name = kernel_names[kernel_choice]
-    seed = 4
+    seed = 5
 end
 
 # allowing covariance matrix to be calculated in parallel
@@ -39,18 +39,19 @@ println("optimizing on $fname using the $kernel_name")
 if called_from_terminal
     problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
 else
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
-    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
 end
 
 ########################################
 # Adding planet and normalizing scores #
 ########################################
 
-length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.3  # m/s
+length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.0  # m/s
 # draw over more periods?
 original_ks = kep_signal(K_val * u"m/s", (8 + 1 * randn())u"d", 2 * π * rand(), rand() / 5, 2 * π * rand(), 0u"m/s")
 add_kepler_to_Jones_problem_definition!(problem_definition, original_ks)
+
 results_dir = "results/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
 
 begin
@@ -126,10 +127,10 @@ possible_labels = [
     [L"\lambda_{pp}"],
     [L"\lambda_{se}"],
     [L"\lambda_{m52}"],
-    [L"\alpha" L"\mu"],
-    [L"\alpha" L"\mu"],
     [L"\tau_p" L"\lambda_{se}" L"^1/_{\lambda_{p}}"],
-    [L"\lambda_{1}" L"\lambda_{2}" L"\sqrt{ratio}"]]
+    [L"\lambda_{1}" L"\lambda_{2}" L"\sqrt{ratio}"],
+    [L"\alpha" L"\mu"],
+    [L"\alpha" L"\mu"]]
 
 global hp_string = ""
 for i in 1:problem_definition.n_kern_hyper
@@ -518,9 +519,8 @@ Jones_line_plots(amount_of_samp_points, problem_definition, fit4_total_hyperpara
 # no planet
 H1 = (∇∇nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
     + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit1_total_hyperparameters), 2))
-nlogL_val1 = fit_nlogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters, 0)
 try
-    global llH1 = log_laplace_approximation(H1, nlogL_val1, 0)
+    global llH1 = log_laplace_approximation(H1, fit_nlogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters, 0), 0)
 catch
      global llH1 = 0
 end
@@ -530,9 +530,8 @@ H2 = ∇∇nlogL_Jones_and_planet!(workspace, problem_definition, fit3_total_hyp
 n_hyper = length(remove_zeros(fit3_total_hyperparameters))
 H2[diagind(H2)[1:n_hyper]] += diag(nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit3_total_hyperparameters), 2))
 H2[diagind(H2)[n_hyper+1:n_hyper+n_kep_parms]] -= diag(logprior_kepler_tot(full_ks; d_tot=2, use_hk=true))
-nlogL_val2 = refit_nlogL2 + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit3_total_hyperparameters, 0) - logprior_kepler(full_ks; use_hk=true)
 try
-    global llH2 = log_laplace_approximation(H2, nlogL_val2, 0)
+    global llH2 = log_laplace_approximation(H2, refit_nlogL2 + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit3_total_hyperparameters, 0) - logprior_kepler(full_ks; use_hk=true), 0)
 catch
     global llH2 = 0
 end
@@ -541,10 +540,9 @@ end
 H3 = ∇∇nlogL_Jones_and_planet!(workspace, problem_definition, fit4_total_hyperparameters, original_ks)
 H3[diagind(H3)[1:n_hyper]] += diag(nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit4_total_hyperparameters), 2))
 H3[diagind(H3)[n_hyper+1:n_hyper+n_kep_parms]] -= diag(logprior_kepler_tot(original_ks; d_tot=2, use_hk=true))
-nlogL_val3 = refit_nlogL3 + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit4_total_hyperparameters, 0) - logprior_kepler(original_ks; use_hk=true)
 # often the following often wont work because the keplerian paramters haven't been optimized on the data
 try
-    global llH3 = log_laplace_approximation(H3, nlogL_val3, 0)
+    global llH3 = log_laplace_approximation(H3, refit_nlogL3 + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit4_total_hyperparameters, 0) - logprior_kepler(original_ks; use_hk=true), 0)
 catch
     global llH3 = 0
 end
@@ -557,5 +555,5 @@ println("\nevidence for Jones model: " * string(llH1))
 println("evidence for Jones + planet model: " * string(llH2))
 println("evidence for Jones + true planet model: " * string(llH3))
 
-likelihoods = [-nlogL_val1, llH1, -nlogL_val2, llH2, -nlogL_val3, llH3]
+likelihoods = [-fit_nlogL, llH1, -refit_nlogL2, llH2, -refit_nlogL3, llH3]
 save_nlogLs(seed, sim_id, likelihoods, append!(copy(fit1_total_hyperparameters), fit3_total_hyperparameters), original_ks, full_ks, results_dir)

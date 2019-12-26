@@ -111,12 +111,12 @@ end
 Generate a noisy permutation of the data by drawing from a multivariate Gaussian
 based on the covariance of many data draws
 """
-function noisy_scores_from_covariance(mean_scores::Matrix{T}, many_scores::AbstractArray{T,3}) where {T<:Real}
+function noisy_scores_from_covariance(mean_scores::Matrix{T}, many_scores::AbstractArray{T,3}; rng::AbstractRNG=Random.GLOBAL_RNG) where {T<:Real}
 	@assert size(mean_scores, 1) == size(many_scores, 2)  # amount of score dimensions
 	@assert size(mean_scores, 2) == size(many_scores, 3)  # amount of time points
 	noisy_scores = zeros(size(mean_scores))
 	for i in 1:size(mean_scores, 2)
-	    noisy_scores[:, i] = rand(MvNormal(mean_scores[:, i], cov(many_scores[:, :, i]; dims=1)))
+	    noisy_scores[:, i] = rand(rng, MvNormal(mean_scores[:, i], cov(many_scores[:, :, i]; dims=1)))
 	end
 	return noisy_scores
 end

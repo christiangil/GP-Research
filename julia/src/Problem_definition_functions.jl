@@ -50,7 +50,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		@load hdf5_filename * "_bootstrap.jld2" scores_tot scores_mean error_ests
 		@assert isapprox(scores, scores_mean)
 
-		noisy_scores = noisy_scores_from_covariance(scores, scores_tot)
+		noisy_scores = noisy_scores_from_covariance(scores, scores_tot; rng=rng)
 
 		time_unit = u"d"
 		time = convert_SOAP_phases.(time_unit, phases)
