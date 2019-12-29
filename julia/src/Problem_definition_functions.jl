@@ -27,6 +27,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 	rv_noise::Vector{T} where T<:Unitful.Velocity # the measurement noise at all observations
 	normals::Vector{T1}  # the normalization of each section of y_obs
 	a0::Matrix{T1}  # the meta kernel coefficients
+	non_zero_hyper_inds::Vector{T2}  # the indices of the non-zero hyperparameters
 	# The powers that each a0 coefficient
 	# is taken to for each part of the matrix construction
 	# used for constructing differentiated versions of the kernel
@@ -107,9 +108,9 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 
 		return Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0)
 	end
-	function Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0)
+	function Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0; non_zero_hyper_inds=append!(findall(!iszero, collect(Iterators.flatten(a0))), collect(1:n_kern_hyper) .+ length(a0)))
 		coeff_orders, coeff_coeffs = coefficient_orders(n_out, n_dif, a=a0)
-		return Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0, coeff_orders, coeff_coeffs)
+		return Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0, non_zero_hyper_inds, coeff_orders, coeff_coeffs)
 	end
 	function Jones_problem_definition(
 		kernel::Function,  # kernel function
@@ -126,6 +127,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		rv_noise::Vector{T} where T<:Unitful.Velocity, # the measurement noise at all observations
 		normals::Vector{T1},  # the normalization of each section of y_obs
 		a0::Matrix{T1},
+		non_zero_hyper_inds::Vector{T2},
 		coeff_orders::AbstractArray{T2,6},
 		coeff_coeffs::AbstractArray{T2,4}
 		) where {T1<:Real, T2<:Integer}
@@ -143,7 +145,8 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		@assert size(a0) == (n_out, n_dif)
 		@assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)  # maybe unnecessary due to the fact that we construct it
 		@assert size(coeff_coeffs) == (n_out, n_out, n_dif, n_dif)  # maybe unnecessary due to the fact that we construct it
-		return new{typeof(a0[1]), typeof(n_kern_hyper)}(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, noise, rv_noise, normals, a0, coeff_orders, coeff_coeffs)
+		@assert length(non_zero_hyper_inds) == length(findall(!iszero, collect(Iterators.flatten(a0)))) + n_kern_hyper
+		return new{typeof(x_obs[1]),typeof(n_kern_hyper)}(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, noise, rv_noise, normals, a0, non_zero_hyper_inds, coeff_orders, coeff_coeffs)
 	end
 end
 

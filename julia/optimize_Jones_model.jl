@@ -16,9 +16,9 @@ if called_from_terminal
     kernel_name = kernel_names[kernel_choice]
     seed = parse(Int, ARGS[2])
 else
-    kernel_choice = 3
+    kernel_choice = 1
     kernel_name = kernel_names[kernel_choice]
-    seed = 5
+    seed = 8
 end
 
 # allowing covariance matrix to be calculated in parallel
@@ -47,7 +47,7 @@ end
 # Adding planet and normalizing scores #
 ########################################
 
-length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.0  # m/s
+length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.5  # m/s
 # draw over more periods?
 original_ks = kep_signal(K_val * u"m/s", (8 + 1 * randn())u"d", 2 * π * rand(), rand() / 5, 2 * π * rand(), 0u"m/s")
 add_kepler_to_Jones_problem_definition!(problem_definition, original_ks)
@@ -155,11 +155,11 @@ end
 initial_x = remove_zeros(total_hyperparameters)
 
 function f_no_print(non_zero_hyper::Vector{T}) where {T<:Real}
-    prior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
-    if prior == Inf
-        return prior
+    nprior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
+    if nprior == Inf
+        return nprior
     else
-        return nlogL_Jones!(workspace, problem_definition, non_zero_hyper) + prior
+        return nlogL_Jones!(workspace, problem_definition, non_zero_hyper) + nprior
     end
 end
 
@@ -204,13 +204,13 @@ function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
         println("retrying fit")
         global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations))
     end
-    println("fitting without Hessian")
-    try
-        global result = optimize(f, g!, current_hyper, LBFGS(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations)) # 27s
-    catch
-        println("retrying fit")
-        global result = optimize(f, g!, current_hyper, LBFGS(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations))
-    end
+    # println("fitting without Hessian")
+    # try
+    #     global result = optimize(f, g!, current_hyper, LBFGS(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations)) # 27s
+    # catch
+    #     println("retrying fit")
+    #     global result = optimize(f, g!, current_hyper, LBFGS(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations))
+    # end
 end
 
 fit_GP!(initial_x)
@@ -230,8 +230,8 @@ println(initial_nlogL, "\n")
 
 println("ending hyperparameters")
 println(fit1_total_hyperparameters)
-fit_nlogL = nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
-println(fit_nlogL, "\n")
+fit_nlogL1 = nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
+println(fit_nlogL1, "\n")
 
 global hp_string = ""
 for i in 1:problem_definition.n_kern_hyper
@@ -255,7 +255,7 @@ end
 # Evaluating GP likelihoods after taking out planets at different periods #
 ###########################################################################
 
-amount_of_periods = 2^12
+amount_of_periods = 2^13
 
 # sample linearly in frequency space so that we get periods from the 1 / uneven Nyquist
 # frequency to 4 times the total timespan of the data
@@ -278,21 +278,6 @@ sendto(workers(), problem_definition=problem_definition, fit1_total_hyperparamet
 period_grid_dist = distribute(period_grid)
 likelihoods = collect(map(kep_likelihood_distributed, period_grid_dist))
 
-begin
-    ax = init_plot()
-    fig = plot(ustrip.(period_grid), likelihoods, color="black")
-    xscale("log")
-    ticklabel_format(style="sci", axis="y", scilimits=(0,0))
-    xlabel("Periods (days)")
-    ylabel("GP log likelihoods")
-    axvline(x=convert_and_strip_units(u"d", original_ks.P))
-    axhline(y=-nlogL_Jones(problem_definition, fit1_total_hyperparameters), color="k")
-    title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
-    title(title_string, fontsize=30)
-
-    save_PyPlot_fig(results_dir * "periodogram.png")
-end
-
 best_period_grid = period_grid[find_modes(likelihoods; amount=10)]
 
 ################################################################
@@ -300,12 +285,62 @@ best_period_grid = period_grid[find_modes(likelihoods; amount=10)]
 ################################################################
 
 # find first period that uses a bound eccentricity
-best_period = best_period_grid[findfirst(y -> isless(y, 0.4), [fit_kepler(
+estimated_eccentricities = [fit_kepler(
     problem_definition, Σ_obs, kep_signal_epicyclic(;P=period)
-    ).e for period in best_period_grid])]
+    ).e for period in best_period_grid]
+
+try
+    global best_period = best_period_grid[findfirst(y -> isless(y, 0.3), estimated_eccentricities)]
+catch
+    try
+        global best_period = best_period_grid[findfirst(y -> isless(y, 0.5), estimated_eccentricities)]
+    catch
+        global best_period = best_period_grid[argmin(estimated_eccentricities)]
+        @warn "no low-eccentricity period found"
+    end
+end
 
 println("original period: $(ustrip(original_ks.P)) days")
 println("found period:    $(ustrip(best_period)) days")
+
+begin
+    ax = init_plot()
+    fig = plot(ustrip.(period_grid), likelihoods, color="black")
+    xscale("log")
+    ticklabel_format(style="sci", axis="y", scilimits=(0,0))
+    xlabel("Periods (days)")
+    ylabel("GP log likelihoods")
+    axhline(y=-nlogL_Jones(problem_definition, fit1_total_hyperparameters), color="k")
+    axvline(x=convert_and_strip_units(u"d", best_period), color="red")
+    if original_ks.K != 0u"m/s"
+        axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue")
+
+        title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
+        title(title_string, fontsize=30)
+    end
+    save_PyPlot_fig(results_dir * "periodogram.png")
+end
+
+
+begin
+    ax = init_plot()
+    inds = period_grid.<20u"d"
+    fig = plot(ustrip.(period_grid[inds]), likelihoods[inds], color="black")
+    xscale("log")
+    ticklabel_format(style="sci", axis="y", scilimits=(0,0))
+    xlabel("Periods (days)")
+    ylabel("GP log likelihoods")
+    axhline(y=-nlogL_Jones(problem_definition, fit1_total_hyperparameters), color="k")
+    axvline(x=convert_and_strip_units(u"d", best_period), color="red")
+    if original_ks.K != 0u"m/s"
+        axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue")
+
+        title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
+        title(title_string, fontsize=30)
+    end
+    save_PyPlot_fig(results_dir * "periodogram_zoom.png")
+end
+
 
 fit_and_remove_kepler_epi_short() = fit_and_remove_kepler(
     problem_definition,
@@ -313,11 +348,11 @@ fit_and_remove_kepler_epi_short() = fit_and_remove_kepler(
     kep_signal_epicyclic(P=best_period))
 
 function f_no_print(non_zero_hyper::Vector{T}) where {T<:Real}
-    prior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
-    if prior == Inf
-        return prior
+    nprior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
+    if nprior == Inf
+        return nprior
     else
-        return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=fit_and_remove_kepler_epi_short()) + prior
+        return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=fit_and_remove_kepler_epi_short()) + nprior
     end
 end
 
@@ -349,12 +384,12 @@ fit2_total_hyperparameters = reconstruct_total_hyperparameters(problem_definitio
 
 println("fit hyperparameters")
 println(fit1_total_hyperparameters)
-println(fit_nlogL, "\n")
+println(fit_nlogL1, "\n")
 
 println("epicyclic hyperparameters")
 println(fit2_total_hyperparameters)
-refit_nlogL = nlogL_Jones!(workspace, problem_definition, fit2_total_hyperparameters; y_obs=fit_and_remove_kepler_epi_short())
-println(refit_nlogL, "\n")
+refit_nlogL1 = nlogL_Jones!(workspace, problem_definition, fit2_total_hyperparameters; y_obs=fit_and_remove_kepler_epi_short())
+println(refit_nlogL1, "\n")
 
 Σ_obs_final = Σ_observations(problem_definition, fit2_total_hyperparameters)
 
@@ -370,24 +405,17 @@ Jones_line_plots(amount_of_samp_points, problem_definition, fit2_total_hyperpara
 # Refitting GP with full planet signal at found period subtracted #
 ###################################################################
 
-global current_ks = fit_kepler(problem_definition, workspace.Σ_obs, kep_signal(epi_ks.K, epi_ks.P, epi_ks.M0, epi_ks.e, epi_ks.ω, epi_ks.γ))
-global hyper_for_ks = copy(workspace.nlogL_hyperparameters)
-
-function fit_and_remove_kepler_short()
-    if workspace.nlogL_hyperparameters!=hyper_for_ks
-        global hyper_for_ks[:] = workspace.nlogL_hyperparameters[:]
-        global current_ks = fit_kepler(problem_definition, workspace.Σ_obs, current_ks)
-    end
-    # println(kep_parms_str(current_ks))
-    return remove_kepler(problem_definition, current_ks)
-end
+global current_ks = kep_signal(epi_ks.K, epi_ks.P, epi_ks.M0, epi_ks.e, epi_ks.ω, epi_ks.γ)
+println(kep_parms_str(current_ks))
 
 function f_no_print(non_zero_hyper::Vector{T}) where {T<:Real}
-    prior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
-    if prior == Inf
-        return prior
+    nprior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
+    # println(prior)
+    # println(kep_parms_str(current_ks))
+    if nprior == Inf
+        return nprior
     else
-        return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=fit_and_remove_kepler_short()) + prior
+        return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=current_y) + nprior
     end
 end
 
@@ -398,17 +426,32 @@ function f(non_zero_hyper::Vector{T}) where {T<:Real}
 end
 
 function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-    G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=fit_and_remove_kepler_short())
+    G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=current_y)
         + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
 end
 
 function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-    H[:, :] = (∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=fit_and_remove_kepler_short())
+    H[:, :] = (∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=current_y)
      + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 2))
 end
 
-# fit_GP!(remove_zeros(fit2_total_hyperparameters); iterations=100)
-fit_GP!(remove_zeros(fit2_total_hyperparameters))
+global current_hyper = remove_zeros(fit2_total_hyperparameters)
+
+results = [Inf, Inf]
+result_change = Inf
+global num_iter = 0
+while (result_change > 1e-6) & (num_iter < 100)
+    global current_ks = fit_kepler(problem_definition, workspace.Σ_obs, current_ks)
+    println(kep_parms_str(current_ks))
+    global current_y = remove_kepler(problem_definition, current_ks)
+    fit_GP!(current_hyper)
+    results[:] = [results[2], copy(result.minimum)]
+    thing = results[1] - results[2]
+    if thing < 0; @warn "result increased occured on iteration $num_iter" end
+    global result_change = abs(thing)
+    global num_iter += 1
+    println("change on joint fit $num_iter: ", result_change)
+end
 
 println(result)
 
@@ -420,12 +463,12 @@ fit3_total_hyperparameters = reconstruct_total_hyperparameters(problem_definitio
 
 println("epicyclic hyperparameters")
 println(fit2_total_hyperparameters)
-println(refit_nlogL, "\n")
+println(refit_nlogL1, "\n")
 
 println("full kepler hyperparameters")
 println(fit3_total_hyperparameters)
-refit_nlogL2 = nlogL_Jones!(workspace, problem_definition, fit3_total_hyperparameters; y_obs=fit_and_remove_kepler_short())
-println(refit_nlogL2, "\n")
+fit_nlogL2 = nlogL_Jones!(workspace, problem_definition, fit3_total_hyperparameters; y_obs=current_y)
+println(fit_nlogL2, "\n")
 
 Σ_obs_final2 = Σ_observations(problem_definition, fit3_total_hyperparameters)
 
@@ -449,11 +492,11 @@ println(kep_parms_str(original_ks))
 if called_from_terminal;
     y_obs = remove_kepler(problem_definition, full_ks)
     function f2(non_zero_hyper::Vector{T}) where {T<:Real}
-        prior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
-        if prior == Inf
-            return prior
+        nprior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
+        if nprior == Inf
+            return nprior
         else
-            return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs) + prior
+            return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs) + nprior
         end
     end
     corner_plot(f2, remove_zeros(fit3_total_hyperparameters), results_dir * "corner_planet.png"; input_labels=actual_labels)
@@ -466,11 +509,11 @@ end
 y_obs_og = remove_kepler(problem_definition, original_ks)
 
 function f_no_print(non_zero_hyper::Vector{T}) where {T<:Real}
-    prior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
-    if prior == Inf
-        return prior
+    nprior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
+    if nprior == Inf
+        return nprior
     else
-        return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs_og) + prior
+        return nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs_og) + nprior
     end
 end
 
@@ -502,8 +545,8 @@ fit4_total_hyperparameters = reconstruct_total_hyperparameters(problem_definitio
 
 println("with no planet hyperparameters")
 println(fit4_total_hyperparameters)
-refit_nlogL3 = nlogL_Jones!(workspace, problem_definition, fit4_total_hyperparameters; y_obs=remove_kepler(problem_definition, original_ks))
-println(refit_nlogL3, "\n")
+fit_nlogL3 = nlogL_Jones!(workspace, problem_definition, fit4_total_hyperparameters; y_obs=remove_kepler(problem_definition, original_ks))
+println(fit_nlogL3, "\n")
 
 
 global hp_string = ""
@@ -519,41 +562,58 @@ Jones_line_plots(amount_of_samp_points, problem_definition, fit4_total_hyperpara
 # no planet
 H1 = (∇∇nlogL_Jones!(workspace, problem_definition, fit1_total_hyperparameters)
     + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit1_total_hyperparameters), 2))
+uE1 = -fit_nlogL1 - nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters, 0)
 try
-    global llH1 = log_laplace_approximation(H1, fit_nlogL + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters, 0), 0)
+    global E1 = log_laplace_approximation(H1, -uE1, 0)
 catch
-     global llH1 = 0
+    println("Laplace approximation failed for initial GP fit")
+    println("det(H1): $(det(H1)) (should've been positive)")
+    global E1 = 0
 end
+
 
 # planet
 H2 = ∇∇nlogL_Jones_and_planet!(workspace, problem_definition, fit3_total_hyperparameters, full_ks)
 n_hyper = length(remove_zeros(fit3_total_hyperparameters))
 H2[diagind(H2)[1:n_hyper]] += diag(nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit3_total_hyperparameters), 2))
 H2[diagind(H2)[n_hyper+1:n_hyper+n_kep_parms]] -= diag(logprior_kepler_tot(full_ks; d_tot=2, use_hk=true))
+uE2 = -fit_nlogL2 - nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit3_total_hyperparameters, 0) + logprior_kepler(full_ks; use_hk=true)
 try
-    global llH2 = log_laplace_approximation(H2, refit_nlogL2 + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit3_total_hyperparameters, 0) - logprior_kepler(full_ks; use_hk=true), 0)
+    global E2 = log_laplace_approximation(H2, -uE2, 0)
 catch
-    global llH2 = 0
+    println("Laplace approximation failed for planet fit")
+    println("det(H2): $(det(H2)) (should've been positive)")
+    global E2 = 0
 end
+
 
 # true planet
 H3 = ∇∇nlogL_Jones_and_planet!(workspace, problem_definition, fit4_total_hyperparameters, original_ks)
 H3[diagind(H3)[1:n_hyper]] += diag(nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit4_total_hyperparameters), 2))
 H3[diagind(H3)[n_hyper+1:n_hyper+n_kep_parms]] -= diag(logprior_kepler_tot(original_ks; d_tot=2, use_hk=true))
 # often the following often wont work because the keplerian paramters haven't been optimized on the data
+uE3 = -fit_nlogL3 - nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit4_total_hyperparameters, 0) + logprior_kepler(original_ks; use_hk=true)
 try
-    global llH3 = log_laplace_approximation(H3, refit_nlogL3 + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit4_total_hyperparameters, 0) - logprior_kepler(original_ks; use_hk=true), 0)
+    global E3 = log_laplace_approximation(H3, -uE3, 0)
+    # equivalent to fitting original dataset with no planet
+    # global llH3 = log_laplace_approximation(Symmetric(H3[1:6,1:6]), fit_nlogL3 + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit4_total_hyperparameters, 0), 0)
 catch
-    global llH3 = 0
+    println("Laplace approximation failed for original planet fit (expected most of the time)")
+    println("det(H3): $(det(H3)) (could've been positive)")
+    global E3 = 0
 end
 
-println("\nunnormalized evidence for Jones model: " * string(-nlogL_val1))
-println("unnormalized evidence for Jones + planet model: " * string(-nlogL_val2))
-println("unnormalized evidence for Jones + true planet model: " * string(-nlogL_val3))
+println("\nlog likelihood for Jones model: " * string(-fit_nlogL1))
+println("log likelihood for Jones + planet model: " * string(-fit_nlogL2))
+println("log likelihood for Jones + true planet model: " * string(-fit_nlogL3))
 
-println("\nevidence for Jones model: " * string(llH1))
-println("evidence for Jones + planet model: " * string(llH2))
-println("evidence for Jones + true planet model: " * string(llH3))
+println("\nunnormalized evidence for Jones model: " * string(uE1))
+println("unnormalized evidence for Jones + planet model: " * string(uE2))
+println("unnormalized evidence for Jones + true planet model: " * string(uE3))
 
-likelihoods = [-fit_nlogL, llH1, -refit_nlogL2, llH2, -refit_nlogL3, llH3]
-save_nlogLs(seed, sim_id, likelihoods, append!(copy(fit1_total_hyperparameters), fit3_total_hyperparameters), original_ks, full_ks, results_dir)
+println("\nevidence for Jones model: " * string(E1))
+println("evidence for Jones + planet model: " * string(E2))
+println("evidence for Jones + true planet model: " * string(E3))
+
+saved_likelihoods = [-fit_nlogL1, uE1, E1, -fit_nlogL2, uE2, E2, -fit_nlogL3, uE3, E3]
+save_nlogLs(seed, sim_id, saved_likelihoods, append!(copy(fit1_total_hyperparameters), fit3_total_hyperparameters), original_ks, full_ks, results_dir)

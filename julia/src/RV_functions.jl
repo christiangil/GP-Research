@@ -280,13 +280,13 @@ function fit_kepler(
         P *= P_u
         γ *= γ_u
         ks = kep_signal(K, P, M0, h, k, γ; use_hk=true)
-        prior = logprior_kepler(ks; use_hk=true)
+        nprior = -logprior_kepler(ks; use_hk=true)
         # println(kep_parms_str(ks))
         # println(prior)
-        if prior == Inf
-            return prior
+        if nprior == Inf
+            return nprior
         else
-            return nlogL(covariance, remove_kepler(data, times, ks; data_unit=data_unit), nlogL_normalization=normalization) + prior
+            return nlogL(covariance, remove_kepler(data, times, ks; data_unit=data_unit), nlogL_normalization=normalization) + nprior
         end
     end
 
@@ -300,13 +300,13 @@ function fit_kepler(
         for i in 1:length(G)
             d = zeros(Int64, length(G))
             d[i] = 1
-            G[i] = dnlogLdθ(remove_kepler(data, times, ks; data_unit=data_unit, d=d), α) + logprior_kepler(K, P, M0, h, k, γ; d=d, use_hk=true)
+            G[i] = dnlogLdθ(remove_kepler(data, times, ks; data_unit=data_unit, d=d), α) - logprior_kepler(K, P, M0, h, k, γ; d=d, use_hk=true)
         end
         # println(G)
     end
 
     # result = optimize(f, g!, ustrip.([ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ]), MomentumGradientDescent(alphaguess=LineSearches.InitialStatic(alpha=1e-3))) # 3x slower
-    result = optimize(f, g!, ustrip.([ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ]), LBFGS(alphaguess=LineSearches.InitialStatic(alpha=1e-2))) # 27s
+    result = optimize(f, g!, ustrip.([ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ]), LBFGS(alphaguess=LineSearches.InitialStatic(alpha=1e-3))) # 27s
     K, P, M0, h, k, γ = result.minimizer
     K *= K_u
     P *= P_u
@@ -364,7 +364,7 @@ function kepler_rv_ecc_anom(
         h, k = eω_2_hk(e, ω)
     end
 
-    k = e * cos(ω)
+    # k = e * cos(ω)
     E = ecc_anomaly(t, P, M0, e)
     j = sqrt(1 - e*e)
     q = e * cos(E)
@@ -929,7 +929,7 @@ function save_nlogLs(
     ) where {T<:Real}
 
 
-    likelihood_strs = ["L", "E"]
+    likelihood_strs = ["L", "uE", "E"]
     num_likelihoods= length(likelihood_strs)
     @assert length(likelihoods) == 3 * num_likelihoods
     orbit_params_strs = ["K", "P", "M0", "e", "ω", "γ"]
@@ -966,7 +966,7 @@ function ∇∇nlogL_Jones_and_planet!(
 
     calculate_shared_∇nlogL_matrices!(workspace, prob_def, total_hyperparameters)
 
-    non_zero_inds = findall(!iszero, total_hyperparameters)
+    non_zero_inds = copy(prob_def.non_zero_hyper_inds)
     n_hyper = length(non_zero_inds)
     full_H = zeros(n_kep_parms + n_hyper, n_kep_parms + n_hyper)
     full_H[1:length(non_zero_inds), 1:length(non_zero_inds)] = ∇∇nlogL_Jones(

@@ -124,7 +124,39 @@ function log_circle(x::Vector{<:Real}, min_max_r::Vector{<:Real}; d::Vector{<:In
     return val
 end
 
-all([0,0.] .== 0)
+
+"""
+Log of the 2D unit cone PDF
+"""
+function log_cone(x::Vector{<:Real}; d::Vector{<:Integer}=[0,0])
+    @assert minimum(d) == 0
+    @assert maximum(d) <= 2
+    @assert sum(d) <= 2
+
+    @assert length(x) == length(d) == 2
+
+    r_sq = dot(x, x)  # x^2 + y^2
+    r = sqrt(r_sq)
+    if d == [0,0]
+        0 <= r < 1 ? val = log(3 / π * (1 - r)) : val = -Inf
+    elseif d == [0,1]
+        0 <= r < 1 ? val = x[2] / (r_sq - r) : val = 0
+    elseif d == [0,2]
+        0 <= r < 1 ? val = (-x[2] ^ 2 * r + x[1] ^ 2 * (r - 1)) /
+            (r ^ 3 * (1 - 2 * r + r_sq)) : val = 0
+    elseif d == [1,0]
+        0 <= r < 1 ? val = x[1] / (r_sq - r) : val = 0
+    elseif d == [1,1]
+        0 <= r < 1 ? val = (x[1] * x[2] * (1 - 2 * r)) /
+            (r ^ 3 * (1 - 2 * r + r_sq)) : val = 0
+    elseif d == [2,0]
+        0 <= r < 1 ? val = (-x[1] ^ 2 * r + x[2] ^ 2 * (r - 1)) /
+            (r ^ 3 * (1 - 2 * r + r_sq)) : val = 0
+    end
+    return val
+end
+
+
 # Keplerian priors references
 # https://arxiv.org/abs/astro-ph/0608328
 # table 1
@@ -165,8 +197,8 @@ function logprior_ω(ω::Real; d::Integer=0)
     return log_uniform(ω, [prior_ω_min, prior_ω_max]; d=d)
 end
 
-function logprior_hk(hk::Vector{<:Real}; d::Vector{<:Integer}=[0,0])
-    return log_circle(hk, [prior_e_min, prior_e_max]; d=d)
+function logprior_hk(h::Real, k::Real; d::Vector{<:Integer}=[0,0])
+    return log_cone([h, k]; d=d)
 end
 
 function logprior_γ(γ::Unitful.Velocity; d::Integer=0)
@@ -193,7 +225,7 @@ function logprior_kepler(
     if d[3] != 0; return logprior_M0(M0; d=d[3]) end
     if d[6] != 0; return logprior_γ(γ; d=d[6]) end
     if use_hk
-        if any(d[4:5] .!= 0); return logprior_hk([e_or_h, ω_or_k]; d=d[4:5]) end
+        if any(d[4:5] .!= 0); return logprior_hk(e_or_h, ω_or_k; d=d[4:5]) end
     else
         if d[4] != 0; return logprior_e(e_or_h; d=d[4]) end
         if d[5] != 0; return logprior_ω(ω_or_k; d=d[5]) end
@@ -202,7 +234,7 @@ function logprior_kepler(
     # logP += logprior_K(K; P=P)
     logP += logprior_P(P)
     logP += logprior_M0(M0)
-    use_hk ? logP += logprior_hk([e_or_h, ω_or_k]) : logP += logprior_e(e_or_h; d=d[4]) + logprior_ω(ω_or_k; d=d[5])
+    use_hk ? logP += logprior_hk(e_or_h, ω_or_k) : logP += logprior_e(e_or_h; d=d[4]) + logprior_ω(ω_or_k; d=d[5])
     logP += logprior_γ(γ)
 
     return logP

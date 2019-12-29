@@ -867,7 +867,7 @@ struct nlogL_matrix_workspace{T<:Real}
             total_hyper,
             Σ_obs,
             copy(total_hyper),
-            [Σ_obs \ covariance(prob_def, total_hyper; dΣdθs_total=[i]) for i in findall(!iszero, total_hyper)])
+            [Σ_obs \ covariance(prob_def, total_hyper; dΣdθs_total=[i]) for i in prob_def.non_zero_hyper_inds])
     end
     nlogL_matrix_workspace(
         nlogL_hyperparameters::Vector{T},
@@ -948,7 +948,7 @@ function calculate_shared_∇nlogL_matrices(
 
     total_hyperparameters, Σ_obs, = calculate_shared_nlogL_matrices(prob_def, non_zero_hyperparameters; Σ_obs=Σ_obs)
 
-    βs = [Σ_obs \ covariance(prob_def, total_hyperparameters; dΣdθs_total=[i]) for i in findall(!iszero, total_hyperparameters)]
+    βs = [Σ_obs \ covariance(prob_def, total_hyperparameters; dΣdθs_total=[i]) for i in prob_def.non_zero_hyper_inds]
 
     return total_hyperparameters, Σ_obs, βs
 
@@ -1069,7 +1069,7 @@ function ∇∇nlogL_Jones(
     βs::Array{Matrix{T},1}
     ) where {T<:Real}
 
-    non_zero_inds = findall(!iszero, total_hyperparameters)
+    non_zero_inds = copy(prob_def.non_zero_hyper_inds)
     H = zeros(length(non_zero_inds), length(non_zero_inds))
 
     for (i, nzind1) in enumerate(non_zero_inds)

@@ -93,7 +93,7 @@ function est_grad(prob_def::Jones_problem_definition, total_hyperparameters::Vec
 
     #estimate gradient
     j = 1
-    grad = zeros(length(findall(!iszero, total_hyperparameters)))
+    grad = zeros(length(prob_def.non_zero_hyper_inds))
     for i in 1:length(total_hyperparameters)
         if total_hyperparameters[i]!=0
             hold = copy(total_hyperparameters)
