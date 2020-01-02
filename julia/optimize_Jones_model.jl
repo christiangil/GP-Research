@@ -324,7 +324,7 @@ end
 
 begin
     ax = init_plot()
-    inds = period_grid.<20u"d"
+    inds = period_grid.<(2.5 * original_ks.P)
     fig = plot(ustrip.(period_grid[inds]), likelihoods[inds], color="black")
     xscale("log")
     ticklabel_format(style="sci", axis="y", scilimits=(0,0))

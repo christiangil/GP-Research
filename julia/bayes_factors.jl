@@ -1,9 +1,13 @@
-include("src/all_functions.jl")
+include("src/general_functions.jl")
+include("src/plotting_functions.jl")
+using Statistics
 
 # kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp", "m52x2"]
 kernel_names = ["pp", "se", "m52", "qp", "m52x2"]
+# kernel_names = ["se", "m52", "qp", "m52x2"]
 # nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Rational Quadratic", "Rational Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
 nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
+# nice_kernel_names = ["Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
 Ks = [string(round(i, digits=2)) for i in (collect(0:10) / 10)]
 seeds = [string(i) for i in 1:10]
 
@@ -61,7 +65,12 @@ for k in 1:length(kernel_names)
             results_dir = "results/$(kernel_name)/K_$(string(K))/seed_$(seed)/"
             try
                 df = CSV.read(results_dir * "logL.csv")
-                seed_factors[j] = (df.E2-df.E1)[1]
+                if ((df.E2[1] != 0) & (df.E1[1] != 0))
+                    seed_factors[j] = (df.E2-df.E1)[1]
+                    # println(df.E2, df.E1)
+                else
+                    println("had to ignore weirdness")
+                end
             catch
                 seed_factors[j] = 0
             end
