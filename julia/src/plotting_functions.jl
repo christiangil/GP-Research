@@ -4,7 +4,7 @@
 using PyPlot
 
 
-# make it so that plot windowsa don't appear
+# make it so that plot windows don't appear
 matplotlib.use("Agg")
 
 

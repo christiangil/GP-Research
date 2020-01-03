@@ -8,7 +8,7 @@ https://en.wikipedia.org/wiki/Inverse-gamma_distribution
 function log_inverse_gamma(x::Real, α::Real=1., β::Real=1.; d::Integer=0)
     @assert 0 <= d <= 2
     if d == 0
-        x > 0 ? val = -(β / x) - (1 + α) * log(x) + α * log(β) - log(gamma(α)) : val = -Inf
+        x > 0 ? val = -(β / x) - (1 + α) * log(x) + α * log(β) - loggamma(α) : val = -Inf
     elseif d == 1
         x > 0 ? val = (β / x - (1 + α)) / x : val = 0
     else
@@ -38,7 +38,7 @@ function log_gamma(x::Real, parameters::Vector{<:Real}; d::Integer=0, passed_mod
     α = parameters[1]
     θ = parameters[2]
     if d == 0
-        x > 0 ? val = -(x / θ) + (α - 1) * log(x) - α * log(θ) - log(gamma(α)) : val = -Inf
+        x > 0 ? val = -(x / θ) + (α - 1) * log(x) - α * log(θ) - loggamma(α) : val = -Inf
     elseif d == 1
         x > 0 ? val = (α - 1) / x - 1 / θ : val = 0
     else
@@ -129,7 +129,7 @@ end
 Log of the 2D unit cone PDF
 """
 function log_cone(x::Vector{<:Real}; d::Vector{<:Integer}=[0,0])
-    @assert minimum(d) == 0
+    @assert minimum(d) >= 0
     @assert maximum(d) <= 2
     @assert sum(d) <= 2
 
@@ -156,6 +156,43 @@ function log_cone(x::Vector{<:Real}; d::Vector{<:Integer}=[0,0])
     return val
 end
 
+
+"""
+Log of the bivariate normal PDF
+NOTE THAT THAT WHEN USING lows!=[-∞,...], THIS IS NOT PROPERLY NORMALIZED
+"""
+function log_bvnormal(x::Vector{T}, Σ::Cholesky{T,Matrix{T}}; μ::Vector{T}=zeros(T, length(x)), d::Vector{<:Integer}=[0,0], lows::Vector{T}=zeros(T, length(x)) .- Inf) where {T<:Real}
+    @assert minimum(d) >= 0
+    @assert maximum(d) <= 2
+    @assert sum(d) <= 2
+
+    @assert length(x) == length(d) == length(μ) == 2
+    y = x - μ
+
+    if sum(d) == 0
+        all(x .>= lows) ? val = -nlogL(Σ, y) : val = -Inf
+    elseif sum(d) == 1
+        y1 = Float64.(d)
+        all(x .>= lows) ? val = -dnlogLdθ(y1, Σ \ y) : val = 0
+    elseif d == [0,2]
+        y1 = y2 = [0, 1.]
+        all(x .>= lows) ? val = -d2nlogLdθ(y2, [0,0.], Σ \ y, Σ \ y1) : val = 0
+    elseif d == [1,1]
+        y1 = [1, 0.]
+        y2 = [0, 1.]
+        all(x .>= lows) ? val = -d2nlogLdθ(y2, [0,0.], Σ \ y, Σ \ y1) : val = 0
+    elseif d == [2,0]
+        y1 = y2 = [1, 0.]
+        all(x .>= lows) ? val = -d2nlogLdθ(y2, [0,0.], Σ \ y, Σ \ y1) : val = 0
+    end
+    return val
+end
+function bvnormal_covariance(σ11::Real, σ22::Real, ρ::Real)
+    assert_positive(σ11, σ22)
+    @assert 0 <= ρ <= 1
+    v12 = σ11*σ22*ρ
+    return ridge_chol([σ11^2 v12;v12 σ22^2])
+end
 
 # Keplerian priors references
 # https://arxiv.org/abs/astro-ph/0608328
@@ -219,17 +256,19 @@ function logprior_kepler(
     @assert maximum(d) <= 2
     @assert sum(d) <= 2
 
-    if sum(d .!= 0) > 1; return 0 end
+    if use_hk
+        if any(d[4:5] .!= 0) & all(d[[1,2,3,6]] .== 0); return logprior_hk(e_or_h, ω_or_k; d=d[4:5]) end
+        if sum(d .!= 0) > 1; return 0 end
+    else
+        if sum(d .!= 0) > 1; return 0 end
+        if d[4] != 0; return logprior_e(e_or_h; d=d[4]) end
+        if d[5] != 0; return logprior_ω(ω_or_k; d=d[5]) end
+    end
     if d[1] != 0; return logprior_K(K; d=d[1]) end
     if d[2] != 0; return logprior_P(P; d=d[2]) end
     if d[3] != 0; return logprior_M0(M0; d=d[3]) end
     if d[6] != 0; return logprior_γ(γ; d=d[6]) end
-    if use_hk
-        if any(d[4:5] .!= 0); return logprior_hk(e_or_h, ω_or_k; d=d[4:5]) end
-    else
-        if d[4] != 0; return logprior_e(e_or_h; d=d[4]) end
-        if d[5] != 0; return logprior_ω(ω_or_k; d=d[5]) end
-    end
+
     logP = logprior_K(K)
     # logP += logprior_K(K; P=P)
     logP += logprior_P(P)

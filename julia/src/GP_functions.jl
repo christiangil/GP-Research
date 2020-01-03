@@ -639,25 +639,23 @@ function dif_coefficients!(
 end
 
 
+# TODO: rename nlogL_normalization
 """
-GP negative log marginal likelihood (see Algorithm 2.1 in Rasmussen and Williams 2006)
+Multivariate normal negative log  likelihood
 
 Parameters:
-Σ_obs (Cholesky factorized object): The covariance matrix constructed by
-    evaulating the kernel at each pair of observations and adding measurement
-    noise.
-y (vector): The observations at each time point
+Σ (Cholesky factorized object): The covariance matrix
+y (vector): The values
 α (vector): inv(Σ_obs) * y_obs
 
 Returns:
 float: the negative log marginal likelihood
-
 """
 function nlogL(
-    Σ_obs::Cholesky{T,Matrix{T}},
+    Σ::Cholesky{T,Matrix{T}},
     y::Vector{T},
     α::Vector{T};
-    nlogL_normalization::T=logdet(Σ_obs)+length(y)*log(2*π)
+    nlogL_normalization::T=logdet(Σ)+length(y)*log(2*π)
     ) where {T<:Real}
 
     # n = length(y)
@@ -673,7 +671,6 @@ function nlogL(
     return (data_fit + nlogL_normalization) / 2
 
 end
-
 nlogL(Σ_obs, y; nlogL_normalization=logdet(Σ_obs)+length(y)*log(2*π)) =
     nlogL(Σ_obs, y, Σ_obs \ y; nlogL_normalization=nlogL_normalization)
 

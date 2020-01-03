@@ -16,7 +16,7 @@ if called_from_terminal
     kernel_name = kernel_names[kernel_choice]
     seed = parse(Int, ARGS[2])
 else
-    kernel_choice = 1
+    kernel_choice = 4
     kernel_name = kernel_names[kernel_choice]
     seed = 8
 end
@@ -65,10 +65,9 @@ begin
     end
     println()
 end
-
 if kernel_name in ["pp", "se", "m52"]
     # normals
-    parameters = gamma_mode_std_2_alpha_theta(10, 10)
+    parameters = gamma_mode_std_2_alpha_theta(30, 10)
     function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
         return [log_gamma(hps[1], parameters; d=d)]
     end
@@ -81,31 +80,46 @@ elseif kernel_name in ["rq", "rm52"]
     end
 elseif  kernel_name == "qp"
     # qp
-    paramsλp = gamma_mode_std_2_alpha_theta(2, 3)
-    paramsP = gamma_mode_std_2_alpha_theta(20, 10)
-    paramsλse = gamma_mode_std_2_alpha_theta(40, 20)
-    function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
-        return [log_gamma(hps[1], paramsP; d=d), log_gamma(hps[2], paramsλse; d=d), log_gamma(hps[3], paramsλp; d=d)]
+    paramsλp = gamma_mode_std_2_alpha_theta(1, 1)
+    σP = 7.5; σse = 15; ρ = .9
+    Σ_qp_prior = bvnormal_covariance(σP, σse, ρ)
+    μ_qp_prior = [30, 60.]
+    function nlogprior_kernel_hyperparameters(n_kern_hyper::Integer, total_hyperparameters::Vector{<:Real}, d::Integer)
+        hps = total_hyperparameters[(end - (n_kern_hyper - 1)):end]
+        if d == 0
+            return -(log_bvnormal(hps[1:2], Σ_qp_prior; μ=μ_qp_prior, lows=[0,0.]) + log_gamma(hps[3], paramsλp))
+        elseif d == 1
+            return append!(zeros(length(total_hyperparameters) - n_kern_hyper), -[log_bvnormal(hps[1:2], Σ_qp_prior; μ=μ_qp_prior, lows=[0,0.], d=[1,0]), log_bvnormal(hps[1:2], Σ_qp_prior; μ=μ_qp_prior, lows=[0,0.], d=[0,1]), log_gamma(hps[3], paramsλp; d=d)])
+        elseif d == 2
+            H = zeros(length(total_hyperparameters), length(total_hyperparameters))
+            H[end-2,end-2] = log_bvnormal(hps[1:2], Σ_qp_prior; μ=μ_qp_prior, lows=[0,0.], d=[2,0])
+            H[end-1,end-1] = log_bvnormal(hps[1:2], Σ_qp_prior; μ=μ_qp_prior, lows=[0,0.], d=[0,2])
+            H[end,end] = log_gamma(hps[3], paramsλp; d=d)
+            H[end-2,end-1] = log_bvnormal(hps[1:2], Σ_qp_prior; μ=μ_qp_prior, lows=[0,0.], d=[1,1])
+            return Symmetric(H)
+        end
     end
 elseif kernel_name == "m52x2"
     # m52x2
-    paramsλ1 = gamma_mode_std_2_alpha_theta(10, 10)
-    paramsλ2 = gamma_mode_std_2_alpha_theta(20, 10)
+    paramsλ1 = gamma_mode_std_2_alpha_theta(30, 7.5)
+    paramsλ2 = gamma_mode_std_2_alpha_theta(60, 15)
     function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
-        return [log_gamma(hps[1], paramsλ1; d=d), log_gamma(hps[2], paramsλ2; d=d), log_gaussian(hps[3], [0, 3]; d=d)]
+        return [log_gamma(hps[1], paramsλ1; d=d), log_gamma(hps[2], paramsλ2; d=d), log_gaussian(hps[3], [1, 1]; d=d)]
     end
 end
 
-function nlogprior_kernel_hyperparameters(n_kern_hyper::Integer, total_hyperparameters::Vector{<:Real}, d::Integer)
-    hps = total_hyperparameters[(end - (n_kern_hyper - 1)):end]
-    if d == 0
-        return -sum(kernel_hyper_priors(hps, d))
-    elseif d == 1
-        return append!(zeros(length(total_hyperparameters) - n_kern_hyper), -kernel_hyper_priors(hps, d))
-    elseif d == 2
-        H = zeros(length(total_hyperparameters), length(total_hyperparameters))
-        H[(end - (n_kern_hyper - 1)):end, (end - (n_kern_hyper - 1)):end] -= Diagonal(kernel_hyper_priors(hps, d))
-        return H
+if !(kernel_name in ["qp"])
+    function nlogprior_kernel_hyperparameters(n_kern_hyper::Integer, total_hyperparameters::Vector{<:Real}, d::Integer)
+        hps = total_hyperparameters[(end - (n_kern_hyper - 1)):end]
+        if d == 0
+            return -sum(kernel_hyper_priors(hps, d))
+        elseif d == 1
+            return append!(zeros(length(total_hyperparameters) - n_kern_hyper), -kernel_hyper_priors(hps, d))
+        elseif d == 2
+            H = zeros(length(total_hyperparameters), length(total_hyperparameters))
+            H[(end - (n_kern_hyper - 1)):end, (end - (n_kern_hyper - 1)):end] -= Diagonal(kernel_hyper_priors(hps, d))
+            return H
+        end
     end
 end
 
@@ -184,10 +198,10 @@ end
 function optim_cb(x::OptimizationState)
     println()
     if x.iteration > 0
-        println("Iteration:     ", x.iteration)
-        println("Time so far:   ", x.metadata["time"], " s")
-        println("nlogL:         ", x.value)
-        println("Gradient Norm: ", x.g_norm)
+        println("Iteration:             ", x.iteration)
+        println("Time so far:           ", x.metadata["time"], " s")
+        println("Unnormalized evidence: ", x.value)
+        println("Gradient Norm:         ", x.g_norm)
         println()
         # update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
     end
@@ -573,13 +587,13 @@ end
 
 
 # planet
-H2 = ∇∇nlogL_Jones_and_planet!(workspace, problem_definition, fit3_total_hyperparameters, full_ks)
+H2 = Matrix(∇∇nlogL_Jones_and_planet!(workspace, problem_definition, fit3_total_hyperparameters, full_ks))
 n_hyper = length(remove_zeros(fit3_total_hyperparameters))
-H2[diagind(H2)[1:n_hyper]] += diag(nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit3_total_hyperparameters), 2))
-H2[diagind(H2)[n_hyper+1:n_hyper+n_kep_parms]] -= diag(logprior_kepler_tot(full_ks; d_tot=2, use_hk=true))
+H2[1:n_hyper, 1:n_hyper] += nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit3_total_hyperparameters), 2)
+H2[n_hyper+1:n_hyper+n_kep_parms, n_hyper+1:n_hyper+n_kep_parms] -= logprior_kepler_tot(full_ks; d_tot=2, use_hk=true)
 uE2 = -fit_nlogL2 - nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit3_total_hyperparameters, 0) + logprior_kepler(full_ks; use_hk=true)
 try
-    global E2 = log_laplace_approximation(H2, -uE2, 0)
+    global E2 = log_laplace_approximation(Symmetric(H2), -uE2, 0)
 catch
     println("Laplace approximation failed for planet fit")
     println("det(H2): $(det(H2)) (should've been positive)")
@@ -588,13 +602,13 @@ end
 
 
 # true planet
-H3 = ∇∇nlogL_Jones_and_planet!(workspace, problem_definition, fit4_total_hyperparameters, original_ks)
-H3[diagind(H3)[1:n_hyper]] += diag(nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit4_total_hyperparameters), 2))
-H3[diagind(H3)[n_hyper+1:n_hyper+n_kep_parms]] -= diag(logprior_kepler_tot(original_ks; d_tot=2, use_hk=true))
-# often the following often wont work because the keplerian paramters haven't been optimized on the data
+H3 = Matrix(∇∇nlogL_Jones_and_planet!(workspace, problem_definition, fit4_total_hyperparameters, original_ks))
+H3[1:n_hyper, 1:n_hyper] += nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, remove_zeros(fit4_total_hyperparameters), 2)
+H3[n_hyper+1:n_hyper+n_kep_parms, n_hyper+1:n_hyper+n_kep_parms] -= logprior_kepler_tot(original_ks; d_tot=2, use_hk=true)
 uE3 = -fit_nlogL3 - nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit4_total_hyperparameters, 0) + logprior_kepler(original_ks; use_hk=true)
 try
-    global E3 = log_laplace_approximation(H3, -uE3, 0)
+    # often the following often wont work because the keplerian paramters haven't been optimized on the data
+    global E3 = log_laplace_approximation(Symmetric(H3), -uE3, 0)
     # equivalent to fitting original dataset with no planet
     # global llH3 = log_laplace_approximation(Symmetric(H3[1:6,1:6]), fit_nlogL3 + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit4_total_hyperparameters, 0), 0)
 catch
@@ -602,6 +616,7 @@ catch
     println("det(H3): $(det(H3)) (could've been positive)")
     global E3 = 0
 end
+
 
 println("\nlog likelihood for Jones model: " * string(-fit_nlogL1))
 println("log likelihood for Jones + planet model: " * string(-fit_nlogL2))

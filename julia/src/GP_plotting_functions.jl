@@ -59,6 +59,7 @@ function custom_GP_plot(
 
         ax1.scatter(x_obs, y_obs, color="black", zorder=2)
         ax1.errorbar(x_obs, y_obs, yerr=[errors';errors'], fmt="o", color="black", zorder=2)
+        ax1.get_xaxis().set_visible(false)
 
         resids = y_obs - mean_obs
         ax2.scatter(x_obs, resids, color="black")

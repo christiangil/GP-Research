@@ -4,12 +4,11 @@ Derivative of transformed Keplerian parameters defined in Pal 2019
 
 Parameters:
 K (real): velocity semi-amplitude
-h * (real): eccentricity * sin(argument of periastron)
-k * (real): eccentricity * cos(argument of periastron)
-M0 (real): initial mean anomaly
-γ (real): velocity offset
 P (real): period
-λ (real): mean anomaly + argument of periastron
+M0 (real): initial mean anomaly
+h (real): eccentricity * sin(argument of periastron)
+k (real): eccentricity * cos(argument of periastron)
+γ (real): velocity offset
 dorder (vector of integers): A vector of how many partial derivatives you want
 	to take with respect to each variable in the following order Basic[k, l, q, an, γ, λ]
 	Can only take up to 2 * partials * (aka sum(dorder) < 3).
