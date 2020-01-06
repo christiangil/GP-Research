@@ -9,84 +9,161 @@ kernel_names = ["pp", "se", "m52", "qp", "m52x2"]
 nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
 # nice_kernel_names = ["Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
 Ks = [string(round(i, digits=2)) for i in (collect(0:10) / 10)]
-seeds = [string(i) for i in 1:10]
+seeds = [string(i) for i in 1:30]
+detect_thres = 0.99
+detection = [0., 0.]
 
 using CSV, DataFrames
 
-ax = init_plot()
+lrs = zeros(length(kernel_names), length(Ks))
+lrs_errs_high = copy(lrs)
+lrs_errs_low = copy(lrs)
+lrs_detection = copy(lrs)
+ers = copy(lrs)
+ers_errs_high = copy(lrs)
+ers_errs_low = copy(lrs)
+ers_detection = copy(lrs)
+
 for k in 1:length(kernel_names)
     failures = 0
+    e_failures = 0
     kernel_name = kernel_names[k]
-    factors = zeros(length(Ks))
-    factor_errs = zeros(length(Ks))
     for i in 1:length(Ks)
         K = Ks[i]
-        seed_factors = zeros(length(seeds))
+        seed_lrs = zeros(length(seeds))
+        seed_ers = zeros(length(seeds))
         for j in 1:length(seeds)
             seed = seeds[j]
-            results_dir = "results/$(kernel_name)/K_$(string(K))/seed_$(seed)/"
             try
-                df = CSV.read(results_dir * "logL.csv")
-                seed_factors[j] = (df.L2-df.L1)[1]
+                df = CSV.read("results/$(kernel_name)/K_$(string(K))/seed_$(seed)/logL.csv")
+                seed_lrs[j] = (df.L2-df.L1)[1]
+                if ((df.E2[1] != 0) & (df.E1[1] != 0))
+                    seed_ers[j] = (df.E2-df.E1)[1]
+                else
+                    println(kernel_name, " ", K, " ", seed, " has weird evidence")
+                    e_failures += 1
+                end
             catch
                 println(kernel_name, " ", K, " ", seed, " failed")
-                seed_factors[j] = 0
                 failures += 1
             end
         end
-        factors[i] = mean(remove_zeros(seed_factors))
-        factor_errs[i] = std(remove_zeros(seed_factors))
+        seed_lrs = remove_zeros(seed_lrs)
+        lrs[k, i] = median(seed_lrs)
+        lrs_errs_high[k, i] = quantile(seed_lrs, 0.84)
+        lrs_errs_low[k, i] = quantile(seed_lrs, 0.16)
+        if i==1; detection[1] = quantile(seed_lrs, detect_thres) end
+        lrs_detection[k, i] = sum(seed_lrs .>= detection[1]) / length(seed_lrs)
+
+        seed_ers = remove_zeros(seed_ers)
+        ers[k, i] = median(seed_ers)
+        ers_errs_high[k, i] = quantile(seed_ers, 0.84)
+        ers_errs_low[k, i] = quantile(seed_ers, 0.16)
+        if i==1; detection[2] = quantile(seed_ers, detect_thres) end
+        ers_detection[k, i] = sum(seed_ers .>= detection[2]) / length(seed_ers)
+
     end
     println(kernel_name, " failed ", failures, " times")
-    plot(Ks, factors, color="C$(k-1)", zorder=2, label=nice_kernel_names[k])
-    fill_between(Ks, factors + factor_errs, factors - factor_errs, alpha=0.1, color="C$(k-1)")
-    # errorbar(Ks, factors, yerr=[factor_errs';factor_errs'], color="C$(k-1)", fmt="o", zorder=2)
-    scatter(Ks, factors, color="C$(k-1)", zorder=2)
+    println(kernel_name, " had weird evidence an additional ", e_failures, " times")
 end
+
 # n=100
 # ax.axvline(x=.25*sqrt(50/n) * 10, color="black", linewidth=3)  # should be 0.25?
+
+ax = init_plot()
+for i in 1:length(kernel_names)
+    plot(Ks, lrs[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
+    fill_between(Ks, lrs_errs_high[i,:], lrs_errs_low[i,:], alpha=0.1, color="C$(i-1)")
+    # errorbar(Ks, factors, yerr=[factor_errs';factor_errs'], color="C$(k-1)", fmt="o", zorder=2)
+    scatter(Ks, lrs[i,:], color="C$(i-1)", zorder=2)
+end
+ax.axhline(y=detection[1], color="black", linewidth=3)
 legend(;loc="upper left", fontsize=30)
 xlabel("K " * L"(^m/_s)")
 ylabel("Likelihood ratios")
-title("Likelihood ratio of models fit with\nand without a planet signal", fontsize=45)
+title("Likelihood ratios of models fit with\nand without a planet signal", fontsize=45)
 save_PyPlot_fig("LRs.png")
+
+ax = init_plot()
+for i in 1:length(kernel_names)
+    plot(Ks, ers[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
+    fill_between(Ks, ers_errs_high[i,:], ers_errs_low[i,:], alpha=0.1, color="C$(i-1)")
+    # errorbar(Ks, factors, yerr=[factor_errs';factor_errs'], color="C$(k-1)", fmt="o", zorder=2)
+    scatter(Ks, ers[i,:], color="C$(i-1)", zorder=2)
+end
+ax.axhline(y=detection[2], color="black", linewidth=3)
+legend(;loc="upper left", fontsize=30)
+xlabel("K " * L"(^m/_s)")
+ylabel("Evidence ratios")
+title("Evidence ratios of models fit with\nand without a planet signal", fontsize=45)
+save_PyPlot_fig("ERs.png")
 
 
 ax = init_plot()
-for k in 1:length(kernel_names)
-    kernel_name = kernel_names[k]
-    factors = zeros(length(Ks))
-    factor_errs = zeros(length(Ks))
-    for i in 1:length(Ks)
-        K = Ks[i]
-        seed_factors = zeros(length(seeds))
-        for j in 1:length(seeds)
-            seed = seeds[j]
-            results_dir = "results/$(kernel_name)/K_$(string(K))/seed_$(seed)/"
-            try
-                df = CSV.read(results_dir * "logL.csv")
-                if ((df.E2[1] != 0) & (df.E1[1] != 0))
-                    seed_factors[j] = (df.E2-df.E1)[1]
-                    # println(df.E2, df.E1)
-                else
-                    println("had to ignore weirdness")
-                end
-            catch
-                seed_factors[j] = 0
-            end
-        end
-        factors[i] = mean(remove_zeros(seed_factors))
-        factor_errs[i] = std(remove_zeros(seed_factors))
-    end
-    plot(Ks, factors, color="C$(k-1)", zorder=2, label=nice_kernel_names[k])
-    fill_between(Ks, factors + factor_errs, factors - factor_errs, alpha=0.1, color="C$(k-1)")
-    # errorbar(Ks, factors, yerr=[factor_errs';factor_errs'], color="C$(k-1)", fmt="o", zorder=2)
-    scatter(Ks, factors, color="C$(k-1)", zorder=2)
+for i in 1:length(kernel_names)
+    plot(Ks, lrs_detection[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
+    scatter(Ks, lrs_detection[i,:], color="C$(i-1)", zorder=2)
 end
-# n=100
-# ax.axvline(x=.25*sqrt(50/n) * 10, color="black", linewidth=3)  # should be 0.25?
-legend(;loc="upper left", fontsize=30)
+ax.axhline(y=0.5, color="black", linewidth=3)
+legend(;loc="lower right", fontsize=30)
 xlabel("K " * L"(^m/_s)")
-ylabel("Evidence ratio")
-title("Evidence ratio of models fit with\nand without a planet signal", fontsize=45)
-save_PyPlot_fig("ERs.png")
+title("Proportion of likelihood ratios > the " * string(Int(round(detect_thres * 100))) * "th percentile", fontsize=45)
+save_PyPlot_fig("detections_LRs.png")
+
+
+ax = init_plot()
+for i in 1:length(kernel_names)
+    plot(Ks, ers_detection[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
+    scatter(Ks, ers_detection[i,:], color="C$(i-1)", zorder=2)
+end
+ax.axhline(y=0.5, color="black", linewidth=3)
+legend(;loc="lower right", fontsize=30)
+xlabel("K " * L"(^m/_s)")
+title("Proportion of evidence ratios > the " * string(Int(round(detect_thres * 100))) * "th percentile", fontsize=45)
+save_PyPlot_fig("detections_ERs.png")
+
+
+
+# ax = init_plot()
+# for k in 1:length(kernel_names)
+#     kernel_name = kernel_names[k]
+#     factors = zeros(length(Ks))
+#     factor_errs_high = zeros(length(Ks))
+#     factor_errs_low = zeros(length(Ks))
+#     for i in 1:length(Ks)
+#         K = Ks[i]
+#         seed_factors = zeros(length(seeds))
+#         for j in 1:length(seeds)
+#             seed = seeds[j]
+#             results_dir = "results/$(kernel_name)/K_$(string(K))/seed_$(seed)/"
+#             try
+#                 df = CSV.read(results_dir * "logL.csv")
+#                 if ((df.E2[1] != 0) & (df.E1[1] != 0))
+#                     seed_factors[j] = (df.E2-df.E1)[1]
+#                     # println(df.E2, df.E1)
+#                 else
+#                     println("had to ignore weirdness for ", kernel_name, " ", K, " ", seed)
+#                 end
+#             catch
+#                 seed_factors[j] = 0
+#             end
+#         end
+#         seed_factors = remove_zeros(seed_factors)
+#         factors[i] = median(seed_factors)
+#         factor_errs_high[i] = quantile(seed_factors, 0.84)
+#         factor_errs_low[i] = quantile(seed_factors, 0.16)
+#         if i==1; detection[2] = quantile(seed_factors, 0.99) end
+#     end
+#     plot(Ks, factors, color="C$(k-1)", zorder=2, label=nice_kernel_names[k])
+#     fill_between(Ks, factor_errs_high, factor_errs_low, alpha=0.1, color="C$(k-1)")
+#     # errorbar(Ks, factors, yerr=[factor_errs';factor_errs'], color="C$(k-1)", fmt="o", zorder=2)
+#     scatter(Ks, factors, color="C$(k-1)", zorder=2)
+# end
+# # n=100
+# # ax.axvline(x=.25*sqrt(50/n) * 10, color="black", linewidth=3)  # should be 0.25?
+# ax.axhline(y=detection[2], color="black", linewidth=3)
+# legend(;loc="upper left", fontsize=30)
+# xlabel("K " * L"(^m/_s)")
+# ylabel("Evidence ratios")
+# title("Evidence ratios of models fit with\nand without a planet signal", fontsize=45)
+# save_PyPlot_fig("ERs.png")

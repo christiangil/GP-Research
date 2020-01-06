@@ -16,9 +16,9 @@ if called_from_terminal
     kernel_name = kernel_names[kernel_choice]
     seed = parse(Int, ARGS[2])
 else
-    kernel_choice = 4
+    kernel_choice = 1
     kernel_name = kernel_names[kernel_choice]
-    seed = 8
+    seed = 7
 end
 
 # allowing covariance matrix to be calculated in parallel
@@ -39,15 +39,15 @@ println("optimizing on $fname using the $kernel_name")
 if called_from_terminal
     problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
 else
-    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
 end
 
 ########################################
 # Adding planet and normalizing scores #
 ########################################
 
-length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.5  # m/s
+length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.0  # m/s
 # draw over more periods?
 original_ks = kep_signal(K_val * u"m/s", (8 + 1 * randn())u"d", 2 * π * rand(), rand() / 5, 2 * π * rand(), 0u"m/s")
 add_kepler_to_Jones_problem_definition!(problem_definition, original_ks)
@@ -65,6 +65,7 @@ begin
     end
     println()
 end
+
 if kernel_name in ["pp", "se", "m52"]
     # normals
     parameters = gamma_mode_std_2_alpha_theta(30, 10)
@@ -81,7 +82,7 @@ elseif kernel_name in ["rq", "rm52"]
 elseif  kernel_name == "qp"
     # qp
     paramsλp = gamma_mode_std_2_alpha_theta(1, 1)
-    σP = 7.5; σse = 15; ρ = .9
+    σP = 10; σse = 20; ρ = .9
     Σ_qp_prior = bvnormal_covariance(σP, σse, ρ)
     μ_qp_prior = [30, 60.]
     function nlogprior_kernel_hyperparameters(n_kern_hyper::Integer, total_hyperparameters::Vector{<:Real}, d::Integer)
@@ -101,8 +102,8 @@ elseif  kernel_name == "qp"
     end
 elseif kernel_name == "m52x2"
     # m52x2
-    paramsλ1 = gamma_mode_std_2_alpha_theta(30, 7.5)
-    paramsλ2 = gamma_mode_std_2_alpha_theta(60, 15)
+    paramsλ1 = gamma_mode_std_2_alpha_theta(30, 10)
+    paramsλ2 = gamma_mode_std_2_alpha_theta(60, 20)
     function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
         return [log_gamma(hps[1], paramsλ1; d=d), log_gamma(hps[2], paramsλ2; d=d), log_gaussian(hps[3], [1, 1]; d=d)]
     end
