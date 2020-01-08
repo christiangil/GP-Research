@@ -257,7 +257,7 @@ function logprior_kepler(
     @assert sum(d) <= 2
 
     if use_hk
-        if any(d[4:5] .!= 0) & all(d[[1,2,3,6]] .== 0); return logprior_hk(e_or_h, ω_or_k; d=d[4:5]) end
+        if any(d[4:5] .!= 0) && all(d[[1,2,3,6]] .== 0); return logprior_hk(e_or_h, ω_or_k; d=d[4:5]) end
         if sum(d .!= 0) > 1; return 0 end
     else
         if sum(d .!= 0) > 1; return 0 end
@@ -309,7 +309,6 @@ function logprior_kepler_tot(ks::Union{kep_signal, kep_signal_epicyclic, kep_sig
         return Symmetric(H)
     end
 end
-
 
 # const prior_α = 1
 # const prior_β = 5

@@ -6,11 +6,11 @@ Parameters:
 K (real): velocity semi-amplitude
 P (real): period
 M0 (real): initial mean anomaly
-h (real): eccentricity * sin(argument of periastron)
-k (real): eccentricity * cos(argument of periastron)
+h * (real): eccentricity * sin(argument of periastron)
+k * (real): eccentricity * cos(argument of periastron)
 γ (real): velocity offset
 dorder (vector of integers): A vector of how many partial derivatives you want
-	to take with respect to each variable in the following order Basic[k, l, q, an, γ, λ]
+	to take with respect to each variable in the following order Basic[k, l, q, an, γ, λ)
 	Can only take up to 2 * partials * (aka sum(dorder) < 3).
 
 Returns:
@@ -35,7 +35,7 @@ function kep_deriv(
 	q = e * cos(EA)
 	p = e * sin(EA)
 	ω = atan(h, k)
-	# λ = mean_anomaly(t, P, M0) + atan(h, k)
+	# λ = mean_anomaly(t, P, M1] + atan(h, k)
 	# c = cos(λ + p)
 	# s = sin(λ + p)
 	c = cos(EA + ω)
@@ -151,6 +151,7 @@ function kep_deriv(
 			qmod^3)
 	end
 
+	# TODO find out why this is slightly incorrect
 	if dorder==[0, 0, 0, 0, 2, 0]
 		func = -(((-jmod^2 * jsq^3 * (c * esq - esq * k + h * p)^2 * (c + c * j - k * q) -
 	   		esq * jmod^2 * jsq^2 * k * (-c * esq + esq * k - h * p) * (c + c * j -
@@ -182,117 +183,42 @@ function kep_deriv(
 			esq^2 * (-qmod - s^2)))) * K) / (jmod^3 * j^5 * (esq - esq * q)^2 * qmod^3))
 	end
 
+	# TODO find out why this is slightly incorrect
 	if dorder==[0, 0, 0, 1, 1, 0]
-		func = -(((2 * jmod * jsq^2 * (c * esq - esq * k +
-			h * p) * (esq * h * jmod * (c + c * j - k * q) * qmod^2 +
-          	jmod * jsq * (c + c * j - k * q) * (k * p + esq * (h - s)) +
-          	j * qmod * (esq * h * k * q * qmod - j * jmod * k * (k * p + esq * (h - s)) -
-            j * jmod^2 * (c * esq - k) * s)) +
-       		esq * jmod * jsq * k * qmod^2 * (esq * h * jmod * (c + c * j - k * q) * qmod^2 +
-          	jmod * jsq * (c + c * j - k * q) * (k * p + esq * (h - s)) +
-          	j * qmod * (esq * h * k * q * qmod - j * jmod * k * (k * p + esq * (h - s)) -
-            j * jmod^2 * (c * esq - k) * s)) -
-       		j * (esq * h * j * jmod^2 * jsq * (c * esq - esq * k + h * p) * (c + c * j -
-            k * q) * qmod^2 -
-          	jmod^2 * j^5 * (c * esq - esq * k + h * p) * (c + c * j - k * q) * (k * p +
-            esq * (h - s)) +
-          	2 * esq * j * jmod^2 * jsq * k * (c + c * j - k * q) * qmod^2 * (k * p +
-            esq * (h - s)) +
-          	jmod * jsq^2 * (c * esq - esq * k + h * p) * qmod * (esq * h * k * q * qmod -
-            j * jmod * k * (k * p + esq * (h - s)) - j * jmod^2 * (c * esq - k) * s) +
-          	2 * esq * jmod * jsq * k * qmod^3 * (esq * h * k * q * qmod -
-            j * jmod * k * (k * p + esq * (h - s)) - j * jmod^2 * (c * esq - k) * s) +
-          	esq * h * jmod * jsq * qmod^3 * (j * jmod * k * (c * esq - esq * k + h * p) -
-            esq * (-1 + h^2 - j) * q * qmod + j * jmod^2 * s * (-h + esq * s)) +
-          	jmod * jsq^2 * qmod * (k * p +
-            esq * (h - s)) * (j * jmod * k * (c * esq - esq * k + h * p) -
-            esq * (-1 + h^2 - j) * q * qmod + j * jmod^2 * s * (-h + esq * s)) -
-          	jmod^2 * j^5 * (c + c * j - k * q) * qmod * ((h^2 - k^2) * p * qmod +
-            c * esq * (h - esq * s) + k * (h * q + esq * s)) -
-          	qmod * (-esq * h * jmod * jsq^2 * k * (-c * esq + esq * k - h * p) * qmod^2 +
-            esq^2 * h * jmod * jsq^2 * q * qmod^3 +
-            esq^2 * h * jmod * jsq * k^2 * q * qmod^3 +
-            2 * esq^2 * h * j^3 * k^2 * q * qmod^3 +
-            jmod^2 * j^5 * k * (-c * esq + esq * k - h * p) * (k * p + esq * (h - s)) -
-            esq * jmod^2 * j^5 * qmod^2 * (k * p + esq * (h - s)) -
-            esq * jmod * jsq^2 * k^2 * qmod^2 * (k * p + esq * (h - s)) -
-            jmod^3 * j^5 * (c * esq - k) * (c * esq - esq * k + h * p) * s -
-            c * jmod^3 * j^5 * (c * esq - k) * qmod * (-h + esq * s) +
-            jmod^3 * j^5 *
-            qmod * s * ((h^2 - k^2) * qmod + esq * s * (-h + esq * s)) -
-            jmod^2 * j^5 *
-            k * qmod * ((h^2 - k^2) * p * qmod + c * esq * (h - esq * s) +
-            k * (h * q + esq * s))))) * K) / (jmod^3 * j^5 * (esq - esq * q)^2 * qmod^3))
+		func = -(((2 * jmod * jsq^2 * (c * esq - esq * k + h * p) * (esq * h *
+		jmod * (c + c * j - k * q) * qmod^2 + jmod * jsq * (c + c * j - k * q) *
+		(k * p + esq * (h - s)) + j * qmod * (esq * h * k * q * qmod - j *
+		jmod * k * (k * p + esq * (h - s)) - j * jmod^2 * (c * esq - k) * s)) +
+		esq * jmod * jsq * k * qmod^2 * (esq * h * jmod * (c + c * j - k * q) *
+		qmod^2 + jmod * jsq * (c + c * j - k * q) * (k * p + esq * (h - s)) +
+		j * qmod * (esq * h * k * q * qmod - j * jmod * k * (k * p + esq * (h -
+		s)) - j * jmod^2 * (c * esq - k) * s)) - j * (esq * h * j * jmod^2 *
+		jsq * (c * esq - esq * k + h * p) * (c + c * j - k * q) * qmod^2 -
+		jmod^2 * j^5 * (c * esq - esq * k + h * p) * (c + c * j - k * q) * (k *
+		p + esq * (h - s)) + 2 * esq * j * jmod^2 * jsq * k * (c + c * j - k *
+		q) * qmod^2 * (k * p + esq * (h - s)) + jmod * jsq^2 * (c * esq - esq *
+		k + h * p) * qmod * (esq * h * k * q * qmod - j * jmod * k * (k * p +
+		esq * (h - s)) - j * jmod^2 * (c * esq - k) * s) + 2 * esq * jmod *
+		jsq * k * qmod^3 * (esq * h * k * q * qmod - j * jmod * k * (k * p +
+		esq * (h - s)) - j * jmod^2 * (c * esq - k) * s) + esq * h * jmod *
+		jsq * qmod^3 * (j * jmod * k * (c * esq - esq * k + h * p) - esq * (-1 +
+		h^2 - j) * q * qmod + j * jmod^2 * s * (-h + esq * s)) + jmod * jsq^2 *
+		qmod * (k * p + esq * (h - s)) * (j * jmod * k * (c * esq - esq * k +
+		h * p) - esq * (-1 + h^2 - j) * q * qmod + j * jmod^2 * s * (-h + esq *
+		s)) - jmod^2 * j^5 * (c + c * j - k * q) * qmod * ((h^2 - k^2) * p *
+		qmod + c * esq * (h - esq * s) + k * (h * q + esq * s)) - qmod * (-esq *
+		h * jmod * jsq^2 * k * (-c * esq + esq * k - h * p) * qmod^2 + esq^2 *
+		h * jmod * jsq^2 * q * qmod^3 + esq^2 * h * jmod * jsq * k^2 * q *
+		qmod^3 + 2 * esq^2 * h * j^3 * k^2 * q * qmod^3 + jmod^2 * j^5 * k *
+		(-c * esq + esq * k - h * p) * (k * p + esq * (h - s)) - esq * jmod^2 *
+		j^5 * qmod^2 * (k * p + esq * (h - s)) - esq * jmod * jsq^2 * k^2 *
+		qmod^2 * (k * p + esq * (h - s)) - jmod^3 * j^5 * (c * esq - k) * (c *
+		esq - esq * k + h * p) * s - c * jmod^3 * j^5 * (c * esq - k) * qmod *
+		(-h + esq * s) + jmod^3 * j^5 * qmod * s * ((h^2 - k^2) * qmod + esq *
+		s * (-h + esq * s)) - jmod^2 * j^5 * k * qmod * ((h^2 - k^2) * p *
+		qmod + c * esq * (h - esq * s) + k * (h * q + esq * s))))) * K) /
+		(jmod^3 * j^5 * (esq - esq * q)^2 * qmod^3))
 	end
-
-	# if dorder==[0, 0, 2, 0, 0, 0]
-	#	 func = -(((-jmod^2 * jsq^3 * (c * esq - esq * k + h * p)^2 * (c + c *
-	# 		j - k * q) - esq * jmod^2 * jsq^2 * k * (-c * esq + esq * k - h *
-	# 		p) * (c + c * j - k * q) * qmod^2 + esq^2 * jmod^2 * jsq^2 * (c +
-	# 		c * j - k * q) * qmod^4 - 3 * esq * j * jmod * jsq * k * qmod^3 *
-	# 		(j * jmod * k * (c * esq - esq * k + h * p) - esq * (-1 + h^2 - j) *
-	# 		q * qmod + j * jmod^2 * s * (-h + esq * s)) - jmod^2 * jsq^3 * (c +
-	# 		c * j - k * q) * qmod * (h * (h * q - 2 * k * p * qmod) + 2 * esq *
-	# 		h * s + esq^2 * (-qmod - s^2)) - 2 * jmod * jsq^2 * (c * esq -
-	# 		esq * k + h * p) * (jmod * jsq * (c * esq - esq * k + h * p) *
-	# 		(c + c * j - k * q) - esq * jmod * k * (c + c * j - k * q) * qmod^2 -
-	# 		j * qmod * (j * jmod * k * (c * esq - esq * k + h * p) - esq *
-	# 		(-1 + h^2 - j) * q * qmod + j * jmod^2 * s * (-h + esq * s))) -
-	# 		esq * jmod * jsq * k * qmod^2 * (jmod * jsq * (c * esq - esq *
-	# 		k + h * p) * (c + c * j - k * q) - esq * jmod * k * (c + c * j - k *
-	# 		q) * qmod^2 - j * qmod * (j * jmod * k * (c * esq - esq * k + h *
-	# 		p) - esq * (-1 + h^2 - j) * q * qmod + j * jmod^2 * s * (-h + esq *
-	# 		s))) + j * qmod * (jmod^2 * j^5 * k * (c * esq - esq * k + h * p)^2 -
-	# 		esq * jmod * jsq^2 * k^2 * (-c * esq + esq * k - h * p) * qmod^2 +
-	# 		esq * jmod * (-h^2 + jmod) * jsq^2 * (c * esq - esq * k + h * p) *
-	# 		qmod^2 + esq * jmod^2 * j^5 * (c * esq - esq * k + h * p) * qmod^2 +
-	# 		esq^2 * jmod * (-h^2 + jmod) * jsq * k * q * qmod^3 - 2 * esq^2 *
-	# 		(-1 + h^2 - j) * j^3 * k * q * qmod^3 - esq^2 * jmod * j^3 * k * q *
-	# 		qmod^3 + c * jmod^3 * j^5 * qmod * (h - esq * s)^2 + jmod^3 * j^5 *
-	# 		(c * esq - esq * k + h * p) * s * (-h + esq * s) + jmod^3 * j^5 *
-	# 		qmod * s * (2 * h * k * qmod + c * esq * (-h + esq * s)) + jmod^2 *
-	# 		j^5 * k * qmod * (h * (h * q - 2 * k * p * qmod) + 2 * esq * h * s +
-	# 		esq^2 * (-qmod - s^2)))) * K) / (jmod^3 * j^5 * (esq - esq * q)^2 *
-	# 		qmod^3))
-	# end
-	#
-	# if dorder==[0, 1, 1, 0, 0, 0]
-	#	 func = -(((2 * jmod * jsq^2 * (c * esq - esq * k + h * p) * (esq * h *
-	# 		jmod * (c + c * j - k * q) * qmod^2 + jmod * jsq * (c + c * j - k *
-	# 		q) * (k * p + esq * (h - s)) + j * qmod * (esq * h * k * q * qmod -
-	# 		j * jmod * k * (k * p + esq * (h - s)) - j * jmod^2 * (c * esq - k) *
-	# 		s)) + esq * jmod * jsq * k * qmod^2 * (esq * h * jmod * (c + c *
-	# 		j - k * q) * qmod^2 + jmod * jsq * (c + c * j - k * q) * (k * p +
-	# 		esq * (h - s)) + j * qmod * (esq * h * k * q * qmod - j * jmod * k *
-	# 		(k * p + esq * (h - s)) - j * jmod^2 * (c * esq - k) * s)) - j *
-	# 		(esq * h * j * jmod^2 * jsq * (c * esq - esq * k + h * p) * (c +
-	# 		c * j - k * q) * qmod^2 - jmod^2 * j^5 * (c * esq - esq * k + h *
-	# 		p) * (c + c * j - k * q) * (k * p + esq * (h - s)) + 2 * esq * j *
-	# 		jmod^2 * jsq * k * (c + c * j - k * q) * qmod^2 * (k * p + esq *
-	# 		(h - s)) + jmod * jsq^2 * (c * esq - esq * k + h * p) * qmod *
-	# 		(esq * h * k * q * qmod - j * jmod * k * (k * p + esq * (h - s)) -
-	# 		j * jmod^2 * (c * esq - k) * s) + 2 * esq * jmod * jsq * k *
-	# 		qmod^3 * (esq * h * k * q * qmod - j * jmod * k * (k * p + esq *
-	# 		(h - s)) - j * jmod^2 * (c * esq - k) * s) + esq * h * jmod * jsq *
-	# 		qmod^3 * (j * jmod * k * (c * esq - esq * k + h * p) - esq * (-1 +
-	# 		h^2 - j) * q * qmod + j * jmod^2 * s * (-h + esq * s)) + jmod *
-	# 		jsq^2 * qmod * (k * p + esq * (h - s)) * (j * jmod * k * (c * esq -
-	# 		esq * k + h * p) - esq * (-1 + h^2 - j) * q * qmod + j * jmod^2 *
-	# 		s * (-h + esq * s)) - jmod^2 * j^5 * (c + c * j - k * q) * qmod *
-	# 		((h^2 - k^2) * p * qmod + c * esq * (h - esq * s) + k * (h * q +
-	# 		esq * s)) - qmod * (-esq * h * jmod * jsq^2 * k * (-c * esq +
-	# 		esq * k - h * p) * qmod^2 + esq^2 * h * jmod * jsq^2 * q * qmod^3 +
-	# 		esq^2 * h * jmod * jsq * k^2 * q * qmod^3 + 2 * esq^2 * h * j^3 *
-	# 		k^2 * q * qmod^3 + jmod^2 * j^5 * k * (-c * esq + esq * k - h * p) *
-	# 		(k * p + esq * (h - s)) - esq * jmod^2 * j^5 * qmod^2 * (k * p +
-	# 		esq * (h - s)) - esq * jmod * jsq^2 * k^2 * qmod^2 * (k * p + esq *
-	# 		(h - s)) - jmod^3 * j^5 * (c * esq - k) * (c * esq - esq * k + h *
-	# 		p) * s - c * jmod^3 * j^5 * (c * esq - k) * qmod * (-h + esq * s) +
-	# 		jmod^3 * j^5 * qmod * s * ((h^2 - k^2) * qmod + esq * s * (-h + esq *
-	# 		s)) - jmod^2 * j^5 * k * qmod * ((h^2 - k^2) * p * qmod + c * esq *
-	# 		(h - esq * s) + k * (h * q + esq * s))))) * K) / (jmod^3 * j^5 *
-	# 		(esq - esq * q)^2 * qmod^3))
-	# end
 
 	if dorder==[1, 0, 0, 0, 1, 0]
 		func = ((jsq * (c - k + (h * p) / esq) * (c - (k * q) / jmod)) / qmod -
@@ -363,40 +289,36 @@ function kep_deriv(
 	return float(func)
 
 end
-
-
-function kep_grad(K1::T, P1::T, M01::T, h1::T, k1::T, γ1::T, t1::T) where {T<:Real}
-
-    nparms = 6
-    grad = zeros(nparms)
-    for i in 1:nparms
-        dorder = zeros(Int64, nparms)
-        dorder[i] = 1
-        grad[i] = kep_deriv(K1, h1, k1, M01, γ1, P1, t1, dorder)
-    end
-
-    return grad
-
-end
-
-
-function kep_hess(K1::T, h1::T, k1::T, M01::T, γ1::T, P1::T, t1::T) where {T<:Real}
-
-    nparms = 6
-    hess = zeros(nparms, nparms)
-    for i in 1:nparms
-        for j in 1:nparms
-            dorder = zeros(Int64, nparms)
-            dorder[i] += 1
-            dorder[j] += 1
-            hess[i,j] = kep_deriv(K1, h1, k1, M01, γ1, P1, t1, dorder)
-        end
-    end
-
-    return hess
-
-end
-
-
 kep_deriv(ks::kep_signal, t::Unitful.Time, dorder::Vector{<:Integer}) =
 	kep_deriv(ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ, t, dorder)
+	
+
+# function kep_grad(K1::T, P1::T, M01::T, h1::T, k1::T, γ1::T, t1::T) where {T<:Real}
+#
+#     grad = zeros(n_kep_parms)
+#     for i in 1:nparms
+#         dorder = zeros(Int64, n_kep_parms)
+#         dorder[i) = 1
+#         grad[i) = kep_deriv(K1, h1, k1, M01, γ1, P1, t1, dorder)
+#     end
+#
+#     return grad
+#
+# end
+#
+#
+# function kep_hess(K1::T, h1::T, k1::T, M01::T, γ1::T, P1::T, t1::T) where {T<:Real}
+#
+#     hess = zeros(n_kep_parms, n_kep_parms)
+#     for i in 1:n_kep_parms
+#         for j in 1:n_kep_parms
+#             dorder = zeros(Int64, n_kep_parms)
+#             dorder[i) += 1
+#             dorder[j) += 1
+#             hess[i,j) = kep_deriv(K1, h1, k1, M01, γ1, P1, t1, dorder)
+#         end
+#     end
+#
+#     return hess
+#
+# end

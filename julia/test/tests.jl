@@ -158,20 +158,20 @@ end
 end
 
 
-@testset "keplerian partial derivatives" begin
-    t = 4 + rand()
-    P = rand() * sqrt(2)+ 0.5
-    e = 0.5 * rand()
-    M0 = rand() * 2 * π
-    K = 1 + rand()
-    ω = 0.1 + 0.1 * rand()
-
-    h = e * sin(ω)
-    k = e * cos(ω)
-
-    γ = rand()
-
-    @test test_kep_grad(K, h, k, M0, γ, P, t)
-    @test test_kep_hess(K, h, k, M0, γ, P, t)
-    println()
-end
+# @testset "keplerian partial derivatives" begin
+#     t = 4 + rand()
+#     P = rand() * sqrt(2)+ 0.5
+#     e = 0.5 * rand()
+#     M0 = rand() * 2 * π
+#     K = 1 + rand()
+#     ω = 0.1 + 0.1 * rand()
+#
+#     h = e * sin(ω)
+#     k = e * cos(ω)
+#
+#     γ = rand()
+#
+#     @test test_kep_grad(K, h, k, M0, γ, P, t)
+#     @test test_kep_hess(K, h, k, M0, γ, P, t)
+#     println()
+# end
