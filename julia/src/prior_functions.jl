@@ -158,6 +158,101 @@ end
 
 
 """
+Log of the 2D unit quadratic cone PDF
+"""
+function log_quad_cone(x::Vector{<:Real}; d::Vector{<:Integer}=[0,0])
+    @assert minimum(d) >= 0
+    @assert maximum(d) <= 2
+    @assert sum(d) <= 2
+
+    @assert length(x) == length(d) == 2
+
+    r_sq = dot(x, x)  # x^2 + y^2
+    r = sqrt(r_sq)
+    if d == [0,0]
+        0 <= r < 1 ? val = log(6 / π * (1 - 2 * r + r_sq)) : val = -Inf
+    elseif d == [0,1]
+        0 <= r < 1 ? val = 2 * x[2] / (r_sq - r) : val = 0
+    elseif d == [0,2]
+        0 <= r < 1 ? val = 2 * (-x[2] ^ 2 * r + x[1] ^ 2 * (r - 1)) /
+            (r ^ 3 * (1 - 2 * r + r_sq)) : val = 0
+    elseif d == [1,0]
+        0 <= r < 1 ? val = 2 * x[1] / (r_sq - r) : val = 0
+    elseif d == [1,1]
+        0 <= r < 1 ? val = (2 * x[1] * x[2] * (1 - 2 * r)) /
+            (r ^ 3 * (1 - 2 * r + r_sq)) : val = 0
+    elseif d == [2,0]
+        0 <= r < 1 ? val = 2 * (-x[1] ^ 2 * r + x[2] ^ 2 * (r - 1)) /
+            (r ^ 3 * (1 - 2 * r + r_sq)) : val = 0
+    end
+    return val
+end
+
+
+"""
+Log of the 2D unit cubic cone PDF
+"""
+function log_cubic_cone(x::Vector{<:Real}; d::Vector{<:Integer}=[0,0])
+    @assert minimum(d) >= 0
+    @assert maximum(d) <= 2
+    @assert sum(d) <= 2
+
+    @assert length(x) == length(d) == 2
+
+    r_sq = dot(x, x)  # x^2 + y^2
+    r = sqrt(r_sq)
+    if d == [0,0]
+        0 <= r < 1 ? val = log(10 / π * (1 - r)^3) : val = -Inf
+    elseif d == [0,1]
+        0 <= r < 1 ? val = 3 * x[2] / (r_sq - r) : val = 0
+    elseif d == [0,2]
+        0 <= r < 1 ? val = 3 * (-x[2] ^ 2 * r + x[1] ^ 2 * (r - 1)) /
+            (r ^ 3 * (1 - 2 * r + r_sq)) : val = 0
+    elseif d == [1,0]
+        0 <= r < 1 ? val = 3 * x[1] / (r_sq - r) : val = 0
+    elseif d == [1,1]
+        0 <= r < 1 ? val = (3 * x[1] * x[2] * (1 - 2 * r)) /
+            (r ^ 3 * (1 - 2 * r + r_sq)) : val = 0
+    elseif d == [2,0]
+        0 <= r < 1 ? val = 3 * (-x[1] ^ 2 * r + x[2] ^ 2 * (r - 1)) /
+            (r ^ 3 * (1 - 2 * r + r_sq)) : val = 0
+    end
+    return val
+end
+
+
+"""
+Log of the 2D rotated Rayleigh PDF that is cutoff at r=1
+ONLY ROUGHLY NORMALIZED according to σ = 1/5
+"""
+function log_rot_Rayleigh(x::Vector{<:Real}; d::Vector{<:Integer}=[0,0], σ=1/5)
+    @assert minimum(d) >= 0
+    @assert maximum(d) <= 2
+    @assert sum(d) <= 2
+
+    @assert length(x) == length(d) == 2
+    r_sq = dot(x, x)  # x^2 + y^2
+    r = sqrt(r_sq)
+    σ_sq = σ ^ 2
+    log_norm = -2 * log(σ) - 0.454215
+    if d == [0,0]
+        0 <= r < 1 ? val = -r_sq / (2 * σ_sq) + log(r) + log_norm : val = -Inf
+    elseif d == [0,1]
+        0 <= r < 1 ? val = -x[2] * (r_sq - σ_sq) / (r_sq * σ_sq) : val = 0
+    elseif d == [0,2]
+        0 <= r < 1 ? val = -(x[1] ^ 4 + x[1] ^ 2 * (2 * x[2] ^ 2 - σ_sq) + x[2] ^ 2 * (x[2] ^ 2 + σ_sq)) / (r_sq ^ 2 * σ_sq) : val = 0
+    elseif d == [1,0]
+        0 <= r < 1 ? val = -x[1] * (r_sq - σ_sq) / (r_sq * σ_sq) : val = 0
+    elseif d == [1,1]
+        0 <= r < 1 ? val = -2 * x[1] * x[2] / r_sq ^ 2 : val = 0
+    elseif d == [2,0]
+        0 <= r < 1 ? val = -(x[2] ^ 4 + x[2] ^ 2 * (2 * x[1] ^ 2 - σ_sq) + x[1] ^ 2 * (x[1] ^ 2 + σ_sq)) / (r_sq ^ 2 * σ_sq) : val = 0
+    end
+    return val
+end
+
+
+"""
 Log of the bivariate normal PDF
 NOTE THAT THAT WHEN USING lows!=[-∞,...], THIS IS NOT PROPERLY NORMALIZED
 """
@@ -198,7 +293,7 @@ end
 # https://arxiv.org/abs/astro-ph/0608328
 # table 1
 
-const prior_K_min = 0#u"m/s"  # m/s
+const prior_K_min = 1e-4#u"m/s"  # m/s
 const prior_K_max = 2129#u"m/s"  # m/s, corresponds to a maximum planet-star mass ratio of 0.01
 const prior_γ_min = -prior_K_max  # m/s
 const prior_γ_max = prior_K_max  # m/s
@@ -235,7 +330,8 @@ function logprior_ω(ω::Real; d::Integer=0)
 end
 
 function logprior_hk(h::Real, k::Real; d::Vector{<:Integer}=[0,0])
-    return log_cone([h, k]; d=d)
+    # return log_quad_cone([h, k]; d=d)
+    return log_rot_Rayleigh([h, k]; d=d)
 end
 
 function logprior_γ(γ::Unitful.Velocity; d::Integer=0)

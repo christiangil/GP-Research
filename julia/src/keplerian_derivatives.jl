@@ -35,7 +35,7 @@ function kep_deriv(
 	q = e * cos(EA)
 	p = e * sin(EA)
 	ω = atan(h, k)
-	# λ = mean_anomaly(t, P, M1] + atan(h, k)
+	# λ = mean_anomaly(t, P, M0) + atan(h, k)
 	# c = cos(λ + p)
 	# s = sin(λ + p)
 	c = cos(EA + ω)
@@ -291,7 +291,7 @@ function kep_deriv(
 end
 kep_deriv(ks::kep_signal, t::Unitful.Time, dorder::Vector{<:Integer}) =
 	kep_deriv(ks.K, ks.P, ks.M0, ks.h, ks.k, ks.γ, t, dorder)
-	
+
 
 # function kep_grad(K1::T, P1::T, M01::T, h1::T, k1::T, γ1::T, t1::T) where {T<:Real}
 #

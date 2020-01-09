@@ -7,7 +7,7 @@ called_from_terminal = length(ARGS) > 0
 ###################################
 
 kernel_names = ["pp", "se", "m52", "qp", "m52x2", "rq", "rm52"]
-initial_hypers = [[30.], [30], [30], [30, 60, 1], [30, 60, 1], [4, 12], [4, 12]]
+initial_hypers = [[30.], [30], [30], [30, 60, 1], [30, 60, 1], [4, 30], [4, 30]]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
 sample_size = 100
@@ -47,7 +47,7 @@ end
 # Adding planet and normalizing scores #
 ########################################
 
-length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.0  # m/s
+length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.3  # m/s
 # draw over more periods?
 original_ks = kep_signal(K_val * u"m/s", (8 + 1 * randn(rng))u"d", 2 * π * rand(rng), rand(rng) / 5, 2 * π * rand(rng), 0u"m/s")
 add_kepler_to_Jones_problem_definition!(problem_definition, original_ks)
@@ -55,9 +55,10 @@ add_kepler_to_Jones_problem_definition!(problem_definition, original_ks)
 results_dir = "results/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
 
 try
-    rm(results_dir, recursive=true)
+    # rm(results_dir, recursive=true)
     mkpath(results_dir)
 catch
+    sleep(1)
     mkpath(results_dir)
 end
 normalize_problem_definition!(problem_definition)
@@ -461,7 +462,7 @@ begin
     global current_hyper = remove_zeros(fit2_total_hyperparameters)
 
     global current_ks = kep_signal(epi_ks.K, epi_ks.P, epi_ks.M0, epi_ks.e, epi_ks.ω, epi_ks.γ)
-    println(kep_parms_str(current_ks))
+    println("before full fit: ", kep_parms_str(current_ks))
     # det(∇∇nlogL_kep(problem_definition.y_obs, problem_definition.time, workspace.Σ_obs, current_ks; data_unit=problem_definition.rv_unit*problem_definition.normals[1]))
 
     results = [Inf, Inf]
@@ -481,6 +482,7 @@ begin
     end
 end
 
+original_ks
 println(result)
 
 fit3_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, result.minimizer)

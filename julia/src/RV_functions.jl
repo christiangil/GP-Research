@@ -309,7 +309,7 @@ function fit_kepler(
             copy!(last_x, x)
             buffer.ks = ks_from_vec(x, K_u, P_u, γ_u; use_hk=true)
             buffer.nprior = -logprior_kepler(buffer.ks; use_hk=true)
-            buffer.rm_kep = remove_kepler(data, times, buffer.ks; data_unit=data_unit)
+            buffer.nprior == Inf ? buffer.rm_kep = zeros(length(buffer.rm_kep)) : buffer.rm_kep = remove_kepler(data, times, buffer.ks; data_unit=data_unit)
         end
         # println("buffer: ", kep_parms_str(buffer.ks))
     end
@@ -345,25 +345,27 @@ function fit_kepler(
 
     attempts = 0
     in_saddle = true
-    while attempts < 10 && in_saddle
+    while attempts < 120 && in_saddle
         attempts += 1
         if attempts > 1;
             println("found saddle point. starting attempt $attempts with a perturbation")
-            current_x += 1e-1 .* (rand(rng, length(current_x)) .- 0.5)
-            current_x[1] = maximum([current_x[1], 0.01])
-            current_x[3] = mod2pi(current_x[3])
-            e, ω = hk_2_eω(current_x[4], current_x[5])
-            e = maximum([minimum([e, 0.75]), 0])
-            ω = mod2pi(ω)
-            current_x[4:5] .= eω_2_hk(e, ω)
+            current_x[1] = maximum([current_x[1] + 2e-1 * (rand() - 0.5), 0.1])
+            current_x[2] *= 1 + 1e-2 * (rand() - 0.5)
+            current_x[3] = mod2pi(current_x[3] + 4e-1 * (rand() - 0.5))
+            # e, ω = hk_2_eω(current_x[4], current_x[5])
+            # e = maximum([minimum([e, 0.1]), 0])
+            # ω = mod2pi(ω)
+            current_x[4:5] .= eω_2_hk(0.05 * rand(), mod2pi(attempts * π / 3))
+            current_x[6] += 1e-1 * (rand() - 0.5)
         end
         println(current_x)
-        result = optimize(f, g!, current_x, LBFGS(alphaguess=LineSearches.InitialStatic(alpha=1e-2))) # 27s
+        result = optimize(f, g!, current_x, LBFGS(alphaguess=LineSearches.InitialStatic(alpha=3e-3))) # 27s
         current_x = copy(result.minimizer)
         ks = ks_from_vec(current_x, K_u, P_u, γ_u; use_hk=true)
-        println(kep_parms_str(ks))
+        println("fit attempt $attempts: "kep_parms_str(ks))
+        # println(∇∇nlogL_kep(data, times, covariance, ks; data_unit=data_unit))
         new_det = det(∇∇nlogL_kep(data, times, covariance, ks; data_unit=data_unit))
-        println(new_det)
+        println("determinant: ", new_det)
         in_saddle = new_det <= 0
         if !in_saddle; return ks end
     end
