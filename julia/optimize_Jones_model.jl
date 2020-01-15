@@ -15,11 +15,14 @@ if called_from_terminal
     kernel_choice = parse(Int, ARGS[1])
     kernel_name = kernel_names[kernel_choice]
     seed = parse(Int, ARGS[2])
+    length(ARGS) > 3 ? use_long = Bool(parse(Int, ARGS[4])) : use_long = true
 else
-    kernel_choice = 1
+    kernel_choice = 4
     kernel_name = kernel_names[kernel_choice]
-    seed = 1
+    seed = 24
+    use_long = true
 end
+
 
 # allowing covariance matrix to be calculated in parallel
 if !called_from_terminal
@@ -33,26 +36,34 @@ end
 kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
 
 rng = MersenneTwister(seed)
-sim_id = sample(rng, 6:20)
-fname = "res-1000-1years_long_id$sim_id"
+if use_long
+    sim_id = sample(rng, 6:20)
+    fname = "res-1000-1years_long_id$sim_id"
+else
+    sim_id = sample(rng, 1:50)
+    fname = "res-1000-1years_full_id$sim_id"
+end
 println("optimizing on $fname using the $kernel_name")
 if called_from_terminal
     problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
 else
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
-    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
 end
 
 ########################################
 # Adding planet and normalizing scores #
 ########################################
 
-length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.3  # m/s
+length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.5  # m/s
 # draw over more periods?
 original_ks = kep_signal(K_val * u"m/s", (8 + 1 * randn(rng))u"d", 2 * π * rand(rng), rand(rng) / 5, 2 * π * rand(rng), 0u"m/s")
 add_kepler_to_Jones_problem_definition!(problem_definition, original_ks)
-
-results_dir = "results/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
+if use_long
+    results_dir = "results/long/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
+else
+    results_dir = "results/short/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
+end
 
 try
     # rm(results_dir, recursive=true)
@@ -77,6 +88,11 @@ if kernel_name in ["pp", "se", "m52"]
     function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
         return [log_gamma(hps[1], parameters; d=d)]
     end
+    function add_kick!(hps::Vector{<:Real})
+        @assert length(hps) == 1
+        hps .*= centered_rand(rng, length(hps); center=1, scale=0.5)
+        return hps
+    end
 elseif kernel_name in ["rq", "rm52"]
     # rationals
     paramsα = gamma_mode_std_2_alpha_theta(4, 10)
@@ -84,10 +100,15 @@ elseif kernel_name in ["rq", "rm52"]
     function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
         return [log_gamma(hps[1], paramsα; d=d), log_gamma(hps[2], paramsμ; d=d)]
     end
+    function add_kick!(hps::Vector{<:Real})
+        @assert length(hps) == 2
+        hps .*= centered_rand(rng, length(hps); center=1, scale=0.5)
+        return hps
+    end
 elseif  kernel_name == "qp"
     # qp
-    paramsλp = gamma_mode_std_2_alpha_theta(1, 1)
-    σP = 15; σse = 30; ρ = .9
+    paramsλp = gamma_mode_std_2_alpha_theta(1, 0.5)
+    σP = 15; σse = 15; ρ = .9
     Σ_qp_prior = bvnormal_covariance(σP, σse, ρ)
     μ_qp_prior = [30, 60.]
     function nlogprior_kernel_hyperparameters(n_kern_hyper::Integer, total_hyperparameters::Vector{<:Real}, d::Integer)
@@ -105,12 +126,28 @@ elseif  kernel_name == "qp"
             return Symmetric(H)
         end
     end
+    function add_kick!(hps::Vector{<:Real})
+        @assert length(hps) == 3
+        hps[1] *= centered_rand(rng; center=0.8, scale=0.4)
+        hps[2] *= centered_rand(rng; center=1.2, scale=0.4)
+        hps[3] *= centered_rand(rng; center=0.8, scale=0.4)
+        return hps
+    end
 elseif kernel_name == "m52x2"
     # m52x2
     paramsλ1 = gamma_mode_std_2_alpha_theta(30, 15)
-    paramsλ2 = gamma_mode_std_2_alpha_theta(60, 30)
+    paramsλ2 = gamma_mode_std_2_alpha_theta(60, 15)
     function kernel_hyper_priors(hps::Vector{<:Real}, d::Integer)
         return [log_gamma(hps[1], paramsλ1; d=d), log_gamma(hps[2], paramsλ2; d=d), log_gaussian(hps[3], [1, 1]; d=d)]
+    end
+    function add_kick!(hps::Vector{<:Real})
+        @assert length(hps) == 3
+        if hps[1] > hps[2]; hps[3] = 1 / hps[3] end
+        hold = sort(hps[1:2])
+        hps[1] = hold[1] * centered_rand(rng; center=0.8, scale=0.4)
+        hps[2] = hold[2] * centered_rand(rng; center=1.2, scale=0.4)
+        hps[3] *= centered_rand(rng; center=1, scale=0.4)
+        return hps
     end
 end
 
@@ -136,7 +173,7 @@ end
 # kernel hyper parameters
 time_span = maximum(problem_definition.x_obs) - minimum(problem_definition.x_obs)
 coeff_hyperparameters = collect(Iterators.flatten(problem_definition.a0))
-total_hyperparameters = append!(coeff_hyperparameters, initial_hypers[kernel_choice] .* (0.8 .+ (0.4 .* rand(rng, problem_definition.n_kern_hyper))))
+total_hyperparameters = append!(coeff_hyperparameters, initial_hypers[kernel_choice] .* centered_rand(rng, problem_definition.n_kern_hyper; center=1, scale=0.4))
 
 # how finely to sample the domain (for plotting)
 amount_of_samp_points = convert(Int64, max(500, round(2 * sqrt(2) * length(problem_definition.x_obs))))
@@ -190,8 +227,12 @@ function f(non_zero_hyper::Vector{T}) where {T<:Real}
 end
 
 function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-    G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
-        + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
+    if nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0) == Inf
+        G[:] = zeros(length(G))
+    else
+        G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper)
+            + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
+    end
 end
 
 function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
@@ -215,7 +256,6 @@ function optim_cb(x::OptimizationState)
     return false
 end
 
-
 function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
     attempts = 0
     in_saddle = true
@@ -223,8 +263,10 @@ function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
     while attempts < 10 && in_saddle
         attempts += 1
         if attempts > 1;
-            println("found saddle point. starting attempt $attempt with a perturbation")
-            global current_hyper += 3e-2 * (rand(rng, length(current_hyper)) .- 0.5)
+            println("found saddle point. starting attempt $attempts with a perturbation")
+            # global current_hyper += 3e-2 * (rand(rng, length(current_hyper)) .- 0.5)
+            global current_hyper[1:end-problem_definition.n_kern_hyper] += centered_rand(rng, length(current_hyper) - problem_definition.n_kern_hyper)
+            global current_hyper[end-problem_definition.n_kern_hyper+1:end] = add_kick!(current_hyper[end-problem_definition.n_kern_hyper+1:end])
         end
         # println("fitting with Hessian")
         try
@@ -240,7 +282,9 @@ function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
         #     println("retrying fit")
         #     global result = optimize(f, g!, current_hyper, LBFGS(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations))
         # end
-        in_saddle = det(h!(zeros(length(initial_x), length(initial_x)), current_hyper)) <= 0
+        current_det = det(h!(zeros(length(initial_x), length(initial_x)), current_hyper))
+        println(current_det)
+        in_saddle = current_det <= 0
     end
 end
 
@@ -389,8 +433,12 @@ function f(non_zero_hyper::Vector{T}) where {T<:Real}
 end
 
 function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-    G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=fit_and_remove_kepler_epi_short())
-        + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
+    if nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0) == Inf
+        G[:] = zeros(length(G))
+    else
+        G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=fit_and_remove_kepler_epi_short())
+            + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
+    end
 end
 
 function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
@@ -449,8 +497,12 @@ function f(non_zero_hyper::Vector{T}) where {T<:Real}
 end
 
 function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-    G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=current_y)
-        + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
+    if nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0) == Inf
+        G[:] = zeros(length(G))
+    else
+        G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=current_y)
+            + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
+    end
 end
 
 function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
@@ -482,7 +534,6 @@ begin
     end
 end
 
-original_ks
 println(result)
 
 fit3_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, result.minimizer)
@@ -554,8 +605,12 @@ function f(non_zero_hyper::Vector{T}) where {T<:Real}
 end
 
 function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
-    G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs_og)
-        + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
+    if nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0) == Inf
+        G[:] = zeros(length(G))
+    else
+        G[:] = (∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs_og)
+            + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1))
+    end
 end
 
 function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
@@ -583,7 +638,7 @@ global hp_string = ""
 for i in 1:problem_definition.n_kern_hyper
     global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit4_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
 end
-Jones_line_plots(amount_of_samp_points, problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks)  # , plot_Σ=true, plot_Σ_profile=true)
+Jones_line_plots(amount_of_samp_points, problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks, hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
 
 ##########################
 # Evidence approximation #
@@ -632,7 +687,6 @@ catch
     println("det(H3): $(det(H3)) (could've been positive)")
     global E3 = 0
 end
-
 
 println("\nlog likelihood for Jones model: " * string(-fit_nlogL1))
 println("log likelihood for Jones + planet model: " * string(-fit_nlogL2))

@@ -222,7 +222,7 @@ function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
     while attempts < 10 && in_saddle
         attempts += 1
         if attempts > 1;
-            println("found saddle point. starting attempt $attempt with a perturbation")
+            println("found saddle point. starting attempt $attempts with a perturbation")
             global current_hyper += 3e-2 * (rand(rng, length(current_hyper)) .- 0.5)
         end
         # println("fitting with Hessian")

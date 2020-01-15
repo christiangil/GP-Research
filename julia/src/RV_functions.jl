@@ -306,7 +306,8 @@ function fit_kepler(
 
     function calculate_common!(x::Vector{T}, last_x::Vector{T}, buffer::kep_buffer) where {T<:Real}
         if x != last_x
-            copy!(last_x, x)
+            # copy!(last_x, x)
+            last_x[:] = x
             buffer.ks = ks_from_vec(x, K_u, P_u, γ_u; use_hk=true)
             buffer.nprior = -logprior_kepler(buffer.ks; use_hk=true)
             buffer.nprior == Inf ? buffer.rm_kep = zeros(length(buffer.rm_kep)) : buffer.rm_kep = remove_kepler(data, times, buffer.ks; data_unit=data_unit)
@@ -342,21 +343,20 @@ function fit_kepler(
         end
     end
     g!(G, x) = g!(G, x, buffer, last_x)
-
     attempts = 0
     in_saddle = true
     while attempts < 120 && in_saddle
         attempts += 1
         if attempts > 1;
             println("found saddle point. starting attempt $attempts with a perturbation")
-            current_x[1] = maximum([current_x[1] + 2e-1 * (rand() - 0.5), 0.1])
-            current_x[2] *= 1 + 1e-2 * (rand() - 0.5)
-            current_x[3] = mod2pi(current_x[3] + 4e-1 * (rand() - 0.5))
+            current_x[1] = maximum([current_x[1] + centered_rand(; scale=0.3), 0.1])
+            current_x[2] *= centered_rand(; scale=2e-2, center=1)
+            current_x[3] = mod2pi(current_x[3] + centered_rand(; scale=4e-1))
             # e, ω = hk_2_eω(current_x[4], current_x[5])
             # e = maximum([minimum([e, 0.1]), 0])
             # ω = mod2pi(ω)
             current_x[4:5] .= eω_2_hk(0.05 * rand(), mod2pi(attempts * π / 3))
-            current_x[6] += 1e-1 * (rand() - 0.5)
+            current_x[6] += centered_rand(; scale=1e-1)
         end
         println(current_x)
         result = optimize(f, g!, current_x, LBFGS(alphaguess=LineSearches.InitialStatic(alpha=3e-3))) # 27s

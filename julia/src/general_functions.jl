@@ -359,3 +359,10 @@ function prep_parallel(; add_procs::Integer=0)
     auto_addprocs(;add_procs=add_procs)
     @everywhere include("src/base_functions.jl")
 end
+
+using Random
+
+centered_rand(; rng::AbstractRNG=Random.GLOBAL_RNG, center::Real=0, scale::Real=1) = centered_rand(rng; center=center, scale=scale)
+centered_rand(rng::AbstractRNG; center::Real=0, scale::Real=1) = (scale * (rand(rng) - 0.5)) + center
+centered_rand(d::Integer; rng::AbstractRNG=Random.GLOBAL_RNG, center::Real=0, scale::Real=1) = centered_rand(rng, d; center=center, scale=scale)
+centered_rand(rng::AbstractRNG, d; center::Real=0, scale::Real=1) = (scale .* (rand(rng, d) .- 0.5)) .+ center
