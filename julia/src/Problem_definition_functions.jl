@@ -37,7 +37,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 	function Jones_problem_definition(
 		kernel::Function,
 		n_kern_hyper::T,
-		hdf5_filename::String;
+		hdf5_filenames::Vector{String};
 		sub_sample::T=0,
 		n_out::T=3,
 		n_dif::T=3,
@@ -47,14 +47,37 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 
 		assert_positive(n_out, n_dif)
 
-		@load hdf5_filename * "_rv_data.jld2" phases scores
-		@load hdf5_filename * "_bootstrap.jld2" scores_tot scores_mean error_ests
-		@assert isapprox(scores, scores_mean)
-
-		noisy_scores = noisy_scores_from_covariance(scores, scores_tot; rng=rng)
-
 		time_unit = u"d"
-		time = convert_SOAP_phases.(time_unit, phases)
+		if length(hdf5_filenames) > 1
+			time = Vector{typeof(1. * time_unit)}()
+			noisy_scores = zeros(n_out, 0)
+			selected_error_ests = zeros(n_out, 0)
+		end
+		for i in 1:length(hdf5_filenames)
+			hdf5_filename = hdf5_filenames[i]
+			@load hdf5_filename * "_rv_data.jld2" phases scores
+			@load hdf5_filename * "_bootstrap.jld2" scores_tot scores_mean error_ests
+			@assert isapprox(scores, scores_mean)
+			len_phase = length(phases)
+			@assert len_phase == size(scores, 2)
+			@assert size(scores) == size(error_ests)
+
+			if length(hdf5_filenames) == 1
+				selected_error_ests = error_ests[1:n_out, :]
+				noisy_scores = noisy_scores_from_covariance(scores, scores_tot; rng=rng)[1:n_out,:]
+				time = convert_SOAP_phases.(time_unit, phases)
+			else
+				fraction_unobservable = 1 / 4
+				shift = Int(floor(rand(rng) * len_phase * fraction_unobservable))
+				kept_inds = shift + 1 : shift + Int(floor(len_phase * (1 - fraction_unobservable)))  # skip 3 months of the year. helps join together disparate simulations
+				println(kept_inds)
+				noisy_scores = cat(noisy_scores, noisy_scores_from_covariance(scores, scores_tot; rng=rng)[1:n_out, kept_inds]; dims=2)
+				selected_error_ests = cat(selected_error_ests, error_ests[1:n_out, kept_inds]; dims=2)
+				all_times = convert_SOAP_phases.(time_unit, phases)
+				i == 1 ? reshift = 0 * time_unit : reshift = fraction_unobservable * (all_times[end] - all_times[1]) + time[end]
+				append!(time, (reshift - all_times[kept_inds[1]]) .+ all_times[kept_inds])
+			end
+		end
 		inds = collect(1:size(noisy_scores, 2))
 		if sub_sample !=0
 			# if a on-off cadence is specified, remove all observations during the
@@ -64,7 +87,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 				inds = sort(sample(rng, inds, sub_sample; replace=false))
 				println(inds[1:10])
 			else
-				shift = convert(Int64, floor(rand() * (length(inds) - sub_sample)))
+				shift = convert(Int64, floor(rand(rng) * (length(inds) - sub_sample)))
 				inds = collect((1 + shift):(sub_sample + shift))
 			end
 		end
@@ -77,8 +100,8 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		time = time[inds]
 		time .-= mean(time)  # minimizing period derivatives
 		x_obs = ustrip.(time)
-		y_obs_hold = noisy_scores[1:n_out, inds]
-		measurement_noise_hold = error_ests[1:n_out, inds]
+		y_obs_hold = noisy_scores[:, inds]
+		measurement_noise_hold = selected_error_ests[:, inds]
 		y_obs_hold[1, :] *= light_speed  # convert scores from redshifts to radial velocities in m/s
 		measurement_noise_hold[1, :] *= light_speed  # convert score errors from redshifts to radial velocities in m/s
 
@@ -108,6 +131,16 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 
 		return Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0)
 	end
+	Jones_problem_definition(
+		kernel::Function,
+		n_kern_hyper::T,
+		hdf5_filename::String;
+		sub_sample::T=0,
+		n_out::T=3,
+		n_dif::T=3,
+		on_off::Unitful.Time=0u"d",
+		rng::AbstractRNG=Random.GLOBAL_RNG
+		) where T<: Real = Jones_problem_definition(kernel, n_kern_hyper, [hdf5_filename]; sub_sample=sub_sample, n_out=n_out, n_dif=n_dif, on_off=on_off, rng=rng)
 	function Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0; non_zero_hyper_inds=append!(findall(!iszero, collect(Iterators.flatten(a0))), collect(1:n_kern_hyper) .+ length(a0)))
 		coeff_orders, coeff_coeffs = coefficient_orders(n_out, n_dif, a=a0)
 		return Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0, non_zero_hyper_inds, coeff_orders, coeff_coeffs)

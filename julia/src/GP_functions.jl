@@ -1082,8 +1082,6 @@ function ∇∇nlogL_Jones(
 end
 
 
-
-
 "Replaces H with Hessian of nlogL for non-zero hyperparameters"
 function ∇∇nlogL_Jones(
     prob_def::Jones_problem_definition,

@@ -10,17 +10,19 @@ kernel_names = ["pp", "se", "m52", "qp", "m52x2", "rq", "rm52"]
 initial_hypers = [[30.], [30], [30], [30, 60, 1], [30, 60, 1], [4, 30], [4, 30]]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
-sample_size = 100
+
 if called_from_terminal
     kernel_choice = parse(Int, ARGS[1])
     kernel_name = kernel_names[kernel_choice]
     seed = parse(Int, ARGS[2])
     length(ARGS) > 3 ? use_long = Bool(parse(Int, ARGS[4])) : use_long = true
+    length(ARGS) > 4 ? sample_size = parse(Int, ARGS[5]) : sample_size = 100
 else
     kernel_choice = 4
     kernel_name = kernel_names[kernel_choice]
-    seed = 24
+    seed = 25
     use_long = true
+    sample_size = 300
 end
 
 
@@ -35,21 +37,24 @@ end
 
 kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
 
+sample_size < 120 ? n_sims_needed = 1 : n_sims_needed = Int(ceil(sample_size/90))
 rng = MersenneTwister(seed)
 if use_long
-    sim_id = sample(rng, 6:20)
-    fname = "res-1000-1years_long_id$sim_id"
+    sim_ids = sample(rng, 6:20, n_sims_needed; replace=false)
+    fnames = ["res-1000-1years_long_id$sim_id" for sim_id in sim_ids]
 else
-    sim_id = sample(rng, 1:50)
-    fname = "res-1000-1years_full_id$sim_id"
+    sim_ids = sample(rng, 1:50, n_sims_needed; replace=false)
+    fnames = ["res-1000-1years_full_id$sim_id" for sim_id in sim_ids]
 end
-println("optimizing on $fname using the $kernel_name")
+
+println("optimizing on $fnames using the $kernel_name")
 if called_from_terminal
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
 else
-    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" * fname; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
 end
+
 
 ########################################
 # Adding planet and normalizing scores #
@@ -60,9 +65,9 @@ length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.5  # m/s
 original_ks = kep_signal(K_val * u"m/s", (8 + 1 * randn(rng))u"d", 2 * π * rand(rng), rand(rng) / 5, 2 * π * rand(rng), 0u"m/s")
 add_kepler_to_Jones_problem_definition!(problem_definition, original_ks)
 if use_long
-    results_dir = "results/long/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
+    results_dir = "results/long/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
 else
-    results_dir = "results/short/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
+    results_dir = "results/short/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
 end
 
 try
@@ -257,6 +262,7 @@ function optim_cb(x::OptimizationState)
 end
 
 function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
+    time0 = Libc.time()
     attempts = 0
     in_saddle = true
     global current_hyper = copy(initial_x)
@@ -286,9 +292,10 @@ function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
         println(current_det)
         in_saddle = current_det <= 0
     end
+    return Libc.time() - time0
 end
 
-fit_GP!(initial_x)
+time1 = fit_GP!(initial_x)
 
 println(result)
 
@@ -333,7 +340,7 @@ amount_of_periods = 2^13
 
 # sample linearly in frequency space so that we get periods from the 1 / uneven Nyquist
 # frequency to 4 times the total timespan of the data
-freq_grid = linspace(1 / (problem_definition.time[end] - problem_definition.time[1]) / 4, uneven_nyquist_frequency(problem_definition.time), amount_of_periods)
+freq_grid = linspace(1 / (problem_definition.time[end] - problem_definition.time[1]) / 4, maximum([uneven_nyquist_frequency(problem_definition.time), 1u"1/d"]), amount_of_periods)
 period_grid = 1 ./ reverse(freq_grid)
 
 Σ_obs = Σ_observations(problem_definition, fit1_total_hyperparameters)
@@ -385,10 +392,9 @@ ticklabel_format(style="sci", axis="y", scilimits=(0,0))
 xlabel("Periods (days)")
 ylabel("GP log likelihoods")
 axhline(y=-nlogL_Jones(problem_definition, fit1_total_hyperparameters), color="k")
-axvline(x=convert_and_strip_units(u"d", best_period), color="red")
+axvline(x=convert_and_strip_units(u"d", best_period), color="red", linestyle="--")
 if original_ks.K != 0u"m/s"
-    axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue")
-
+    axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue", linestyle="--")
     title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
     title(title_string, fontsize=30)
 end
@@ -397,15 +403,15 @@ save_PyPlot_fig(results_dir * "periodogram.png")
 
 if original_ks.K != 0u"m/s"
     ax = init_plot()
-    inds = period_grid.<(2.5 * original_ks.P)
+    inds = (original_ks.P / 1.5).<period_grid.<(2.5 * original_ks.P)
     fig = plot(ustrip.(period_grid[inds]), likelihoods[inds], color="black")
     xscale("log")
     ticklabel_format(style="sci", axis="y", scilimits=(0,0))
     xlabel("Periods (days)")
     ylabel("GP log likelihoods")
     axhline(y=-nlogL_Jones(problem_definition, fit1_total_hyperparameters), color="k")
-    axvline(x=convert_and_strip_units(u"d", best_period), color="red")
-    axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue")
+    axvline(x=convert_and_strip_units(u"d", best_period), color="red", linestyle="--")
+    axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue", linestyle="--")
     title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
     title(title_string, fontsize=30)
     save_PyPlot_fig(results_dir * "periodogram_zoom.png")
@@ -446,8 +452,7 @@ function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
      + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 2))
 end
 
-fit_GP!(remove_zeros(fit1_total_hyperparameters))
-
+time2 = fit_GP!(remove_zeros(fit1_total_hyperparameters))
 println(result)
 
 fit2_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, result.minimizer)
@@ -511,6 +516,7 @@ function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
 end
 
 begin
+    time0 = Libc.time()
     global current_hyper = remove_zeros(fit2_total_hyperparameters)
 
     global current_ks = kep_signal(epi_ks.K, epi_ks.P, epi_ks.M0, epi_ks.e, epi_ks.ω, epi_ks.γ)
@@ -532,6 +538,7 @@ begin
         global num_iter += 1
         println("change on joint fit $num_iter: ", result_change)
     end
+    time3 = Libc.time() - time0
 end
 
 println(result)
@@ -618,7 +625,7 @@ function h!(H::Matrix{T}, non_zero_hyper::Vector{T}) where {T<:Real}
      + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 2))
 end
 
-original_ks.K < 0.5u"m/s" ? fit_GP!(remove_zeros(fit1_total_hyperparameters)) : fit_GP!(remove_zeros(fit3_total_hyperparameters))
+original_ks.K < 0.5u"m/s" ? time4 = fit_GP!(remove_zeros(fit1_total_hyperparameters)) : time4 = fit_GP!(remove_zeros(fit3_total_hyperparameters))
 
 println(result)
 
@@ -701,4 +708,5 @@ println("evidence for Jones + planet model: " * string(E2))
 println("evidence for Jones + true planet model: " * string(E3))
 
 saved_likelihoods = [-fit_nlogL1, uE1, E1, -fit_nlogL2, uE2, E2, -fit_nlogL3, uE3, E3]
-save_nlogLs(seed, sim_id, saved_likelihoods, append!(copy(fit1_total_hyperparameters), fit3_total_hyperparameters), original_ks, full_ks, results_dir)
+save_nlogLs(seed, [time1, time2 + time3, time4] ./ 3600, saved_likelihoods, append!(copy(fit1_total_hyperparameters), fit3_total_hyperparameters), original_ks, full_ks, results_dir)
+sum([time1, time2 + time3, time4] ./ 3600)

@@ -349,7 +349,7 @@ function fit_kepler(
         attempts += 1
         if attempts > 1;
             println("found saddle point. starting attempt $attempts with a perturbation")
-            current_x[1] = maximum([current_x[1] + centered_rand(; scale=0.3), 0.1])
+            current_x[1] = maximum([current_x[1] + centered_rand(; scale=0.3), 0.2])
             current_x[2] *= centered_rand(; scale=2e-2, center=1)
             current_x[3] = mod2pi(current_x[3] + centered_rand(; scale=4e-1))
             # e, ω = hk_2_eω(current_x[4], current_x[5])
@@ -879,7 +879,7 @@ using DataFrames, CSV
 
 function save_nlogLs(
     seed::Integer,
-    sim_id::Integer,
+    times::Vector{T},
     likelihoods::Vector{T},
     hyperparameters::Vector{T},
     og_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright},
@@ -890,6 +890,7 @@ function save_nlogLs(
 
     likelihood_strs = ["L", "uE", "E"]
     num_likelihoods= length(likelihood_strs)
+    @assert num_likelihoods == length(times)
     @assert length(likelihoods) == 3 * num_likelihoods
     orbit_params_strs = ["K", "P", "M0", "e", "ω", "γ"]
     orbit_params= [og_ks.K, og_ks.P, og_ks.M0, og_ks.e, og_ks.ω, og_ks.γ, fit_ks.K, fit_ks.P, fit_ks.M0, fit_ks.e, fit_ks.ω, fit_ks.γ]
@@ -897,8 +898,11 @@ function save_nlogLs(
     # file_name = "csv_files/$(kernel_name)_logLs.csv"
     file_name = save_loc * "logL.csv"
 
-    df = DataFrame(seed=seed, sim_id=sim_id, date=today())
+    df = DataFrame(seed=seed, date=today())
 
+    for i in 1:length(times)
+        df[!, Symbol("t$(Int(i))")] .= times[i]
+    end
     for i in 1:length(likelihoods)
         df[!, Symbol(string(likelihood_strs[(i-1)%num_likelihoods + 1]) * string(Int(1 + floor((i-1)//num_likelihoods))))] .= likelihoods[i]
     end
