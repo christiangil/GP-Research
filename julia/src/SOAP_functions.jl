@@ -1,13 +1,14 @@
 # SOAP_functions.jl
-
+using Unitful
+using UnitfulAstro
 
 """
 Get flat, active SOAP spectra time series from HDF5 file, impose a Planck
 distribution, and normalize so that the brightness stays the same.
 """
 function prep_SOAP_spectra(fid::HDF5File)
-	λs = fid["lambdas"][:]
-	return normalize_columns_to_first_integral!(fid["active"][:, :] .* planck.(λs, 5700), λs), λs
+	λs = fid["lambdas"][:]u"nm"/10
+	return normalize_columns_to_first_integral!(fid["active"][:, :] .* planck.(λs, 5700u"K"), ustrip.(λs)), λs
 end
 
 

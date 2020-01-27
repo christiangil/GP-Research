@@ -107,16 +107,44 @@ function fit_gen_pca_rv_RVSKL(X::Matrix{T}, fixed_comp::Vector{T}; mu::Vector{T}
 end
 
 
+function score_covariances(many_scores::Array{<:Real,3})
+	n_out = size(many_scores, 2)
+	amount_of_measurements = size(many_scores, 3)
+	covariances = zeros(amount_of_measurements, n_out, n_out)
+	for i in 1:amount_of_measurements
+		covariances[i, :, :] = cov(many_scores[:, :, i]; dims=1)
+	end
+	return covariances
+end
+
+
 """
 Generate a noisy permutation of the data by drawing from a multivariate Gaussian
 based on the covariance of many data draws
 """
-function noisy_scores_from_covariance(mean_scores::Matrix{T}, many_scores::AbstractArray{T,3}; rng::AbstractRNG=Random.GLOBAL_RNG) where {T<:Real}
+function noisy_scores_from_samples(mean_scores::Matrix{T}, many_scores::Array{T,3}; rng::AbstractRNG=Random.GLOBAL_RNG) where {T<:Real}
 	@assert size(mean_scores, 1) == size(many_scores, 2)  # amount of score dimensions
 	@assert size(mean_scores, 2) == size(many_scores, 3)  # amount of time points
 	noisy_scores = zeros(size(mean_scores))
+	covariance_hold = zeros(size(many_scores, 2), size(many_scores, 2))
 	for i in 1:size(mean_scores, 2)
-	    noisy_scores[:, i] = rand(rng, MvNormal(mean_scores[:, i], cov(many_scores[:, :, i]; dims=1)))
+		covariance_hold[:, :] = cov(many_scores[:, :, i]; dims=1)
+	    noisy_scores[:, i] = rand(rng, MvNormal(mean_scores[:, i], covariance_hold))
+	end
+	return noisy_scores
+end
+
+
+"""
+Generate a noisy permutation of the data by drawing from a multivariate Gaussian
+based on the covariance of many data draws
+"""
+function noisy_scores_from_covariance(mean_scores::Matrix{T}, covariances::Array{T,3}; rng::AbstractRNG=Random.GLOBAL_RNG) where {T<:Real}
+	@assert size(mean_scores, 1) == size(covariances, 2) == size(covariances, 3)  # amount of score dimensions
+	@assert size(mean_scores, 2) == size(covariances, 1)  # amount of time points
+	noisy_scores = zeros(size(mean_scores))
+	for i in 1:size(mean_scores, 2)
+	    noisy_scores[:, i] = rand(rng, MvNormal(mean_scores[:, i], covariances[i, :, :]))
 	end
 	return noisy_scores
 end

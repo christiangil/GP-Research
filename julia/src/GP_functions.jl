@@ -301,6 +301,37 @@ covariance(
 
 "adding measurement noise to Σ_obs"
 function Σ_observations(
+    Σ::Symmetric{T, Matrix{T}},
+    measurement_noise::Vector{T};
+    return_both::Bool=false
+    ) where {T<:Real}
+
+    Σ_obs = symmetric_A(Σ + Diagonal(measurement_noise .* measurement_noise); ignore_asymmetry=ignore_asymmetry, chol=true)
+    return return_both ? (Σ_obs, Σ) : Σ_obs
+end
+
+"adding measurement noise to Σ_obs"
+function Σ_observations(
+    Σ::Symmetric{T, Matrix{T}},
+    measurement_covariance::Array{T, 3};
+    return_both::Bool=false
+    ) where {T<:Real}
+
+    amount_of_measurements = size(measurement_covariance, 1)
+    n_out = size(measurement_covariance, 2)
+    @assert n_out == size(measurement_covariance, 3) == size(Σ, 2) / amount_of_measurements
+    Σ_obs = Matrix(Σ)
+    for i in 1:n_out
+        for j in 1:n_out
+            if i <= j; Σ_obs[diagind(Σ_obs, amount_of_measurements * (i - 1))[((j - i) * amount_of_measurements + 1):((j - i + 1) * amount_of_measurements)]] += measurement_covariance[:, i, j] end
+        end
+    end
+    Σ_obs = symmetric_A(Symmetric(Σ_obs); chol=true)
+    return return_both ? (Σ_obs, Σ) : Σ_obs
+end
+
+"adding measurement noise to Σ_obs"
+function Σ_observations(
     kernel_func::Function,
     x_obs::Vector{T},
     measurement_noise::Vector{T},
@@ -309,11 +340,8 @@ function Σ_observations(
     return_both::Bool=false
     ) where {T<:Real}
 
-    Σ = symmetric_A(covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters); ignore_asymmetry=ignore_asymmetry)
-    Σ_obs = symmetric_A(Σ + Diagonal(measurement_noise .* measurement_noise); ignore_asymmetry=ignore_asymmetry, chol=true)
-    return return_both ? (Σ_obs, Σ) : Σ_obs
+    return Σ_observations(symmetric_A(covariance(kernel_func, x_obs, x_obs, kernel_hyperparameters); ignore_asymmetry=ignore_asymmetry), measurement_noise; return_both=return_both)
 end
-
 
 "adding measurement noise to Σ_obs"
 function Σ_observations(
@@ -323,9 +351,9 @@ function Σ_observations(
     return_both::Bool=false
     ) where {T<:Real}
 
-    Σ = symmetric_A(covariance(prob_def, total_hyperparameters); ignore_asymmetry=ignore_asymmetry)
-    Σ_obs = symmetric_A(Σ + Diagonal(prob_def.noise .* prob_def.noise); ignore_asymmetry=ignore_asymmetry, chol=true)
-    return return_both ? (Σ_obs, Σ) : Σ_obs
+    return prob_def.has_covariance ?
+        Σ_observations(symmetric_A(covariance(prob_def, total_hyperparameters); ignore_asymmetry=ignore_asymmetry), prob_def.covariance; return_both=return_both) :
+        Σ_observations(symmetric_A(covariance(prob_def, total_hyperparameters); ignore_asymmetry=ignore_asymmetry), prob_def.noise; return_both=return_both)
 end
 
 

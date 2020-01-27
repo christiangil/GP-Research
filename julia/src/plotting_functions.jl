@@ -75,7 +75,7 @@ function corner_plot(
     f::Function,
     input::Vector{<:AbstractFloat},
     filename::AbstractString;
-    steps::Integer=15+1,
+    steps::Integer=15,
     min_spread::Real=1/2,
     input_labels::Vector{<:AbstractString}=repeat([" "],length(input)),
     n::Integer=length(input))

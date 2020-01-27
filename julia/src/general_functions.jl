@@ -310,14 +310,11 @@ function log_laplace_approximation(
 end
 
 
-function planck(λÅ::Union{Quantity, Real}, TK::Union{Quantity, Real})
-    λ = convert_and_strip_units(u"m", λÅ)u"m" / 10 ^ 10
-    h = u"h"
+function planck(λ::Unitful.Length, T::Unitful.Temperature)
+    λ = uconvert(u"m", λ)
     c = (light_speed)u"m/s"
-    k = u"k"
-    T = uconvert(u"K", TK)
     # W·sr−1·m−3
-    return strip_units(2 * h * c ^ 2 / λ^5 / (exp(h * c / (λ * k * T)) - 1))
+    return ustrip.(2 * u"h" * c ^ 2 / λ^5 / (exp(u"h" * c / (λ * u"k" * uconvert(u"K", T))) - 1))
 end
 
 

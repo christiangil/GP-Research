@@ -21,7 +21,7 @@ else
     kernel_choice = 4
     kernel_name = kernel_names[kernel_choice]
     seed = 25
-    use_long = true
+    use_long = false
     sample_size = 300
 end
 
@@ -51,8 +51,8 @@ println("optimizing on $fnames using the $kernel_name")
 if called_from_terminal
     problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
 else
-    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
 end
 
 
@@ -216,6 +216,8 @@ end
 # storing initial hyperparameters
 initial_x = remove_zeros(total_hyperparameters)
 
+global current_iter = 0
+
 function f_no_print(non_zero_hyper::Vector{T}) where {T<:Real}
     nprior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
     if nprior == Inf
@@ -227,7 +229,24 @@ end
 
 function f(non_zero_hyper::Vector{T}) where {T<:Real}
     println(non_zero_hyper)
-    global current_hyper = copy(non_zero_hyper)
+    if kernel_name == "qp" && current_iter % 5 == 0
+        current_τ = non_zero_hyper[end - 2]
+        spread = max(0.5, abs(current_τ) / 4)
+        possible_τ = linspace(current_τ - spread, current_τ + spread, 11)
+        new_τ = current_τ
+        new_f = f_no_print(non_zero_hyper)
+        for τ in possible_τ
+            hold = copy(non_zero_hyper)
+            hold[end - 2] = τ
+            possible_f = f_no_print(non_zero_hyper)
+            if possible_f < new_f
+                new_τ = τ
+                new_f = possible_f
+            end
+        end
+        non_zero_hyper[end - 2] = new_τ
+    end
+    global current_hyper[:] = non_zero_hyper
     return f_no_print(non_zero_hyper)
 end
 
@@ -249,6 +268,7 @@ end
 # ends optimization if true
 function optim_cb(x::OptimizationState)
     println()
+    global current_iter = x.iteration
     if x.iteration > 0
         println("Iteration:             ", x.iteration)
         println("Time so far:           ", x.metadata["time"], " s")
@@ -434,7 +454,7 @@ end
 
 function f(non_zero_hyper::Vector{T}) where {T<:Real}
     println(non_zero_hyper)
-    global current_hyper = copy(non_zero_hyper)
+    global current_hyper[:] = non_zero_hyper
     return f_no_print(non_zero_hyper)
 end
 
@@ -497,7 +517,7 @@ end
 
 function f(non_zero_hyper::Vector{T}) where {T<:Real}
     println(non_zero_hyper)
-    global current_hyper = copy(non_zero_hyper)
+    global current_hyper[:] = non_zero_hyper
     return f_no_print(non_zero_hyper)
 end
 
@@ -607,7 +627,7 @@ end
 
 function f(non_zero_hyper::Vector{T}) where {T<:Real}
     println(non_zero_hyper)
-    global current_hyper = copy(non_zero_hyper)
+    global current_hyper[:] = non_zero_hyper
     return f_no_print(non_zero_hyper)
 end
 

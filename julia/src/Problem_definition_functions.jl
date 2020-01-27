@@ -33,6 +33,8 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 	# used for constructing differentiated versions of the kernel
 	coeff_orders::AbstractArray{T2,6}
 	coeff_coeffs::AbstractArray{T2,4}
+	covariance::Array{T1, 3}  # the measurement covariance at all observations
+	has_covariance::Bool
 
 	function Jones_problem_definition(
 		kernel::Function,
@@ -52,6 +54,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 			time = Vector{typeof(1. * time_unit)}()
 			noisy_scores = zeros(n_out, 0)
 			selected_error_ests = zeros(n_out, 0)
+			selected_covariances = zeros(0, n_out, n_out)
 		end
 		for i in 1:length(hdf5_filenames)
 			hdf5_filename = hdf5_filenames[i]
@@ -63,16 +66,19 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 			@assert size(scores) == size(error_ests)
 
 			if length(hdf5_filenames) == 1
+				selected_covariances = score_covariances(scores_tot[:, 1:n_out, :])
 				selected_error_ests = error_ests[1:n_out, :]
-				noisy_scores = noisy_scores_from_covariance(scores, scores_tot; rng=rng)[1:n_out,:]
+				noisy_scores = noisy_scores_from_covariance(scores[1:n_out,:], selected_covariances; rng=rng)
 				time = convert_SOAP_phases.(time_unit, phases)
 			else
 				fraction_unobservable = 1 / 4
 				shift = Int(floor(rand(rng) * len_phase * fraction_unobservable))
 				kept_inds = shift + 1 : shift + Int(floor(len_phase * (1 - fraction_unobservable)))  # skip 3 months of the year. helps join together disparate simulations
 				println(kept_inds)
-				noisy_scores = cat(noisy_scores, noisy_scores_from_covariance(scores, scores_tot; rng=rng)[1:n_out, kept_inds]; dims=2)
+				selected_covariances_holder = score_covariances(scores_tot[:, 1:n_out, kept_inds])
+				noisy_scores = cat(noisy_scores, noisy_scores_from_covariance(scores[1:n_out, kept_inds], selected_covariances_holder; rng=rng); dims=2)
 				selected_error_ests = cat(selected_error_ests, error_ests[1:n_out, kept_inds]; dims=2)
+				selected_covariances = cat(selected_covariances, selected_covariances_holder; dims=1)
 				all_times = convert_SOAP_phases.(time_unit, phases)
 				i == 1 ? reshift = 0 * time_unit : reshift = fraction_unobservable * (all_times[end] - all_times[1]) + time[end]
 				append!(time, (reshift - all_times[kept_inds[1]]) .+ all_times[kept_inds])
@@ -97,6 +103,9 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 
 		# getting proper slice of data and converting to days
 
+		selected_covariances = selected_covariances[inds, :, :]
+		selected_covariances[:, 1, :] *= light_speed
+		selected_covariances[:, :, 1] *= light_speed
 		time = time[inds]
 		time .-= mean(time)  # minimizing period derivatives
 		x_obs = ustrip.(time)
@@ -129,7 +138,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 			a0[:,:] = ones(n_out, n_dif) / 20
 		end
 
-		return Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0)
+		return Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0; covariance=selected_covariances)
 	end
 	Jones_problem_definition(
 		kernel::Function,
@@ -141,9 +150,10 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		on_off::Unitful.Time=0u"d",
 		rng::AbstractRNG=Random.GLOBAL_RNG
 		) where T<: Real = Jones_problem_definition(kernel, n_kern_hyper, [hdf5_filename]; sub_sample=sub_sample, n_out=n_out, n_dif=n_dif, on_off=on_off, rng=rng)
-	function Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0; non_zero_hyper_inds=append!(findall(!iszero, collect(Iterators.flatten(a0))), collect(1:n_kern_hyper) .+ length(a0)))
+	function Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0; covariance=zeros(length(x_obs), n_out, n_out), non_zero_hyper_inds=append!(findall(!iszero, collect(Iterators.flatten(a0))), collect(1:n_kern_hyper) .+ length(a0)))
 		coeff_orders, coeff_coeffs = coefficient_orders(n_out, n_dif, a=a0)
-		return Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0, non_zero_hyper_inds, coeff_orders, coeff_coeffs)
+		has_covariance = (covariance != zeros(length(x_obs), n_out, n_out))
+		return Jones_problem_definition(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, measurement_noise, rv_noise, normals, a0, non_zero_hyper_inds, coeff_orders, coeff_coeffs, covariance, has_covariance)
 	end
 	function Jones_problem_definition(
 		kernel::Function,  # kernel function
@@ -161,17 +171,19 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		normals::Vector{T1},  # the normalization of each section of y_obs
 		a0::Matrix{T1},
 		non_zero_hyper_inds::Vector{T2},
-		coeff_orders::AbstractArray{T2,6},
-		coeff_coeffs::AbstractArray{T2,4}
-		) where {T1<:Real, T2<:Integer}
+		coeff_orders::Array{T2,6},
+		coeff_coeffs::Array{T2,4},
+		covariance::Array{T1, 3},
+		has_covariance::Bool) where {T1<:Real, T2<:Integer}
 
 		@assert isfinite(kernel(ones(num_kernel_hyperparameters), randn(); dorder=zeros(Int64, 2 + num_kernel_hyperparameters)))  # make sure the kernel is valid by testing a sample input
 		@assert n_dif>0
 		@assert n_out>0
 		# @assert dimension(time_unit) == dimension(u"s")
 		# @assert dimension(rvs_unit) == dimension(u"m / s")
-		@assert (length(x_obs) * n_out) == length(y_obs) == length(noise)
-		@assert length(x_obs) == length(rv) == length(rv_noise)
+		amount_of_measurements = length(x_obs)
+		@assert (amount_of_measurements * n_out) == length(y_obs) == length(noise)
+		@assert amount_of_measurements == length(rv) == length(rv_noise) == size(covariance, 1)
 		@assert time_unit == unit(time[1])
 		@assert rv_unit == unit(rv[1]) == unit(rv_noise[1])
 		@assert length(normals) == n_out
@@ -179,244 +191,32 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		@assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)  # maybe unnecessary due to the fact that we construct it
 		@assert size(coeff_coeffs) == (n_out, n_out, n_dif, n_dif)  # maybe unnecessary due to the fact that we construct it
 		@assert length(non_zero_hyper_inds) == length(findall(!iszero, collect(Iterators.flatten(a0)))) + n_kern_hyper
-		return new{typeof(x_obs[1]),typeof(n_kern_hyper)}(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, noise, rv_noise, normals, a0, non_zero_hyper_inds, coeff_orders, coeff_coeffs)
+		@assert n_out == size(covariance, 2) == size(covariance, 3)
+		@assert (covariance != zeros(amount_of_measurements, n_out, n_out)) == has_covariance
+
+		return new{typeof(x_obs[1]),typeof(n_kern_hyper)}(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, noise, rv_noise, normals, a0, non_zero_hyper_inds, coeff_orders, coeff_coeffs, covariance, has_covariance)
 	end
 end
 
 
-# "Jones_problem_definition without kernel information"
-# struct Jones_problem_definition_base{T1<:Real, T2<:Integer}
-#	 n_dif::Integer  # amount of times you are differenting the base kernel
-#	 n_out::Integer  # amount of scores you are jointly modelling
-#	 x_obs::Vector{T1} # the observation times/phases
-#	 time_unit::Unitful.FreeUnits  # the units of x_bs
-#	 y_obs::Vector{T1}  # the flattened, observed data
-#	 rvs_unit::Unitful.FreeUnits  # the units of the RV section of y_obs
-#	 noise::Vector{T1}  # the measurement noise at all observations
-#	 normals::Vector{T1}  # the normalization of each section of y_obs
-#	 a0::Matrix{T1}  # the meta kernel coefficients
-#	 # The powers that each a0 coefficient
-#	 # is taken to for each part of the matrix construction
-#	 # used for constructing differentiated versions of the kernel
-#	 coeff_orders::AbstractArray{T2,6}
-#	 coeff_coeffs::AbstractArray{T2,4}
-# end
-#
-#
-# "Ensure that the passed problem definition parameters are what we expect them to be"
-# function check_problem_definition(
-#	 n_dif::Integer,
-#	 n_out::Integer,
-#	 x_obs::Vector{T1},
-#	 time_unit::Unitful.FreeUnits,
-#	 y_obs::Vector{T1},
-#	 rvs_unit::Unitful.FreeUnits,
-#	 noise::Vector{T1},
-#	 normals::Vector{T1},
-#	 a0::Matrix{T1},
-#	 coeff_orders::AbstractArray{T2,6},
-#	 coeff_coeffs::AbstractArray{T2,4}
-#	 ) where {T1<:Real, T2<:Integer}
-#
-#	 @assert n_dif>0
-#	 @assert n_out>0
-#	 @assert dimension(time_unit) == dimension(u"s")
-#	 @assert dimension(rvs_unit) == dimension(u"m / s")
-#	 @assert (length(x_obs) * n_out) == length(y_obs)
-#	 @assert length(y_obs) == length(noise)
-#	 @assert length(normals) == n_out
-#	 @assert size(a0) == (n_out, n_dif)
-#	 @assert size(coeff_orders) == (n_out, n_out, n_dif, n_dif, n_out, n_dif)  # maybe unnecessary due to the fact that we construct it
-#	 @assert size(coeff_coeffs) == (n_out, n_out, n_dif, n_dif)  # maybe unnecessary due to the fact that we construct it
-# end
-#
-#
-# "Ensure that Jones_problem_definition_base is constructed correctly"
-# function init_problem_definition(
-#	 n_dif::Integer,
-#	 n_out::Integer,
-#	 x_obs::Vector{T1},
-#	 time_unit::Unitful.FreeUnits,
-#	 y_obs::Vector{T1},
-#	 rvs_unit::Unitful.FreeUnits,
-#	 noise::Vector{T1},
-#	 normals::Vector{T1},
-#	 a0::Matrix{T1},
-#	 coeff_orders::AbstractArray{T2,6},
-#	 coeff_coeffs::AbstractArray{T2,4},
-#	 ) where {T1<:Real, T2<:Integer}
-#
-#	 check_problem_definition(n_dif, n_out, x_obs, time_unit, y_obs, rvs_unit, noise, normals, a0, coeff_orders, coeff_coeffs)
-#	 return Jones_problem_definition_base(n_dif, n_out, x_obs, time_unit, y_obs, rvs_unit, noise, normals, a0, coeff_orders, coeff_coeffs)
-# end
-#
-# "Calculate the coeffficient orders for Jones_problem_definition_base construction if they weren't passed"
-# function init_problem_definition(
-#	 n_dif::Integer,
-#	 n_out::Integer,
-#	 x_obs::Vector{T},
-#	 time_unit::Unitful.FreeUnits,
-#	 a0::Matrix{T};
-#	 y_obs::Vector{T}=zeros(length(x_obs) * n_out),
-#	 rvs_unit::Unitful.FreeUnits=u"m / s",
-#	 noise::Vector{T}=zeros(length(x_obs) * n_out),
-#	 normals::Vector{T}=ones(n_out)
-#	 ) where {T<:Real}
-#
-#	 coeff_orders, coeff_coeffs = coefficient_orders(n_out, n_dif, a=a0)
-#	 return init_problem_definition(n_dif, n_out, x_obs, time_unit, y_obs, rvs_unit, noise, normals, a0, coeff_orders, coeff_coeffs)
-# end
-#
-# "Construct Jones_problem_definition by adding kernel information to Jones_problem_definition_base"
-# function init_problem_definition(
-#	 kernel_func::Function,
-#	 num_kernel_hyperparameters::Integer,
-#	 prob_def_base::Jones_problem_definition_base)
-#
-#	 @assert isfinite(kernel_func(ones(num_kernel_hyperparameters), randn(); dorder=zeros(Int64, 2 + num_kernel_hyperparameters)))  # make sure the kernel is valid by testing a sample input
-#	 check_problem_definition(prob_def_base.n_dif, prob_def_base.n_out, prob_def_base.x_obs, prob_def_base.time_unit, prob_def_base.y_obs, prob_def_base.rvs_unit, prob_def_base.noise, prob_def_base.normals, prob_def_base.a0, prob_def_base.coeff_orders, prob_def_base.coeff_coeffs)  # might be unnecessary
-#	 return Jones_problem_definition(kernel_func, num_kernel_hyperparameters, prob_def_base.n_dif, prob_def_base.n_out, prob_def_base.x_obs, prob_def_base.time_unit, prob_def_base.y_obs, prob_def_base.rvs_unit, prob_def_base.noise, prob_def_base.normals, prob_def_base.a0, prob_def_base.coeff_orders, prob_def_base.coeff_coeffs)
-# end
-
-
-# function init_problem_definition(
-# 	hdf5_filename::String;
-# 	sub_sample::Integer=0,
-# 	n_out::Integer=3,
-# 	n_dif::Integer=3,
-# 	save_prob_def::Bool=true,
-# 	save_str::String="full",
-# 	on_off::Unitful.Time=0u"d",
-# 	rng::AbstractRNG=Random.GLOBAL_RNG)
-#
-#	 assert_positive(n_out, n_dif)
-#
-#	 @load hdf5_filename * "_rv_data.jld2" phases scores
-#	 @load hdf5_filename * "_bootstrap.jld2" scores_tot scores_mean error_ests
-#	 @assert isapprox(scores, scores_mean)
-#
-#	 noisy_scores = noisy_scores_from_covariance(scores, scores_tot)
-#
-# 	phases_days = convert_SOAP_phases.(u"d", phases)
-#	 inds = collect(1:size(noisy_scores, 2))
-#	 if sub_sample !=0
-# 		# if a on-off cadence is specified, remove all observations during the
-# 		# off-phase and shift by a random phase
-# 		if on_off != 0u"d"
-# 			inds = findall(iseven, convert.(Int64, floor.((phases_days / on_off) .- rand(rng))))
-# 			inds = sort(sample(rng, inds, sub_sample; replace=false))
-# 			println(inds[1:10])
-# 		else
-# 			shift = convert(Int64, floor(rand() * (length(inds) - sub_sample)))
-# 			inds = collect((1 + shift):(sub_sample + shift))
-# 		end
-# 	end
-#
-#	 amount_of_measurements = length(inds)
-#	 total_amount_of_measurements = amount_of_measurements * n_out
-#
-#	 # getting proper slice of data and converting to days
-#	 x_obs = convert_SOAP_phases.(u"d", phases[inds])
-#	 time_unit = u"d"
-#	 y_obs_hold = noisy_scores[1:n_out, inds]
-#	 measurement_noise_hold = error_ests[1:n_out, inds]
-#	 y_obs_hold[1, :] *= light_speed  # convert scores from redshifts to radial velocities in m/s
-#	 measurement_noise_hold[1, :] *= light_speed  # convert score errors from redshifts to radial velocities in m/s
-#
-#	 # rearranging the data into one column (not sure reshape() does what I want)
-#	 # and normalizing the data (for numerical purposes)
-#	 y_obs = zeros(total_amount_of_measurements)
-#	 measurement_noise = zeros(total_amount_of_measurements)
-#
-#	 normals = ones(n_out)
-#	 for i in 1:n_out
-#		 y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :]
-#		 measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :]
-#	 end
-#	 rvs_unit = u"m / s"
-#
-#	 # a0 = ones(n_out, n_dif) / 20
-#	 a0 = zeros(n_out, n_dif)
-# 	if n_dif == n_out == 3
-# 		a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075;
-# 	else
-# 		a0[:,:] = ones(n_out, n_dif) / 20
-# 	end
-#
-#	 problem_def_base = init_problem_definition(n_dif, n_out, x_obs, time_unit, a0; y_obs=y_obs, rvs_unit=rvs_unit, normals=normals, noise=measurement_noise)
-#
-# 	if save_prob_def; @save hdf5_filename * "_problem_def_" * save_str * "_base.jld2" problem_def_base end
-#
-# 	return problem_def_base
-#
-#	 # kernel_function, num_kernel_hyperparameters = include("src/kernels/quasi_periodic_kernel.jl")
-#	 # problem_def = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
-#	 # @save "jld2_files/" * hdf5_filename * "_problem_def_" * save_str * ".jld2" problem_def
-# end
-
-
-# function init_problem_definition(
-# 	rvs::Vector{Real},
-# 	noises::Vector{Real},
-# 	rv_units::Unitful.FreeUnits,
-# 	phases::Vector{Real},
-# 	phase_units::Unitful.FreeUnits;
-# 	n_dif::Integer=3,
-# 	save_str::String="full",
-# 	rng::AbstractRNG=Random.GLOBAL_RNG)
-#
-#	 assert_positive(n_out, n_dif)
-#
-# 	phases_days = convert_and_strip_units("days", phases * phase_units)
-#
-#	 amount_of_measurements = length(rvs)
-#
-#	 # getting proper slice of data and converting to days
-#	 x_obs = convert_SOAP_phases_to_days.(phases[inds])
-#	 time_unit = u"d"
-#	 y_obs_hold = noisy_scores[1:n_out, inds]
-#	 measurement_noise_hold = error_ests[1:n_out, inds]
-#	 y_obs_hold[1, :] *= light_speed  # convert scores from redshifts to radial velocities in m/s
-#	 measurement_noise_hold[1, :] *= light_speed  # convert score errors from redshifts to radial velocities in m/s
-#
-#	 # rearranging the data into one column (not sure reshape() does what I want)
-#	 # and normalizing the data (for numerical purposes)
-#	 y_obs = zeros(amount_of_measurements)
-#	 measurement_noise = zeros(amount_of_measurements)
-#
-#	 normals = ones(n_out)
-#	 for i in 1:n_out
-#		 y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :]
-#		 measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :]
-#	 end
-#	 rvs_unit = u"m / s"
-#
-#	 # a0 = ones(n_out, n_dif) / 20
-#	 a0 = zeros(n_out, n_dif)
-# 	a0[1,1] = 0.03;
-# 	a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075; a0
-#
-#	 problem_def_base = init_problem_definition(n_dif, n_out, x_obs, time_unit, a0; y_obs=y_obs, rvs_unit=rvs_unit, normals=normals, noise=measurement_noise)
-#
-# 	if save_prob_def; @save hdf5_filename * "_problem_def_" * save_str * "_base.jld2" problem_def_base end
-#
-# 	return problem_def_base
-#
-#	 # kernel_function, num_kernel_hyperparameters = include("src/kernels/quasi_periodic_kernel.jl")
-#	 # problem_def = init_problem_definition(kernel_function, num_kernel_hyperparameters, problem_def_base)
-#	 # @save "jld2_files/" * hdf5_filename * "_problem_def_" * save_str * ".jld2" problem_def
-# end
-
-
 function normalize_problem_definition!(prob_def::Jones_problem_definition)
 	n_obs = length(prob_def.x_obs)
+	renorms = ones(prob_def.n_out)
 	for i in 1:prob_def.n_out
 		inds = 1 + (i - 1) * n_obs : i * n_obs
 		prob_def.y_obs[inds] .-= mean(prob_def.y_obs[inds])
-		renorm = std(prob_def.y_obs[inds])
+		renorms[i] = std(prob_def.y_obs[inds])
 		# println(renorm)
-		prob_def.normals[i] *= renorm
-		prob_def.y_obs[inds] /= renorm
-		prob_def.noise[inds] /= renorm
+		prob_def.normals[i] *= renorms[i]
+		prob_def.y_obs[inds] /= renorms[i]
+		prob_def.noise[inds] /= renorms[i]
+	end
+	renorm_mat = renorms .* transpose(renorms)
+	# println(renorms)
+	# println(renorm_mat)
+	if prob_def.has_covariance
+		for i in 1:n_obs
+			prob_def.covariance[i, :, :] ./= renorm_mat
+		end
 	end
 end
