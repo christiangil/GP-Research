@@ -98,8 +98,8 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 			end
 		end
 
-		amount_of_measurements = length(inds)
-		total_amount_of_measurements = amount_of_measurements * n_out
+		n_meas = length(inds)
+		total_n_meas = n_meas * n_out
 
 		# getting proper slice of data and converting to days
 
@@ -116,17 +116,19 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 
 		# rearranging the data into one column (not sure reshape() does what I want)
 		# and normalizing the data (for numerical purposes)
-		y_obs = zeros(total_amount_of_measurements)
-		measurement_noise = zeros(total_amount_of_measurements)
+		y_obs = zeros(total_n_meas)
+		measurement_noise = zeros(total_n_meas)
 
 		normals = ones(n_out)
 		for i in 1:n_out
-			y_obs[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = y_obs_hold[i, :]
-			measurement_noise[((i - 1) * amount_of_measurements + 1):(i * amount_of_measurements)] = measurement_noise_hold[i, :]
+			# y_obs[((i - 1) * n_meas + 1):(i * n_meas)] = y_obs_hold[i, :]
+			# measurement_noise[((i - 1) * n_meas + 1):(i * n_meas)] = measurement_noise_hold[i, :]
+			y_obs[i:n_out:end] = y_obs_hold[i, :]
+			measurement_noise[i:n_out:end] = measurement_noise_hold[i, :]
 		end
 		rv_unit = u"m/s"
-        rv = y_obs[1:amount_of_measurements] * rv_unit
-        rv_noise = measurement_noise[1:amount_of_measurements] * rv_unit
+        rv = y_obs[1:n_out:end] * rv_unit
+        rv_noise = measurement_noise[1:n_out:end] * rv_unit
 		# y_obs *= rvs_unit
 		# measurement_noise *= rvs_unit
 
@@ -181,9 +183,9 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		@assert n_out>0
 		# @assert dimension(time_unit) == dimension(u"s")
 		# @assert dimension(rvs_unit) == dimension(u"m / s")
-		amount_of_measurements = length(x_obs)
-		@assert (amount_of_measurements * n_out) == length(y_obs) == length(noise)
-		@assert amount_of_measurements == length(rv) == length(rv_noise) == size(covariance, 1)
+		n_meas = length(x_obs)
+		@assert (n_meas * n_out) == length(y_obs) == length(noise)
+		@assert n_meas == length(rv) == length(rv_noise) == size(covariance, 1)
 		@assert time_unit == unit(time[1])
 		@assert rv_unit == unit(rv[1]) == unit(rv_noise[1])
 		@assert length(normals) == n_out
@@ -192,7 +194,7 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		@assert size(coeff_coeffs) == (n_out, n_out, n_dif, n_dif)  # maybe unnecessary due to the fact that we construct it
 		@assert length(non_zero_hyper_inds) == length(findall(!iszero, collect(Iterators.flatten(a0)))) + n_kern_hyper
 		@assert n_out == size(covariance, 2) == size(covariance, 3)
-		@assert (covariance != zeros(amount_of_measurements, n_out, n_out)) == has_covariance
+		@assert (covariance != zeros(n_meas, n_out, n_out)) == has_covariance
 
 		return new{typeof(x_obs[1]),typeof(n_kern_hyper)}(kernel, n_kern_hyper, n_dif, n_out, x_obs, time, time_unit, y_obs, rv, rv_unit, noise, rv_noise, normals, a0, non_zero_hyper_inds, coeff_orders, coeff_coeffs, covariance, has_covariance)
 	end
@@ -203,7 +205,7 @@ function normalize_problem_definition!(prob_def::Jones_problem_definition)
 	n_obs = length(prob_def.x_obs)
 	renorms = ones(prob_def.n_out)
 	for i in 1:prob_def.n_out
-		inds = 1 + (i - 1) * n_obs : i * n_obs
+		inds = (i:prob_def.n_out:length(prob_def.y_obs))
 		prob_def.y_obs[inds] .-= mean(prob_def.y_obs[inds])
 		renorms[i] = std(prob_def.y_obs[inds])
 		# println(renorm)
@@ -211,10 +213,8 @@ function normalize_problem_definition!(prob_def::Jones_problem_definition)
 		prob_def.y_obs[inds] /= renorms[i]
 		prob_def.noise[inds] /= renorms[i]
 	end
-	renorm_mat = renorms .* transpose(renorms)
-	# println(renorms)
-	# println(renorm_mat)
 	if prob_def.has_covariance
+		renorm_mat = renorms .* transpose(renorms)
 		for i in 1:n_obs
 			prob_def.covariance[i, :, :] ./= renorm_mat
 		end

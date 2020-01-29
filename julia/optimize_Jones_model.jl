@@ -20,20 +20,20 @@ if called_from_terminal
 else
     kernel_choice = 4
     kernel_name = kernel_names[kernel_choice]
-    seed = 25
+    seed = 20
     use_long = false
-    sample_size = 300
+    sample_size = 50
 end
 
 
-# allowing covariance matrix to be calculated in parallel
-if !called_from_terminal
-    try
-        prep_parallel_covariance(kernel_name)
-    catch
-        prep_parallel_covariance(kernel_name)
-    end
-end
+# # allowing covariance matrix to be calculated in parallel
+# if !called_from_terminal
+#     try
+#         prep_parallel_covariance(kernel_name)
+#     catch
+#         prep_parallel_covariance(kernel_name)
+#     end
+# end
 
 kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
 
@@ -51,10 +51,9 @@ println("optimizing on $fnames using the $kernel_name")
 if called_from_terminal
     problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
 else
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
-    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
 end
-
 
 ########################################
 # Adding planet and normalizing scores #
@@ -69,7 +68,6 @@ if use_long
 else
     results_dir = "results/short/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
 end
-
 try
     # rm(results_dir, recursive=true)
     mkpath(results_dir)
@@ -79,13 +77,17 @@ catch
 end
 normalize_problem_definition!(problem_definition)
 println("Score errors:")
-println(mean(problem_definition.noise[1:sample_size]) * problem_definition.normals[1], " m/s")
+# println(mean(problem_definition.noise[1:sample_size]) * problem_definition.normals[1], " m/s")
+# for i in 1:problem_definition.n_out
+#     println(mean(problem_definition.noise[(i-1)*sample_size+1:i*sample_size]))
+#     @assert mean(problem_definition.noise[(i-1)*sample_size+1:i*sample_size]) < 2
+# end
+println(mean(problem_definition.noise[1:problem_definition.n_out:end]) * problem_definition.normals[1], " m/s")
 for i in 1:problem_definition.n_out
-    println(mean(problem_definition.noise[(i-1)*sample_size+1:i*sample_size]))
-    @assert mean(problem_definition.noise[(i-1)*sample_size+1:i*sample_size]) < 2
+    println(mean(problem_definition.noise[i:problem_definition.n_out:end]))
+    @assert mean(problem_definition.noise[i:problem_definition.n_out:end]) < 2
 end
 println()
-
 
 if kernel_name in ["pp", "se", "m52"]
     # normals
@@ -112,7 +114,7 @@ elseif kernel_name in ["rq", "rm52"]
     end
 elseif  kernel_name == "qp"
     # qp
-    paramsλp = gamma_mode_std_2_alpha_theta(1, 0.5)
+    paramsλp = gamma_mode_std_2_alpha_theta(1, 0.4)
     σP = 15; σse = 15; ρ = .9
     Σ_qp_prior = bvnormal_covariance(σP, σse, ρ)
     μ_qp_prior = [30, 60.]
@@ -180,10 +182,13 @@ time_span = maximum(problem_definition.x_obs) - minimum(problem_definition.x_obs
 coeff_hyperparameters = collect(Iterators.flatten(problem_definition.a0))
 total_hyperparameters = append!(coeff_hyperparameters, initial_hypers[kernel_choice] .* centered_rand(rng, problem_definition.n_kern_hyper; center=1, scale=0.4))
 
-# how finely to sample the domain (for plotting)
-amount_of_samp_points = convert(Int64, max(500, round(2 * sqrt(2) * length(problem_definition.x_obs))))
+# hmm = Σ_observations(problem_definition, total_hyperparameters)
+#
+# init_plot()
+# imshow(hmm.L * hmm.U)
+# save_PyPlot_fig("test_new.png")
 
-# Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_initial_gp"; find_post=false)  # , plot_Σ=true, plot_Σ_profile=true)
+# Jones_line_plots(problem_definition, total_hyperparameters, "figs/gp/$kernel_name/seed$(seed)_initial_gp"; find_post=false)  # , plot_Σ=true, plot_Σ_profile=true)
 
 possible_labels = [
     [L"\lambda_{pp}"],
@@ -199,7 +204,7 @@ for i in 1:problem_definition.n_kern_hyper
     global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
 end
 
-Jones_line_plots(amount_of_samp_points, problem_definition, total_hyperparameters, results_dir * "init"; hyper_param_string=hp_string)
+Jones_line_plots(problem_definition, total_hyperparameters, results_dir * "init"; hyper_param_string=hp_string)
 
 #######################
 # Jones model fitting #
@@ -216,8 +221,6 @@ end
 # storing initial hyperparameters
 initial_x = remove_zeros(total_hyperparameters)
 
-global current_iter = 0
-
 function f_no_print(non_zero_hyper::Vector{T}) where {T<:Real}
     nprior = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0)
     if nprior == Inf
@@ -229,23 +232,6 @@ end
 
 function f(non_zero_hyper::Vector{T}) where {T<:Real}
     println(non_zero_hyper)
-    if kernel_name == "qp" && current_iter % 5 == 0
-        current_τ = non_zero_hyper[end - 2]
-        spread = max(0.5, abs(current_τ) / 4)
-        possible_τ = linspace(current_τ - spread, current_τ + spread, 11)
-        new_τ = current_τ
-        new_f = f_no_print(non_zero_hyper)
-        for τ in possible_τ
-            hold = copy(non_zero_hyper)
-            hold[end - 2] = τ
-            possible_f = f_no_print(non_zero_hyper)
-            if possible_f < new_f
-                new_τ = τ
-                new_f = possible_f
-            end
-        end
-        non_zero_hyper[end - 2] = new_τ
-    end
     global current_hyper[:] = non_zero_hyper
     return f_no_print(non_zero_hyper)
 end
@@ -268,7 +254,6 @@ end
 # ends optimization if true
 function optim_cb(x::OptimizationState)
     println()
-    global current_iter = x.iteration
     if x.iteration > 0
         println("Iteration:             ", x.iteration)
         println("Time so far:           ", x.metadata["time"], " s")
@@ -277,9 +262,34 @@ function optim_cb(x::OptimizationState)
         println()
         # update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
     end
-    # Jones_line_plots(amount_of_samp_points, problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)), "figs/gp/$kernel_name/training/training_$(x.iteration)_gp")  # ; plot_Σ_profile=true)
+    # Jones_line_plots(problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)), "figs/gp/$kernel_name/training/training_$(x.iteration)_gp")  # ; plot_Σ_profile=true)
     return false
 end
+
+
+function do_gp_fit_gridsearch!(non_zero_hyper::Vector{<:Real}, ind::Integer)
+    println("gridsearching over hp$ind")
+    current_hp = non_zero_hyper[end - 2]
+    spread = max(0.5, abs(current_hp) / 4)
+    possible_hp = linspace(current_hp - spread, current_hp + spread, 11)
+    new_hp = current_hp
+    new_f = f_no_print(non_zero_hyper)
+    println("starting at hp = ", new_hp, " -> ", new_f)
+    println("searching from ", current_hp - spread, " to ", current_hp + spread)
+    for hp in possible_hp
+        hold = copy(non_zero_hyper)
+        hold[ind] = hp
+        possible_f = f_no_print(hold)
+        if possible_f < new_f
+            new_hp = hp
+            new_f = possible_f
+        end
+    end
+    non_zero_hyper[ind] = new_hp
+    println("ending at hp   = ", new_hp, " -> ", new_f)
+    return non_zero_hyper
+end
+
 
 function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
     time0 = Libc.time()
@@ -290,24 +300,39 @@ function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
         attempts += 1
         if attempts > 1;
             println("found saddle point. starting attempt $attempts with a perturbation")
-            # global current_hyper += 3e-2 * (rand(rng, length(current_hyper)) .- 0.5)
             global current_hyper[1:end-problem_definition.n_kern_hyper] += centered_rand(rng, length(current_hyper) - problem_definition.n_kern_hyper)
             global current_hyper[end-problem_definition.n_kern_hyper+1:end] = add_kick!(current_hyper[end-problem_definition.n_kern_hyper+1:end])
         end
-        # println("fitting with Hessian")
-        try
-            global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations)) # 27s
-        catch
-            println("retrying fit")
-            global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations))
+        if kernel_name == "qp"
+            gridsearch_every = 50
+            converged = false
+            i = 0
+            before_grid = zeros(length(current_hyper))
+            global current_hyper = do_gp_fit_gridsearch!(current_hyper, length(current_hyper) - 2)
+            try
+                while i < Int(ceil(iterations / gridsearch_every)) & !converged
+                    global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=gridsearch_every)) # 27s
+                    before_grid[:] = current_hyper
+                    global current_hyper = do_gp_fit_gridsearch!(current_hyper, length(current_hyper) - 2)
+                    converged = result.g_converged & isapprox(before_grid, current_hyper)
+                end
+            catch
+                println("retrying fit")
+                while i < Int(ceil(iterations / gridsearch_every)) & !converged
+                    global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=gridsearch_every)) # 27s
+                    before_grid[:] = current_hyper
+                    global current_hyper = do_gp_fit_gridsearch!(current_hyper, length(current_hyper) - 2)
+                    converged = result.g_converged & isapprox(before_grid, current_hyper)
+                end
+            end
+        else
+            try
+                global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations)) # 27s
+            catch
+                println("retrying fit")
+                global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations))
+            end
         end
-        # println("fitting without Hessian")
-        # try
-        #     global result = optimize(f, g!, current_hyper, LBFGS(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations)) # 27s
-        # catch
-        #     println("retrying fit")
-        #     global result = optimize(f, g!, current_hyper, LBFGS(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=iterations))
-        # end
         current_det = det(h!(zeros(length(initial_x), length(initial_x)), current_hyper))
         println(current_det)
         in_saddle = current_det <= 0
@@ -316,7 +341,6 @@ function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
 end
 
 time1 = fit_GP!(initial_x)
-
 println(result)
 
 fit1_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, result.minimizer)
@@ -340,7 +364,7 @@ for i in 1:problem_definition.n_kern_hyper
     global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit1_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
 end
 
-Jones_line_plots(amount_of_samp_points, problem_definition, fit1_total_hyperparameters, results_dir * "fit"; hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
+Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fit"; hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
 
 ################
 # Corner plots #
@@ -498,7 +522,7 @@ global hp_string = ""
 for i in 1:problem_definition.n_kern_hyper
     global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit2_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
 end
-Jones_line_plots(amount_of_samp_points, problem_definition, fit2_total_hyperparameters, results_dir * "fit_epi"; fit_ks=epi_ks, hyper_param_string=hp_string)
+Jones_line_plots(problem_definition, fit2_total_hyperparameters, results_dir * "fit_epi"; fit_ks=epi_ks, hyper_param_string=hp_string)
 
 ###################################################################
 # Refitting GP with full planet signal at found period subtracted #
@@ -586,7 +610,7 @@ global hp_string = ""
 for i in 1:problem_definition.n_kern_hyper
     global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit3_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
 end
-Jones_line_plots(amount_of_samp_points, problem_definition, fit3_total_hyperparameters, results_dir * "fit_full"; fit_ks=full_ks, hyper_param_string=hp_string)
+Jones_line_plots(problem_definition, fit3_total_hyperparameters, results_dir * "fit_full"; fit_ks=full_ks, hyper_param_string=hp_string)
 
 println("best fit keplerian")
 println(kep_parms_str(full_ks))
@@ -665,7 +689,7 @@ global hp_string = ""
 for i in 1:problem_definition.n_kern_hyper
     global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit4_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
 end
-Jones_line_plots(amount_of_samp_points, problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks, hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
+Jones_line_plots(problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks, hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
 
 ##########################
 # Evidence approximation #
@@ -729,4 +753,4 @@ println("evidence for Jones + true planet model: " * string(E3))
 
 saved_likelihoods = [-fit_nlogL1, uE1, E1, -fit_nlogL2, uE2, E2, -fit_nlogL3, uE3, E3]
 save_nlogLs(seed, [time1, time2 + time3, time4] ./ 3600, saved_likelihoods, append!(copy(fit1_total_hyperparameters), fit3_total_hyperparameters), original_ks, full_ks, results_dir)
-sum([time1, time2 + time3, time4] ./ 3600)
+# sum([time1, time2 + time3, time4] ./ 3600)

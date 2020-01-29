@@ -77,7 +77,6 @@ end
 
 
 function Jones_line_plots(
-    amount_of_samp_points::Integer,
     prob_def::Jones_problem_definition,
     total_hyperparameters::Vector{T},
     file::AbstractString;
@@ -86,14 +85,15 @@ function Jones_line_plots(
     plot_Σ_profile::Bool=false,
     filetype::AbstractString="png",
     fit_ks::Union{kep_signal, kep_signal_epicyclic, kep_signal_wright, kep_signal_circ}=kep_signal(;K=0u"m/s"),
-    hyper_param_string::String=""
+    hyper_param_string::String="",
+    n_samp_points::Integer = convert(Int64, max(500, round(2 * sqrt(2) * length(prob_def.x_obs))))
     ) where {T<:Real}
 
-    x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), amount_of_samp_points))
-    amount_of_total_samp_points = amount_of_samp_points * prob_def.n_out
-    amount_of_obs = length(prob_def.x_obs)
+    x_samp = collect(linspace(minimum(prob_def.x_obs), maximum(prob_def.x_obs), n_samp_points))
+    n_total_samp_points = n_samp_points * prob_def.n_out
+    n_meas = length(prob_def.x_obs)
 
-    show_curves = zeros(show, amount_of_total_samp_points)
+    show_curves = zeros(show, n_total_samp_points)
 
     # calculate mean, σ, and show_curves
     # if find_post
@@ -101,19 +101,19 @@ function Jones_line_plots(
     mean_GP, σ, mean_GP_obs, Σ = GP_posteriors(prob_def, x_samp, total_hyperparameters; return_mean_obs=true, y_obs=remove_kepler(prob_def, fit_ks))
 
     # init_plot()
-    # plot(x_samp, mean_GP[1:amount_of_samp_points])
-    # plot(prob_def.x_obs, mean_GP_obs[1:amount_of_obs])
+    # plot(x_samp, mean_GP[1:n_samp_points])
+    # plot(prob_def.x_obs, mean_GP_obs[1:n_meas])
     # save_PyPlot_fig("test.png")
 
     if plot_Σ; plot_im(Σ, file = file * "_K_post." * filetype) end
     L = ridge_chol(Σ).L
     for i in 1:show
-        show_curves[i,:] = L * randn(amount_of_total_samp_points) + mean_GP
+        show_curves[i,:] = L * randn(n_total_samp_points) + mean_GP
     end
     # if no posterior is being calculated, estimate σ with sampling
     # else
     #     show_resids = false
-    #     mean_GP = zeros(amount_of_total_samp_points)
+    #     mean_GP = zeros(n_total_samp_points)
     #     Σ = covariance(prob_def, x_samp, x_samp, total_hyperparameters)
     #     if plot_Σ
     #         plot_im(Σ, file = file * "_K_prior." * filetype)
@@ -122,9 +122,9 @@ function Jones_line_plots(
     #
     #     # calculate a bunch of GP draws for a σ estimation
     #     draws = 5000
-    #     storage = zeros((draws, amount_of_total_samp_points))
+    #     storage = zeros((draws, n_total_samp_points))
     #     for i in 1:draws
-    #         storage[i, :] = (L * randn(amount_of_total_samp_points)) + mean
+    #         storage[i, :] = (L * randn(n_total_samp_points)) + mean
     #     end
     #     show_curves[:, :] = storage[1:show, :]
     #     storage = sort(storage, dims=1)
@@ -140,7 +140,7 @@ function Jones_line_plots(
 
         if plot_Σ_profile
             init_plot()
-            fig = plot(collect(1:(prob_def.n_out * amount_of_samp_points)) / amount_of_samp_points, Σ[convert(Int64, round((output - 1 / 2) * amount_of_samp_points)),:])
+            fig = plot(collect(1:(prob_def.n_out * n_samp_points)) / n_samp_points, Σ[convert(Int64, round((output - 1 / 2) * n_samp_points)),:])
             axvline(x=1, color="black")
             axvline(x=2, color="black")
             ylabel("Covariance")
@@ -149,8 +149,10 @@ function Jones_line_plots(
         end
 
         # the indices corresponding to the proper output
-        sample_output_indices = (amount_of_samp_points * (output - 1) + 1):(amount_of_samp_points * output)
-        obs_output_indices = (amount_of_obs * (output - 1) + 1):(amount_of_obs * output)
+        # sample_output_indices = (n_samp_points * (output - 1) + 1):(n_samp_points * output)
+        # obs_output_indices = (n_meas * (output - 1) + 1):(n_meas * output)
+        sample_output_indices = output:prob_def.n_out:n_total_samp_points
+        obs_output_indices = output:prob_def.n_out:length(prob_def.y_obs)
 
         # getting the y values for the proper output
         y_o = prob_def.y_obs[obs_output_indices]
@@ -211,7 +213,7 @@ function Jones_line_plots(
         mod_x_obs = convert_and_strip_units.(u"d", mod.(prob_def.time, fit_ks.P))
         samp_x = collect(linspace(0, ustrip(fit_ks.P), 1000)) * unit(fit_ks.P)
         keps = fit_ks.(samp_x)
-        ys = ustrip.(prob_def.rv) - mean_GP_obs[1:amount_of_obs] .* prob_def.normals[1]
+        ys = ustrip.(prob_def.rv) - mean_GP_obs[1:prob_def.n_out:end] .* prob_def.normals[1]
         noises = convert_and_strip_units.(unit(prob_def.rv[1]), prob_def.rv_noise)
 
         init_plot()

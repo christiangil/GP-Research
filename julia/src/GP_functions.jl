@@ -276,10 +276,17 @@ function covariance(
         end
     end
 
+    # making the highest variances all along the main diagonals
+    Σ_rearranged = zeros((n_out * x1_length, n_out * x2_length))
+    for i in 1:x1_length
+        for j in 1:x2_length
+            Σ_rearranged[1 + (i - 1) * n_out:i * n_out,1 + (j - 1) * n_out:j * n_out] = Σ[i:x1_length:end,:][:, j:x2_length:end]
+        end
+    end
     # return the symmetrized version of the covariance matrix
     # function corrects for numerical errors and notifies us if our matrix isn't
     # symmetric like it should be
-    return symmetric_A(Σ; chol=chol)
+    return symmetric_A(Σ_rearranged; chol=chol)
     # if x1list == x2list
     #     if chol
     #         return ridge_chol(Symmetric(Σ))
@@ -317,16 +324,19 @@ function Σ_observations(
     return_both::Bool=false
     ) where {T<:Real}
 
-    amount_of_measurements = size(measurement_covariance, 1)
+    n_meas = size(measurement_covariance, 1)
     n_out = size(measurement_covariance, 2)
-    @assert n_out == size(measurement_covariance, 3) == size(Σ, 2) / amount_of_measurements
+    @assert n_out == size(measurement_covariance, 3) == size(Σ, 2) / n_meas
     Σ_obs = Matrix(Σ)
-    for i in 1:n_out
-        for j in 1:n_out
-            if i <= j; Σ_obs[diagind(Σ_obs, amount_of_measurements * (i - 1))[((j - i) * amount_of_measurements + 1):((j - i + 1) * amount_of_measurements)]] += measurement_covariance[:, i, j] end
-        end
+    # for i in 1:n_out
+    #     for j in 1:n_out
+    #         if i <= j; Σ_obs[diagind(Σ_obs, i - 1)[((j - i) * n_meas + 1):((j - i + 1) * n_meas)]] += measurement_covariance[:, i, j] end
+    #     end
+    # end
+    for i in 1:n_meas
+        Σ_obs[1 + (i - 1) * n_out : i * n_out, 1 + (i - 1) * n_out : i * n_out] += measurement_covariance[i, :, :]
     end
-    Σ_obs = symmetric_A(Symmetric(Σ_obs); chol=true)
+    Σ_obs = symmetric_A(Σ_obs; chol=true)
     return return_both ? (Σ_obs, Σ) : Σ_obs
 end
 

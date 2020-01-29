@@ -210,7 +210,7 @@ divide by another factor of 4 for uneven spacing
 """
 function nyquist_frequency(times::Vector{T}; scale::Real=1) where {T<:Union{Real,Quantity}}
     time_span = times[end] - times[1]
-    return amount_of_samp_points / time_span / 2 / scale
+    return length(times) / time_span / 2 / scale
 end
 
 uneven_nyquist_frequency(times; scale=4) = nyquist_frequency(times; scale=scale)

@@ -109,9 +109,9 @@ end
 
 function score_covariances(many_scores::Array{<:Real,3})
 	n_out = size(many_scores, 2)
-	amount_of_measurements = size(many_scores, 3)
-	covariances = zeros(amount_of_measurements, n_out, n_out)
-	for i in 1:amount_of_measurements
+	n_meas = size(many_scores, 3)
+	covariances = zeros(n_meas, n_out, n_out)
+	for i in 1:n_meas
 		covariances[i, :, :] = cov(many_scores[:, :, i]; dims=1)
 	end
 	return covariances

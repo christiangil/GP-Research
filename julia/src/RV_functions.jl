@@ -293,9 +293,9 @@ function fit_kepler(
     for i in 1:ndims(covariance)
         @assert size(covariance,i)==length(data) "covariance incompatible with data"
     end
-    amount_of_total_samp_points = length(data)
-    amount_of_samp_points = length(times)
-    normalization = logdet(covariance) + amount_of_total_samp_points * log(2 * π)
+    n_total_samp_points = length(data)
+    n_samp_points = length(times)
+    normalization = logdet(covariance) + n_total_samp_points * log(2 * π)
     K_u = unit(init_ks.K)
     P_u = unit(init_ks.P)
     γ_u = unit(init_ks.γ)
@@ -593,11 +593,13 @@ function fit_kepler_epicyclic(
     for i in 1:ndims(covariance)
         @assert size(covariance,i)==length(data) "covariance incompatible with data"
     end
-    amount_of_total_samp_points = length(data)
-    amount_of_samp_points = length(times)
+    n_total_samp_points = length(data)
+    n_samp_points = length(times)
+    n_out = Int(n_total_samp_points / n_samp_points)
     phases = unit_phase.(times, P)
-    design_matrix = hcat(cos.(phases), sin.(phases), cos.(2 .* phases), sin.(2 .* phases), ones(length(times)))
-    amount_of_total_samp_points > amount_of_samp_points ? design_matrix = vcat(design_matrix, zeros(amount_of_total_samp_points - amount_of_samp_points, size(design_matrix, 2))) : design_matrix = design_matrix
+    design_matrix = zeros(n_total_samp_points, 5)
+    design_matrix[1:n_out:end, :] = hcat(cos.(phases), sin.(phases), cos.(2 .* phases), sin.(2 .* phases), ones(length(times)))
+    # n_total_samp_points > n_samp_points ? design_matrix = vcat(design_matrix, zeros(n_total_samp_points - n_samp_points, size(design_matrix, 2))) : design_matrix = design_matrix
     x = general_lst_sq(design_matrix, data; Σ=covariance)
     return kep_signal_epicyclic(P, x .* data_unit)
 end
@@ -754,9 +756,10 @@ function add_kepler_to_Jones_problem_definition!(
         return prob_def.y_obs
     end
 
-    amount_of_samp_points = length(prob_def.x_obs)
+    n_samp_points = length(prob_def.x_obs)
     planet_rvs = ks.(prob_def.time)
-    prob_def.y_obs[1:amount_of_samp_points] += planet_rvs / (prob_def.normals[1] * prob_def.rv_unit)
+    # prob_def.y_obs[1:n_samp_points] += planet_rvs / (prob_def.normals[1] * prob_def.rv_unit)
+    prob_def.y_obs[1:prob_def.n_out:end] += planet_rvs / (prob_def.normals[1] * prob_def.rv_unit)
     prob_def.rv[:] += planet_rvs
     # return prob_def
 end
@@ -786,15 +789,17 @@ function remove_kepler(
     d::Vector{<:Integer}=zeros(Int64,n_kep_parms))
 
     validate_kepler_dorder(d)
-
+    n_out = Int(length(data) / length(times))
     if all(d .== 0)
         y = copy(data)
-        if ustrip(ks.K) != 0; y[1:length(times)] -= uconvert.(unit(data_unit), ks.(times)) ./ data_unit end
+        # if ustrip(ks.K) != 0; y[1:length(times)] -= uconvert.(unit(data_unit), ks.(times)) ./ data_unit end
+        if ustrip(ks.K) != 0; y[1:n_out:end] -= uconvert.(unit(data_unit), ks.(times)) ./ data_unit end
     else
         @assert typeof(ks) == kep_signal
         y = zeros(length(data))
         kep_deriv_simple(t) = kep_deriv(ks, t, d)
-        y[1:length(times)] -= ustrip.(kep_deriv_simple.(times)) ./ convert_and_strip_units(unit(ks.K), data_unit)
+        # y[1:length(times)] -= ustrip.(kep_deriv_simple.(times)) ./ convert_and_strip_units(unit(ks.K), data_unit)
+        y[1:n_out:end] -= ustrip.(kep_deriv_simple.(times)) ./ convert_and_strip_units(unit(ks.K), data_unit)
     end
     return y
 
@@ -813,7 +818,9 @@ function add_kepler(
     data_unit::Unitful.Velocity=1u"m/s")
 
     y = copy(data)
-    if ustrip(ks.K) != 0; y[1:length(times)] += uconvert.(unit(data_unit), ks.(times)) ./ data_unit end
+    n_out = Int(length(data) / length(times))
+    # if ustrip(ks.K) != 0; y[1:length(times)] += uconvert.(unit(data_unit), ks.(times)) ./ data_unit end
+    if ustrip(ks.K) != 0; y[1:n_out:end] += uconvert.(unit(data_unit), ks.(times)) ./ data_unit end
     return y
 end
 add_kepler(
