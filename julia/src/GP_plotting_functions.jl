@@ -213,8 +213,10 @@ function Jones_line_plots(
         mod_x_obs = convert_and_strip_units.(u"d", mod.(prob_def.time, fit_ks.P))
         samp_x = collect(linspace(0, ustrip(fit_ks.P), 1000)) * unit(fit_ks.P)
         keps = fit_ks.(samp_x)
-        ys = ustrip.(prob_def.rv) - mean_GP_obs[1:prob_def.n_out:end] .* prob_def.normals[1]
-        noises = convert_and_strip_units.(unit(prob_def.rv[1]), prob_def.rv_noise)
+        # ys = ustrip.(prob_def.rv) - mean_GP_obs[1:prob_def.n_out:end] .* prob_def.normals[1]
+        ys = (prob_def.y_obs[1:prob_def.n_out:end] - mean_GP_obs[1:prob_def.n_out:end]) .* prob_def.normals[1]
+        # noises = convert_and_strip_units.(unit(prob_def.rv[1]), prob_def.rv_noise)
+        noises = prob_def.noise[1:prob_def.n_out:end] .* prob_def.normals[1]
 
         init_plot()
         plot(convert_and_strip_units.(u"d", samp_x), ustrip.(keps), linewidth=4)

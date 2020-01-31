@@ -18,22 +18,22 @@ if called_from_terminal
     length(ARGS) > 3 ? use_long = Bool(parse(Int, ARGS[4])) : use_long = true
     length(ARGS) > 4 ? sample_size = parse(Int, ARGS[5]) : sample_size = 100
 else
-    kernel_choice = 4
+    kernel_choice = 3
     kernel_name = kernel_names[kernel_choice]
-    seed = 20
-    use_long = false
-    sample_size = 50
+    seed = 1
+    use_long = true
+    sample_size = 30
 end
 
 
-# # allowing covariance matrix to be calculated in parallel
-# if !called_from_terminal
-#     try
-#         prep_parallel_covariance(kernel_name)
-#     catch
-#         prep_parallel_covariance(kernel_name)
-#     end
-# end
+# allowing covariance matrix to be calculated in parallel
+if !called_from_terminal
+    try
+        prep_parallel_covariance(kernel_name)
+    catch
+        prep_parallel_covariance(kernel_name)
+    end
+end
 
 kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
 
@@ -41,6 +41,7 @@ sample_size < 120 ? n_sims_needed = 1 : n_sims_needed = Int(ceil(sample_size/90)
 rng = MersenneTwister(seed)
 if use_long
     sim_ids = sample(rng, 6:20, n_sims_needed; replace=false)
+    # sim_ids = sample(rng, 6:55, n_sims_needed; replace=false)
     fnames = ["res-1000-1years_long_id$sim_id" for sim_id in sim_ids]
 else
     sim_ids = sample(rng, 1:50, n_sims_needed; replace=false)
@@ -59,7 +60,7 @@ end
 # Adding planet and normalizing scores #
 ########################################
 
-length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.5  # m/s
+length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 1.0  # m/s
 # draw over more periods?
 original_ks = kep_signal(K_val * u"m/s", (8 + 1 * randn(rng))u"d", 2 * π * rand(rng), rand(rng) / 5, 2 * π * rand(rng), 0u"m/s")
 add_kepler_to_Jones_problem_definition!(problem_definition, original_ks)
@@ -304,25 +305,29 @@ function fit_GP!(initial_x::Vector{<:Real}; g_tol=1e-6, iterations=200)
             global current_hyper[end-problem_definition.n_kern_hyper+1:end] = add_kick!(current_hyper[end-problem_definition.n_kern_hyper+1:end])
         end
         if kernel_name == "qp"
-            gridsearch_every = 50
+            gridsearch_every = 100
+            iterations = Int(ceil(iterations * 1.5))
             converged = false
             i = 0
             before_grid = zeros(length(current_hyper))
             global current_hyper = do_gp_fit_gridsearch!(current_hyper, length(current_hyper) - 2)
             try
-                while i < Int(ceil(iterations / gridsearch_every)) & !converged
+                while i < Int(ceil(iterations / gridsearch_every)) && !converged
                     global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=gridsearch_every)) # 27s
                     before_grid[:] = current_hyper
                     global current_hyper = do_gp_fit_gridsearch!(current_hyper, length(current_hyper) - 2)
-                    converged = result.g_converged & isapprox(before_grid, current_hyper)
+                    converged = result.g_converged && isapprox(before_grid, current_hyper)
+                    i += 1
                 end
             catch
                 println("retrying fit")
-                while i < Int(ceil(iterations / gridsearch_every)) & !converged
+                i = 0
+                while i < Int(ceil(iterations / gridsearch_every)) && !converged
                     global result = optimize(f, g!, h!, current_hyper, NewtonTrustRegion(), Optim.Options(callback=optim_cb, g_tol=g_tol, iterations=gridsearch_every)) # 27s
                     before_grid[:] = current_hyper
                     global current_hyper = do_gp_fit_gridsearch!(current_hyper, length(current_hyper) - 2)
-                    converged = result.g_converged & isapprox(before_grid, current_hyper)
+                    converged = result.g_converged && isapprox(before_grid, current_hyper)
+                    i += 1
                 end
             end
         else
@@ -384,7 +389,7 @@ amount_of_periods = 2^13
 
 # sample linearly in frequency space so that we get periods from the 1 / uneven Nyquist
 # frequency to 4 times the total timespan of the data
-freq_grid = linspace(1 / (problem_definition.time[end] - problem_definition.time[1]) / 4, maximum([uneven_nyquist_frequency(problem_definition.time), 1u"1/d"]), amount_of_periods)
+freq_grid = linspace(1 / (problem_definition.time[end] - problem_definition.time[1]) / 4, maximum([uneven_nyquist_frequency(problem_definition.time), 1/4u"d"]), amount_of_periods)
 period_grid = 1 ./ reverse(freq_grid)
 
 Σ_obs = Σ_observations(problem_definition, fit1_total_hyperparameters)
@@ -415,7 +420,7 @@ estimated_eccentricities = [fit_kepler(
     ).e for period in best_period_grid]
 
 try
-    global best_period = best_period_grid[findfirst(y -> isless(y, 0.3), estimated_eccentricities)]
+    global best_period = best_period_grid[findfirst(y -> isless(y, 0.33), estimated_eccentricities)]
 catch
     try
         global best_period = best_period_grid[findfirst(y -> isless(y, 0.5), estimated_eccentricities)]
