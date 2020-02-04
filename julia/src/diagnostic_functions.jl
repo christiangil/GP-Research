@@ -178,6 +178,28 @@ function est_∇∇(g::Function, inputs::Vector{<:Real}; dif::Real=1e-7, ignore_
     return symmetric_A(hess)
 
 end
+
+
+function est_∇∇_from_f(f::Function, inputs::Vector{<:Real}; dif::Real=1e-7, ignore_0_inputs::Bool=false)
+
+    val = est_∇(f, inputs; dif=dif, ignore_0_inputs=ignore_0_inputs)
+
+    #estimate hessian
+    j = 1
+    hess = zeros(length(inputs), length(inputs))
+    for i in 1:length(inputs)
+        if !ignore_0_inputs || inputs[i]!=0
+            hold = copy(inputs)
+            hold[i] += dif
+            hess[j, :] =  (est_∇(f, hold; dif=dif, ignore_0_inputs=ignore_0_inputs) - val) / dif
+            j += 1
+        end
+    end
+    return symmetric_A(hess)
+
+end
+
+
 """
 Estimate the Hessian of nlogL_Jones() with forward differences
 

@@ -967,7 +967,7 @@ function calculate_shared_nlogL_matrices!(
     # this allows us to prevent the optimizer from seeing the constant zero coefficients
     total_hyperparameters = reconstruct_total_hyperparameters(prob_def, non_zero_hyperparameters)
 
-    if !isapprox(workspace.nlogL_hyperparameters, total_hyperparameters)
+    if workspace.nlogL_hyperparameters != total_hyperparameters
         workspace.nlogL_hyperparameters[:] = total_hyperparameters
         workspace.Σ_obs.factors[:,:] = Σ_observations(prob_def, total_hyperparameters).factors
     end
@@ -997,7 +997,7 @@ function calculate_shared_∇nlogL_matrices!(
 
     calculate_shared_nlogL_matrices!(workspace, prob_def, non_zero_hyperparameters)
 
-    if !isapprox(workspace.∇nlogL_hyperparameters, workspace.nlogL_hyperparameters)
+    if workspace.∇nlogL_hyperparameters != workspace.nlogL_hyperparameters
         workspace.∇nlogL_hyperparameters[:] = workspace.nlogL_hyperparameters
         workspace.βs[:] = [workspace.Σ_obs \ covariance(prob_def, workspace.∇nlogL_hyperparameters; dΣdθs_total=[i]) for i in findall(!iszero, workspace.∇nlogL_hyperparameters)]
     end

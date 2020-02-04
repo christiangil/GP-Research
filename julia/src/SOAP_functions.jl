@@ -14,7 +14,7 @@ end
 
 function make_noisy_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vector{T}; SNR::Real=100, temperature::Real=5700) where {T<:Real}
 	noisy_spectra = zero(time_series_spectra)
-	photons = strip_units.(u"h" * uconvert(u"m / s", (1)u"c") ./ ((λs)u"m" / 10 ^ 10))
+	photons = ustrip.(u"h" * uconvert(u"m / s", (1)u"c") ./ ((λs)u"m" / 10 ^ 10))
 	mask = findall(!iszero, time_series_spectra[:, 1])
 	for i in 1:size(time_series_spectra, 2)
 		noises = sqrt.(time_series_spectra[:, i] .* photons)

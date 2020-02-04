@@ -16,7 +16,7 @@ hdf5_filename = "jld2_files/" * string(split(hdf5_loc,"/")[end])[1:end-3]
 fid = h5open(hdf5_loc, "r")
 
 @elapsed obs, λs = prep_SOAP_spectra(fid)
-
+λs = ustrip.(λs * 10)
 phases = fid["phases"][:]
 quiet = fid["quiet"][:]
 

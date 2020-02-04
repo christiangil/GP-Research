@@ -1,6 +1,7 @@
 include("src/general_functions.jl")
 include("src/plotting_functions.jl")
 using Statistics
+using CSV, DataFrames
 
 # kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp", "m52x2"]
 # nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Rational Quadratic", "Rational Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
@@ -8,8 +9,8 @@ kernel_names = ["pp", "se", "m52", "qp", "m52x2"]
 nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
 # kernel_names = ["m52", "m52x2"]
 # nice_kernel_names = ["Matérn " * L"^5/_2", "Two Matérn " * L"^5/_2"]
-length(ARGS) > 0 ? use_long = Bool(parse(Int, ARGS[1])) : use_long = true
-length(ARGS) > 1 ? n = ARGS[2] : n = "100"
+length(ARGS) > 0 ? use_long = Bool(parse(Int, ARGS[1])) : use_long = false
+length(ARGS) > 1 ? n = ARGS[2] : n = "300"
 use_long ? star_str = "long" : star_str = "short"
 
 Ks = [string(round(i, digits=2)) for i in (collect(0:10) / 10)]
@@ -17,8 +18,6 @@ seeds_rest = [string(i) for i in 1:30]
 seeds_0 = [string(i) for i in 1:100]
 detect_thres = 0.95
 detection = zeros(length(kernel_names), 3)
-
-using CSV, DataFrames
 
 lrs = zeros(length(kernel_names), length(Ks))
 lrs_errs_high = copy(lrs)
