@@ -165,19 +165,29 @@ end
 Solve a linear system of equations (optionally with variance values at each point or covariance array)
 see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
 """
-function general_lst_sq(design_matrix::Matrix{T}, data::Vector; Σ::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}}=ones(1)) where {T<:Real}
+function general_lst_sq(
+    dm::Matrix{T},
+    data::Vector;
+    Σ::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}}=ones(1),
+    return_ϵ_inv::Bool=false) where {T<:Real}
     @assert ndims(Σ) < 3 "the Σ variable needs to be a 1D or 2D array"
 
-    if Σ == ones(1)
-        return design_matrix \ data
+    # if Σ == ones(1)
+    #     return dm \ data
+    # else
+    if ndims(Σ) == 1
+        Σ = Diagonal(Σ)
     else
-        if ndims(Σ) == 1
-            Σ = Diagonal(Σ)
-        else
-            Σ = ridge_chol(Σ)
-        end
-        return (design_matrix' * (Σ \ design_matrix)) \ (design_matrix' * (Σ \ data))
+        Σ = ridge_chol(Σ)
     end
+    if return_ϵ_inv
+        ϵ_int = Σ \ dm
+        ϵ_inv = dm' * ϵ_int
+        return ϵ_inv \ (dm' * (Σ \ data)), ϵ_int, ϵ_inv
+    else
+        return (dm' * (Σ \ dm)) \ (dm' * (Σ \ data))
+    end
+    # end
 end
 
 

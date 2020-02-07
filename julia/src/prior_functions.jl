@@ -104,6 +104,23 @@ end
 
 
 """
+Log of the Rayleigh PDF.
+Not properly normalized because of truncation
+"""
+function log_Rayleigh(x::Real, σ::Real; d::Integer=0)
+    @assert 0 <= d <= 2
+    if d == 0
+        0 <= x <= 1 ? val = -(x * x / (2 * σ * σ)) + log(x / σ / σ) : val = -Inf
+    elseif d == 1
+        0 <= x <= 1 ? val = 1 / x - x / σ / σ : val = 0
+    elseif d == 2
+        0 <= x <= 1 ? val = -1 / x / x - 1 / σ / σ : val = 0
+    end
+    return val
+end
+
+
+"""
 Log of the 2D circle PDF
 """
 function log_circle(x::Vector{<:Real}, min_max_r::Vector{<:Real}; d::Vector{<:Integer}=[0,0])
@@ -322,7 +339,8 @@ function logprior_M0(M0::Real; d::Integer=0)
 end
 
 function logprior_e(e::Real; d::Integer=0)
-    return log_uniform(e, [prior_e_min, prior_e_max]; d=d)
+    # return log_uniform(e, [prior_e_min, prior_e_max]; d=d)
+    return log_Rayleigh(e, 1/5; d=d)
 end
 
 function logprior_ω(ω::Real; d::Integer=0)

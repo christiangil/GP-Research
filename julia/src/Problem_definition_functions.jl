@@ -136,6 +136,10 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		a0 = zeros(n_out, n_dif)
 		if n_dif == n_out == 3
 			a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[3,2] = 0.3; a0[2,3] = 0.075;
+		elseif n_dif == 3 && n_out == 2
+			a0[1,1] = 0.03; a0[2,1] = 0.3; a0[1,2] = 0.3; a0[2,3] = 0.075;
+		elseif n_dif == 3 && n_out == 1
+			a0[1,1] = 0.03; a0[1,2] = 0.3;
 		else
 			a0[:,:] = ones(n_out, n_dif) / 20
 		end

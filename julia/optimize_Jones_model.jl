@@ -13,18 +13,20 @@ initial_hypers = [[30.], [30], [30], [30, 60, 1], [30, 60, 1], [4, 30], [4, 30]]
 
 if called_from_terminal
     kernel_choice = parse(Int, ARGS[1])
-    kernel_name = kernel_names[kernel_choice]
-    seed = parse(Int, ARGS[2])
+    length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.3  # m/s
+    length(ARGS) > 2 ? seed = parse(Int, ARGS[2]) : seed = 0  # m/s
     length(ARGS) > 3 ? use_long = Bool(parse(Int, ARGS[4])) : use_long = true
     length(ARGS) > 4 ? sample_size = parse(Int, ARGS[5]) : sample_size = 100
+    length(ARGS) > 5 ? n_out = parse(Int, ARGS[5]) : n_out = 3
 else
-    kernel_choice = 4
-    kernel_name = kernel_names[kernel_choice]
-    seed = 2
+    kernel_choice = 3
+    K_val = 1.0
+    seed = 0
     use_long = true
-    sample_size = 100
+    sample_size = 50
+    n_out = 3
 end
-
+kernel_name = kernel_names[kernel_choice]
 
 # allowing covariance matrix to be calculated in parallel
 if !called_from_terminal
@@ -50,24 +52,23 @@ end
 
 println("optimizing on $fnames using the $kernel_name")
 if called_from_terminal
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out)
 else
-    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng)
+    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out)
 end
 
 ########################################
 # Adding planet and normalizing scores #
 ########################################
 
-length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.0  # m/s
 # draw over more periods?
 original_ks = kep_signal(K_val * u"m/s", (8 + 1 * randn(rng))u"d", 2 * π * rand(rng), rand(rng) / 5, 2 * π * rand(rng), 0u"m/s")
 add_kepler_to_Jones_problem_definition!(problem_definition, original_ks)
 if use_long
-    results_dir = "results/long/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
+    results_dir = "results/long/$n_out/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
 else
-    results_dir = "results/short/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
+    results_dir = "results/short/$n_out/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
 end
 try
     # rm(results_dir, recursive=true)
@@ -361,12 +362,15 @@ period_grid = 1 ./ reverse(freq_grid)
 
 # making necessary variables local to all workers
 sendto(workers(), problem_definition=problem_definition, fit1_total_hyperparameters=fit1_total_hyperparameters, Σ_obs=Σ_obs)
-@everywhere kep_likelihood_distributed(P::Unitful.Time) =
-    -nlogL_Jones(
+@everywhere function kep_likelihood_distributed(P::Unitful.Time)
+    ks = fit_kepler(problem_definition, Σ_obs, kep_signal_epicyclic(P=P))
+    # ks = kep_signal(ks.K, ks.P, ks.M0, minimum([ks.e, 0.3]), ks.ω, ks.γ)
+    return -nlogL_Jones(
         problem_definition,
         fit1_total_hyperparameters;
         Σ_obs=Σ_obs,
-        y_obs=fit_and_remove_kepler(problem_definition, Σ_obs, kep_signal_epicyclic(P=P)))
+        y_obs=remove_kepler(problem_definition, ks))
+end
 
 
 fit1_total_hyperparameters_nz = remove_zeros(fit1_total_hyperparameters)
@@ -374,7 +378,8 @@ nlogprior_kernel = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hy
 sendto(workers(), fit1_total_hyperparameters_nz=fit1_total_hyperparameters_nz, nlogprior_kernel=nlogprior_kernel)
 @everywhere function kep_unnormalized_evidence_distributed(P::Unitful.Time)
     ks = fit_kepler(problem_definition, Σ_obs, kep_signal_epicyclic(P=P))
-    return logprior_kepler_tot(ks; use_hk=true) - nlogprior_kernel - nlogL_Jones(
+    # ks = kep_signal(ks.K, ks.P, ks.M0, minimum([ks.e, 0.3]), ks.ω, ks.γ)
+    return logprior_kepler(ks; use_hk=true) - nlogprior_kernel - nlogL_Jones(
         problem_definition,
         fit1_total_hyperparameters;
         Σ_obs=Σ_obs,
@@ -384,8 +389,23 @@ end
 # parallelize with DistributedArrays
 @everywhere using DistributedArrays
 period_grid_dist = distribute(period_grid)
-likelihoods = collect(map(kep_likelihood_distributed, period_grid_dist))
-evidences = collect(map(kep_unnormalized_evidence_distributed, period_grid_dist))
+@time likelihoods = collect(map(kep_likelihood_distributed, period_grid_dist))
+@time evidences = collect(map(kep_unnormalized_evidence_distributed, period_grid_dist))
+
+# @everywhere function kep_full_unnormalized_evidence_distributed(P::Unitful.Time)  # 400x slower than kep_unnormalized_evidence_distributed
+#     ks = fit_kepler(problem_definition, Σ_obs, kep_signal_epicyclic(P=P))
+#     ks = fit_kepler(problem_definition, Σ_obs, kep_signal_wright(maximum([0.1u"m/s", ks.K]), ks.P, ks.M0, minimum([ks.e, 0.3]), ks.ω, ks.γ); print_stuff=false)
+#     return logprior_kepler(ks; use_hk=true) - nlogprior_kernel - nlogL_Jones(
+#         problem_definition,
+#         fit1_total_hyperparameters;
+#         Σ_obs=Σ_obs,
+#         y_obs=remove_kepler(problem_definition, ks))
+# end
+
+# period_grid_dist_small = distribute(period_grid[1:10])
+# @time evidences_full = collect(map(kep_full_unnormalized_evidence_distributed, period_grid_dist_small))
+# @time evidences_full = kep_full_unnormalized_evidence_distributed.(period_grid[1:10])
+
 
 best_period_grid = period_grid[find_modes(likelihoods; amount=10)]
 
@@ -405,40 +425,58 @@ catch
     end
 end
 
+kep_signal_wright(0.1u"m/s", test_ks.P + 0.1u"d", test_ks.M0, 0.3, test_ks.ω, test_ks.γ)
+
+
+# test_ks = fit_kepler(problem_definition, Σ_obs, kep_signal_epicyclic(P=best_period))
+@time test_ks1 = fit_kepler(problem_definition, Σ_obs, kep_signal_wright(0.1u"m/s", test_ks.P + 0.1u"d", test_ks.M0, 0.1, test_ks.ω, test_ks.γ))
+@time test_ks2 = fit_kepler(problem_definition, Σ_obs, kep_signal(maximum([0.1u"m/s", test_ks.K]), test_ks.P, test_ks.M0, minimum([test_ks.e, 0.3]), test_ks.ω, test_ks.γ); print_stuff=false)
+
+
+
+test_ks
+Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fart"; fit_ks=test_ks)
+test_ks1
+Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fart1"; fit_ks=test_ks1)
+test_ks2
+Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fart2"; fit_ks=test_ks2)
+
+
 println("original period: $(ustrip(original_ks.P)) days")
 println("found period:    $(ustrip(best_period)) days")
 
+begin
+    ax = init_plot()
+    fig = plot(ustrip.(period_grid), likelihoods, color="black")
+    xscale("log")
+    ticklabel_format(style="sci", axis="y", scilimits=(0,0))
+    xlabel("Periods (days)")
+    ylabel("GP log likelihoods")
+    ylim(-fit_nlogL1 - 3, maximum(likelihoods) + 3)
+    axhline(y=-fit_nlogL1, color="k")
+    axvline(x=convert_and_strip_units(u"d", best_period), color="red", linestyle="--")
+    if original_ks.K != 0u"m/s"
+        axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue", linestyle="--")
+        title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
+        title(title_string, fontsize=30)
+    end
+    save_PyPlot_fig(results_dir * "periodogram.png")
 
-ax = init_plot()
-fig = plot(ustrip.(period_grid), likelihoods, color="black")
-xscale("log")
-ticklabel_format(style="sci", axis="y", scilimits=(0,0))
-xlabel("Periods (days)")
-ylabel("GP log likelihoods")
-axhline(y=-fit_nlogL1, color="k")
-axvline(x=convert_and_strip_units(u"d", best_period), color="red", linestyle="--")
-if original_ks.K != 0u"m/s"
-    axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue", linestyle="--")
-    title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
-    title(title_string, fontsize=30)
+    ax = init_plot()
+    fig = plot(ustrip.(period_grid), evidences, color="black")
+    xscale("log")
+    ticklabel_format(style="sci", axis="y", scilimits=(0,0))
+    xlabel("Periods (days)")
+    ylabel("GP log unnormalized evidences")
+    axhline(y=uE1, color="k")
+    axvline(x=convert_and_strip_units(u"d", best_period), color="red", linestyle="--")
+    if original_ks.K != 0u"m/s"
+        axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue", linestyle="--")
+        title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
+        title(title_string, fontsize=30)
+    end
+    save_PyPlot_fig(results_dir * "periodogram_ev.png")
 end
-save_PyPlot_fig(results_dir * "periodogram.png")
-
-ax = init_plot()
-fig = plot(ustrip.(period_grid), evidences, color="black")
-xscale("log")
-ticklabel_format(style="sci", axis="y", scilimits=(0,0))
-xlabel("Periods (days)")
-ylabel("GP log likelihoods")
-axhline(y=uE1, color="k")
-axvline(x=convert_and_strip_units(u"d", best_period), color="red", linestyle="--")
-if original_ks.K != 0u"m/s"
-    axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue", linestyle="--")
-    title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
-    title(title_string, fontsize=30)
-end
-save_PyPlot_fig(results_dir * "periodogram_ev.png")
-
 
 if original_ks.K != 0u"m/s"
     ax = init_plot()
@@ -454,17 +492,15 @@ if original_ks.K != 0u"m/s"
     title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
     title(title_string, fontsize=30)
     save_PyPlot_fig(results_dir * "periodogram_zoom.png")
-end
 
-if original_ks.K != 0u"m/s"
     ax = init_plot()
     inds = (original_ks.P / 1.5).<period_grid.<(2.5 * original_ks.P)
     fig = plot(ustrip.(period_grid[inds]), evidences[inds], color="black")
     xscale("log")
     ticklabel_format(style="sci", axis="y", scilimits=(0,0))
     xlabel("Periods (days)")
-    ylabel("GP log likelihoods")
-    axhline(y=-uE1, color="k")
+    ylabel("GP log unnormalized evidences")
+    axhline(y=uE1, color="k")
     axvline(x=convert_and_strip_units(u"d", best_period), color="red", linestyle="--")
     axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue", linestyle="--")
     title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
