@@ -6,8 +6,8 @@ called_from_terminal = length(ARGS) > 0
 # Loading data and setting kernel #
 ###################################
 
-kernel_names = ["pp", "se", "m52", "qp", "m52x2", "rq", "rm52"]
-initial_hypers = [[30.], [30], [30], [30, 60, 1], [30, 60, 1], [4, 30], [4, 30]]
+kernel_names = ["pp", "se", "m52", "qp", "m52x2", "sex2", "rq", "rm52"]
+initial_hypers = [[30.], [30], [30], [30, 60, 1], [30, 60, 1], [30, 60, 1], [4, 30], [4, 30]]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
 
@@ -20,10 +20,10 @@ if called_from_terminal
     length(ARGS) > 5 ? n_out = parse(Int, ARGS[5]) : n_out = 3
 else
     kernel_choice = 3
-    K_val = 1.0
+    K_val = 0.5
     seed = 0
     use_long = true
-    sample_size = 50
+    sample_size = 100
     n_out = 3
 end
 kernel_name = kernel_names[kernel_choice]
@@ -56,6 +56,7 @@ if called_from_terminal
 else
     # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out)
     problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out)
+    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, rng=rng, n_out=n_out)
 end
 
 ########################################
@@ -137,7 +138,7 @@ elseif  kernel_name == "qp"
         hps[3] *= centered_rand(rng; center=0.8, scale=0.4)
         return hps
     end
-elseif kernel_name == "m52x2"
+elseif kernel_name in ["sex2", "m52x2"]
     # m52x2
     paramsλ1 = gamma_mode_std_2_alpha_theta(30, 15)
     paramsλ2 = gamma_mode_std_2_alpha_theta(60, 15)
@@ -184,7 +185,8 @@ possible_labels = [
     [L"\lambda_{se}"],
     [L"\lambda_{m52}"],
     [L"\tau_p" L"\lambda_{se}" L"^1/_{\lambda_{p}}"],
-    [L"\lambda_{1}" L"\lambda_{2}" L"\sqrt{ratio}"],
+    [L"\lambda_{m52_1}" L"\lambda_{m52_2}" L"\sqrt{ratio}"],
+    [L"\lambda_{se_1}" L"\lambda_{se_2}" L"\sqrt{ratio}"],
     [L"\alpha" L"\mu"],
     [L"\alpha" L"\mu"]]
 
@@ -244,7 +246,15 @@ function optim_cb(x::OptimizationState)
         println()
         # update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
     end
-    # Jones_line_plots(problem_definition, reconstruct_total_hyperparameters(problem_definition, data(non_zero_hyper_param)), "figs/gp/$kernel_name/training/training_$(x.iteration)_gp")  # ; plot_Σ_profile=true)
+    # try
+    #     global hp_string = ""
+    #     for i in 1:problem_definition.n_kern_hyper
+    #         global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(current_hyper[end-problem_definition.n_kern_hyper+i], digits=3))  "
+    #     end
+    #     Jones_line_plots(problem_definition, reconstruct_total_hyperparameters(problem_definition, current_hyper), "figs/gp/$(kernel_name)_training_$(x.iteration)", hyper_param_string=hp_string)  # ; plot_Σ_profile=true)
+    # catch
+    #     nothing
+    # end
     return false
 end
 
@@ -406,7 +416,6 @@ period_grid_dist = distribute(period_grid)
 # @time evidences_full = collect(map(kep_full_unnormalized_evidence_distributed, period_grid_dist_small))
 # @time evidences_full = kep_full_unnormalized_evidence_distributed.(period_grid[1:10])
 
-
 best_period_grid = period_grid[find_modes(likelihoods; amount=10)]
 
 # find first period that uses a bound eccentricity
@@ -425,21 +434,21 @@ catch
     end
 end
 
-kep_signal_wright(0.1u"m/s", test_ks.P + 0.1u"d", test_ks.M0, 0.3, test_ks.ω, test_ks.γ)
-
-
-# test_ks = fit_kepler(problem_definition, Σ_obs, kep_signal_epicyclic(P=best_period))
-@time test_ks1 = fit_kepler(problem_definition, Σ_obs, kep_signal_wright(0.1u"m/s", test_ks.P + 0.1u"d", test_ks.M0, 0.1, test_ks.ω, test_ks.γ))
-@time test_ks2 = fit_kepler(problem_definition, Σ_obs, kep_signal(maximum([0.1u"m/s", test_ks.K]), test_ks.P, test_ks.M0, minimum([test_ks.e, 0.3]), test_ks.ω, test_ks.γ); print_stuff=false)
-
-
-
-test_ks
-Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fart"; fit_ks=test_ks)
-test_ks1
-Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fart1"; fit_ks=test_ks1)
-test_ks2
-Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fart2"; fit_ks=test_ks2)
+# kep_signal_wright(0.1u"m/s", test_ks.P + 0.1u"d", test_ks.M0, 0.3, test_ks.ω, test_ks.γ)
+#
+#
+# # test_ks = fit_kepler(problem_definition, Σ_obs, kep_signal_epicyclic(P=best_period))
+# @time test_ks1 = fit_kepler(problem_definition, Σ_obs, kep_signal_wright(0.1u"m/s", test_ks.P + 0.1u"d", test_ks.M0, 0.1, test_ks.ω, test_ks.γ))
+# @time test_ks2 = fit_kepler(problem_definition, Σ_obs, kep_signal(maximum([0.1u"m/s", test_ks.K]), test_ks.P, test_ks.M0, minimum([test_ks.e, 0.3]), test_ks.ω, test_ks.γ); print_stuff=false)
+#
+#
+#
+# test_ks
+# Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fart"; fit_ks=test_ks)
+# test_ks1
+# Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fart1"; fit_ks=test_ks1)
+# test_ks2
+# Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fart2"; fit_ks=test_ks2)
 
 
 println("original period: $(ustrip(original_ks.P)) days")
@@ -731,7 +740,8 @@ Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "
 # Corner plots #
 ################
 
-if called_from_terminal
+# if called_from_terminal
+if true
     actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
 
     corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), results_dir * "corner.png"; input_labels=actual_labels)
