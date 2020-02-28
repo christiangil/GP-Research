@@ -7,10 +7,10 @@ include("src/all_functions.jl")
 # Importing from SOAP HDF5 file #
 #################################
 
-hdf5_loc = "C:/Users/chris/Downloads/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.h5"
+# hdf5_loc = "C:/Users/chris/Downloads/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.h5"
 # hdf5_loc = "D:/Christian/Downloads/res-1000-lambda-3923-6664-1years_1584spots_diffrot_id12.h5"
-# length(ARGS)>0 ? id = ARGS[1] : id = "11"
-# hdf5_loc = "/gpfs/group/ebf11/default/SOAP_output/Christian_runs/res-1000-1years_full_id$id.h5"
+length(ARGS)>0 ? id = ARGS[1] : id = "11"
+hdf5_loc = "/gpfs/group/ebf11/default/SOAP_output/Christian_runs/res-1000-1years_full_id$id.h5"
 
 hdf5_filename = "jld2_files/" * string(split(hdf5_loc,"/")[end])[1:end-3]
 fid = h5open(hdf5_loc, "r")

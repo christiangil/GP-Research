@@ -139,7 +139,7 @@ x is the place you want the derivative at
 n is the order of derivative
 h is the step size
 """
-function finite_differences(f, x::Real, n::Integer, h::Real)
+function finite_differences(f, x::Real, n::Integer; h::Real=1e-8)
     return sum([powers_of_negative_one(i) * binomial(n, i) * f(x + (n / 2 - i) * h) for i in 0:n] / h ^ n)
 end
 

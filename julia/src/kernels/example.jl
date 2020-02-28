@@ -13,10 +13,10 @@ kernel_coder(matern52_kernel_base(λ, δ), "m52")
 kernel_coder(pp_kernel_base(λ, δ), "pp"; cutoff_var="λ")
 
 @vars δ λ1 λ2 sratio
-kernel_coder(matern52_kernel_base(λ1, δ) + sratio * sratio * matern52_kernel_base(λ2, δ), "m52x2")
+kernel_coder(matern52_kernel_base(λ1, δ) + sratio * sratio * matern52_kernel_base(λ2, δ), "m52_m52")
 
 @vars δ λ1 λ2 sratio
-kernel_coder(se_kernel_base(λ1, δ) + sratio * sratio * se_kernel_base(λ2, δ), "sex2")
+kernel_coder(se_kernel_base(λ1, δ) + sratio * sratio * se_kernel_base(λ2, δ), "se_se")
 
 # process for periodic_kernel_base
 # @vars δ se_P λ
