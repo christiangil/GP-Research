@@ -823,9 +823,6 @@ function fit_kepler_wright(
 
     function f(x::Vector{T}, buffer::kep_buffer_wright, last_x::Vector{T}) where {T<:Real}
         calculate_common!(x, last_x, buffer)
-        # println(kep_parms_str(buffer.ks))
-        # println(buffer.nprior)
-        # println(x)
         if buffer.nprior == Inf
             return buffer.nprior
         else
@@ -839,30 +836,33 @@ function fit_kepler_wright(
         if buffer.nprior == Inf
             G[:] .= 0
         else
-            ∇nlogL_kep!(G, data, times, covariance, buffer; data_unit=data_unit, hold_P=hold_P)
-            # G[:], dβdP, dβdM0, dβde = ∇nlogL_kep(data, times, covariance, buffer; data_unit=data_unit, hold_P=hold_P, return_extra=true)
-            #
-            # kep_prior_G =zeros(n_kep_parms)
-            # d = zeros(Int64, n_kep_parms)
-            # for i in 1:length(G)
-            #     d[:] .= 0
-            #     d[i] = 1
-            #     kep_prior_G[i] -= logprior_kepler(buffer.ks; d=d)
-            # end
-            #
-            # β = buffer.ks.coefficients
-            # function dPdx(dβdx::Vector{T}, δPδx::T) where T<:Real
-            #     dKdx = (β[1] * dβdx[1] + β[2] * dβdx[2]) / buffer.ks.K
-            #     dωdx = ustrip.((β[2] * dβdx[1] - β[1] * dβdx[2]) / buffer.ks.K^2)
-            #     dγdx = dβdx[3] - buffer.ks.e * dβdx[1]
-            #     return kep_prior_G[1] * dKdx + kep_prior_G[5] * dωdx + kep_prior_G[6] * dγdx + δPδx
-            # end
-            #
-            # G[1] += dPdx(dβdP, kep_prior_G[2])
-            # G[2] += dPdx(dβdM0, kep_prior_G[3])
-            # G[3] += dPdx(dβde, kep_prior_G[4])
+            # ∇nlogL_kep!(G, data, times, covariance, buffer; data_unit=data_unit, hold_P=hold_P)
+            if hold_P
+                G[:], dβdM0, dβde = ∇nlogL_kep!(G, data, times, covariance, buffer; data_unit=data_unit, hold_P=hold_P, return_extra=true)
+            else
+                G[:], dβdP, dβdM0, dβde = ∇nlogL_kep!(G, data, times, covariance, buffer; data_unit=data_unit, hold_P=hold_P, return_extra=true)
+            end
 
-            # println(G)
+            kep_prior_G =zeros(n_kep_parms)
+            d = zeros(Int64, n_kep_parms)
+            for i in 1:length(G)
+                d[:] .= 0
+                d[i] = 1
+                kep_prior_G[i] -= logprior_kepler(buffer.ks; d=d)
+            end
+
+            β = buffer.ks.coefficients
+            function dPdx(dβdx::Vector{T}, δPδx::T) where T<:Real
+                dKdx = (β[1] * dβdx[1] + β[2] * dβdx[2]) / buffer.ks.K
+                dωdx = ustrip.((β[2] * dβdx[1] - β[1] * dβdx[2]) / buffer.ks.K^2)
+                dγdx = dβdx[3] - buffer.ks.e * dβdx[1]
+                return kep_prior_G[1] * dKdx + kep_prior_G[5] * dωdx + kep_prior_G[6] * dγdx + δPδx
+            end
+
+            if !hold_P; G[1] += dPdx(dβdP, kep_prior_G[2]) end
+            G[end-1] += dPdx(dβdM0, kep_prior_G[3])
+            G[end] += dPdx(dβde, kep_prior_G[4])
+
         end
     end
     g!(G, x) = g!(G, x, buffer, last_x)
@@ -977,25 +977,6 @@ add_kepler(
     add_kepler(prob_def.y_obs, prob_def.time, ks; data_unit=prob_def.rv_unit*prob_def.normals[1])
 
 
-# function fit_and_remove_kepler_epi(
-#     data::Vector{<:Real},
-#     times::Vector{T2} where T2<:Unitful.Time,
-#     Σ_obs::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
-#     P::Unitful.Time;
-#     data_unit::Unitful.Velocity=1u"m/s") where T<:Real
-#
-#     ks = fit_kepler_epicyclic(data, times, Σ_obs, P; data_unit=data_unit)
-#     return remove_kepler(data, times, ks; data_unit=data_unit)
-# end
-# function fit_and_remove_kepler_epi(
-#     prob_def::Jones_problem_definition,
-#     Σ_obs::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
-#     P::Unitful.Time;
-#     data_unit::Unitful.Velocity=1u"m/s") where T<:Real)
-#     return fit_and_remove_kepler_epi(prob_def.y_obs, prob_def.time, Σ_obs, P; data_unit=prob_def.rv_unit*prob_def.normals[1])
-# end
-
-
 function fit_and_remove_kepler(
     data::Vector{<:Real},
     times::Vector{T2} where T2<:Unitful.Time,
@@ -1021,7 +1002,7 @@ fit_kepler(
 fit_kepler(
     prob_def::Jones_problem_definition,
     covariance::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}},
-    ks::Union{kep_signal, kep_signal_wright};
+    ks::kep_signal_wright;
     print_stuff::Bool=true,
     hold_P::Bool=false,
     avoid_saddle=true) where T<:Real =
