@@ -20,7 +20,7 @@ if called_from_terminal
     length(ARGS) > 5 ? n_out = parse(Int, ARGS[5]) : n_out = 3
 else
     kernel_choice = 6
-    K_val = 0.3
+    K_val = 0.5
     seed = 48
     use_long = true
     sample_size = 100
@@ -410,9 +410,9 @@ period_grid_dist = distribute(period_grid)
 likelihoods = [holder[i][1] for i in 1:length(holder)]
 unnorm_evidences = [holder[i][2] for i in 1:length(holder)]
 
-@time holder_lin = collect(map(kep_unnormalized_evidence_lin_distributed, period_grid_dist))
-likelihoods_lin = [holder_lin[i][1] for i in 1:length(holder_lin)]
-unnorm_evidences_lin = [holder_lin[i][2] for i in 1:length(holder_lin)]
+# @time holder_lin = collect(map(kep_unnormalized_evidence_lin_distributed, period_grid_dist))
+# likelihoods_lin = [holder_lin[i][1] for i in 1:length(holder_lin)]
+# unnorm_evidences_lin = [holder_lin[i][2] for i in 1:length(holder_lin)]
 
 best_period = period_grid[find_modes(unnorm_evidences; amount=1)][1]
 
@@ -423,7 +423,7 @@ println("found period:    $(ustrip(best_period)) days")
 function periodogram_plot(vals::Vector{T} where T<:Real; likelihoods::Bool=true, zoom::Bool=false, linear::Bool=true)
     ax = init_plot()
     if zoom
-        inds = (original_ks.P / 1.5).<period_grid.<(2.5 * original_ks.P)
+        inds = (minimum([original_ks.P, best_period]) / 1.5).<period_grid.<(1.5 * maximum([original_ks.P, best_period]))
         fig = plot(ustrip.(period_grid[inds]), vals[inds], color="black")
     else
         fig = plot(ustrip.(period_grid), vals, color="black")
@@ -469,9 +469,9 @@ end
 # fitting with first found planet signal removed #
 ##################################################
 
-f_no_print_helper(non_zero_hyper::Vector{T} where T<:Real) = nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs_first)
-g!_helper(non_zero_hyper::Vector{T} where T<:Real) = ∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs_first)
-h!_helper(non_zero_hyper::Vector{T} where T<:Real) = ∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs_first)
+f_no_print_helper(non_zero_hyper::Vector{T} where T<:Real) = nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=current_y)
+g!_helper(non_zero_hyper::Vector{T} where T<:Real) = ∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=current_y)
+h!_helper(non_zero_hyper::Vector{T} where T<:Real) = ∇∇nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=current_y)
 
 begin
     time0 = Libc.time()
@@ -483,7 +483,7 @@ begin
     results = [Inf, Inf]
     result_change = Inf
     global num_iter = 0
-    while result_change > 1e-6 && num_iter < 100
+    while result_change > 1e-4 && num_iter < 50
         global current_ks = fit_kepler(problem_definition, workspace.Σ_obs, current_ks; print_stuff=false, avoid_saddle=false)
         println(kep_parms_str(current_ks))
         global current_y = remove_kepler(problem_definition, current_ks)

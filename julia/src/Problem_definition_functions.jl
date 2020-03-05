@@ -104,15 +104,15 @@ struct Jones_problem_definition{T1<:Real, T2<:Integer}
 		# getting proper slice of data and converting to days
 
 		selected_covariances = selected_covariances[inds, :, :]
-		selected_covariances[:, 1, :] *= light_speed
-		selected_covariances[:, :, 1] *= light_speed
+		selected_covariances[:, 1, :] *= light_speed_nu
+		selected_covariances[:, :, 1] *= light_speed_nu
 		time = time[inds]
 		time .-= mean(time)  # minimizing period derivatives
 		x_obs = ustrip.(time)
 		y_obs_hold = noisy_scores[:, inds]
 		measurement_noise_hold = selected_error_ests[:, inds]
-		y_obs_hold[1, :] *= light_speed  # convert scores from redshifts to radial velocities in m/s
-		measurement_noise_hold[1, :] *= light_speed  # convert score errors from redshifts to radial velocities in m/s
+		y_obs_hold[1, :] *= light_speed_nu  # convert scores from redshifts to radial velocities in m/s
+		measurement_noise_hold[1, :] *= light_speed_nu  # convert score errors from redshifts to radial velocities in m/s
 
 		# rearranging the data into one column (not sure reshape() does what I want)
 		# and normalizing the data (for numerical purposes)

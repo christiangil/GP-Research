@@ -101,7 +101,7 @@ function fit_gen_pca_rv_RVSKL(X::Matrix{T}, fixed_comp::Vector{T}; mu::Vector{T}
 	end
 
 	# calculating radial velocities (in m/s) from redshifts
-	rvs = light_speed * scores[1, :]  # c * z
+	rvs = light_speed_nu * scores[1, :]  # c * z
 
 	return (mu, M, scores, fracvar, rvs)
 end

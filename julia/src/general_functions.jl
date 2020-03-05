@@ -12,6 +12,7 @@ function multiple_append!(a::Vector{T}, b...) where {T<:Real}
     for i in 1:length(b)
         append!(a, b[i])
     end
+    return a
 end
 
 
@@ -322,7 +323,7 @@ end
 
 function planck(λ::Unitful.Length, T::Unitful.Temperature)
     λ = uconvert(u"m", λ)
-    c = (light_speed)u"m/s"
+    c = (light_speed_nu)u"m/s"
     # W·sr−1·m−3
     return ustrip.(2 * u"h" * c ^ 2 / λ^5 / (exp(u"h" * c / (λ * u"k" * uconvert(u"K", T))) - 1))
 end
@@ -373,3 +374,28 @@ centered_rand(; rng::AbstractRNG=Random.GLOBAL_RNG, center::Real=0, scale::Real=
 centered_rand(rng::AbstractRNG; center::Real=0, scale::Real=1) = (scale * (rand(rng) - 0.5)) + center
 centered_rand(d::Integer; rng::AbstractRNG=Random.GLOBAL_RNG, center::Real=0, scale::Real=1) = centered_rand(rng, d; center=center, scale=scale)
 centered_rand(rng::AbstractRNG, d; center::Real=0, scale::Real=1) = (scale .* (rand(rng, d) .- 0.5)) .+ center
+
+
+function searchsortednearest(a::AbstractVector{T} where T<:Real, x::Real)
+   idx = searchsortedfirst(a,x)
+   if (idx==1); return idx; end
+   if (idx>length(a)); return length(a); end
+   if (a[idx]==x); return idx; end
+   if (abs(a[idx]-x) < abs(a[idx-1]-x))
+      return idx
+   else
+      return idx-1
+   end
+end
+
+
+function searchsortednearest(a::Vector{T} where T<:Real, x::Vector{T} where T<:Real)
+   len_x = length(x)
+   len_a = length(a)
+   idxs = zeros(Int64, len_x)
+   idxs[1] = searchsortednearest(a, x[1])
+   for i in 2:len_x
+	   idxs[i] = idxs[i-1] + searchsortednearest(view(a, idxs[i-1]:len_a), x[i]) - 1
+   end
+   return idxs
+end
