@@ -65,5 +65,5 @@ function spectra_interpolate(
 		OldYCoords[OldYCoords .< 1] .= 1
 	end
 	OldYSlices = oldY[OldYCoords]
-	return sum(OldYSlices .* FilterValues, dims=2)
+	return vec(sum(OldYSlices .* FilterValues, dims=2))
 end

@@ -323,7 +323,7 @@ end
 
 function planck(λ::Unitful.Length, T::Unitful.Temperature)
     λ = uconvert(u"m", λ)
-    c = (light_speed_nu)u"m/s"
+    c = light_speed
     # W·sr−1·m−3
     return ustrip.(2 * u"h" * c ^ 2 / λ^5 / (exp(u"h" * c / (λ * u"k" * uconvert(u"K", T))) - 1))
 end

@@ -12,14 +12,15 @@ function prep_SOAP_spectra(fid::HDF5File)
 end
 
 
-function make_noisy_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vector{T}; SNR::Real=100, temperature::Real=5700) where {T<:Real}
+function make_noisy_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vector{T}; SNR::Real=100, sampling::Integer=1) where {T<:Real}
+	per_pixel_SNR = SNR / sqrt(sampling)
 	noisy_spectra = zero(time_series_spectra)
-	photons = ustrip.(u"h" * uconvert(u"m / s", (1)u"c") ./ ((λs)u"m" / 10 ^ 10))
+	photons = ustrip.(u"h" * uconvert(u"m / s", 1u"c") ./ ((λs)u"m" / 10 ^ 10))
 	mask = findall(!iszero, time_series_spectra[:, 1])
 	for i in 1:size(time_series_spectra, 2)
-		noises = sqrt.(time_series_spectra[:, i] .* photons)
+		noises = sqrt.(time_series_spectra[:, i] ./ photons)
 	    normalization = mean(noises[mask] ./ time_series_spectra[mask, i])
-	    ratios = noises[mask] ./ time_series_spectra[mask, i] / (normalization * SNR)
+	    ratios = noises[mask] ./ time_series_spectra[mask, i] / (normalization * per_pixel_SNR)
 	    noisy_spectra[mask, i] = time_series_spectra[mask, i] .* (1 .+ (ratios .* randn(length(mask))))
 	end
 	return noisy_spectra
@@ -27,7 +28,7 @@ end
 
 
 """
-Generate a noisy permutation of the data by recalculating PCA components and scores
+Generate a noisy permutation of the data by recalculating PCA scores
 after adding a noise-to-signal ratio amount of Gaussian noise to each flux bin
 """
 function noisy_scores_from_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vector{T}, M::Matrix{T}) where {T<:Real}

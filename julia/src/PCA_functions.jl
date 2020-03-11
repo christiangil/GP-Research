@@ -33,7 +33,7 @@ function calc_doppler_component_RVSKL(lambda::Vector{T}, flux::Vector{T}) where 
 end
 
 function calc_doppler_component_RVSKL(lambda::Vector{T}, flux::Matrix{T}) where {T<:Real}
-    return calc_doppler_component_simple(lambda, vec(mean(flux, dims=2)))
+    return calc_doppler_component_RVSKL(lambda, vec(mean(flux, dims=2)))
 end
 
 
