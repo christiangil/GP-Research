@@ -3,12 +3,8 @@ include("src/plotting_functions.jl")
 using Statistics
 using CSV, DataFrames
 
-# kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp", "m52_m52"]
-# nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Rational Quadratic", "Rational Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
-kernel_names = ["pp", "se", "m52", "qp", "m52_m52", "se_se"]
-nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2", "Two Squared Exponential"]
-# kernel_names = ["se", "m52", "qp"]
-# nice_kernel_names = ["Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic"]
+kernel_names = ["pp", "se", "m52", "qp", "m52_m52", "se_se", "zero", "white"]
+nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2", "Two Squared Exponential", "None", "White Noise"]
 
 Ks = [string(round(i, digits=2)) for i in (collect(0:10) / 10)]
 seeds_rest = [string(i) for i in 1:50]

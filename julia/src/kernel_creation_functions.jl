@@ -81,7 +81,7 @@ function $kernel_name(
     dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))
 
     @assert length(hyperparameters)==$hyper_amount \"hyperparameters is the wrong length\"
-    dorder_len = $hyper_amount + 2
+    dorder_len = $(hyper_amount + 2)
     @assert length(dorder)==dorder_len \"dorder is the wrong length\"
     dorder2 = dorder[2]
     @assert maximum(dorder) < 3 \"No more than two time derivatives for either t1 or t2 can be calculated\"
