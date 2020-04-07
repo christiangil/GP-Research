@@ -3,12 +3,12 @@ include("src/plotting_functions.jl")
 using Statistics
 using CSV, DataFrames
 
-# kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp", "m52x2"]
+# kernel_names = ["pp", "se", "m52", "rq", "rm52", "qp", "m52_m52"]
 # nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Rational Quadratic", "Rational Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
-# kernel_names = ["pp", "se", "m52", "qp", "m52x2"]
-# nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2"]
-kernel_names = ["se", "m52", "qp"]
-nice_kernel_names = ["Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic"]
+kernel_names = ["pp", "se", "m52", "qp", "m52_m52", "se_se"]
+nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2", "Two Squared Exponential"]
+# kernel_names = ["se", "m52", "qp"]
+# nice_kernel_names = ["Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic"]
 
 Ks = [string(round(i, digits=2)) for i in (collect(0:10) / 10)]
 seeds_rest = [string(i) for i in 1:50]
@@ -31,6 +31,8 @@ ers_detection = copy(lrs)
 
 for star_str in ["long", "short"]
     for n in ["100", "300"]
+# for star_str in ["long"]
+#     for n in ["100"]
         for k in 1:length(kernel_names)
             failures = 0
             l_failures = 0
@@ -43,11 +45,15 @@ for star_str in ["long", "short"]
                 seed_lrs = zeros(length(seeds))
                 seed_uers = zeros(length(seeds))
                 seed_ers = zeros(length(seeds))
+                df_tot = CSV.read("saved_csv/$(star_str)_$(n)_$(kernel_name)_$(string(K)).csv")
                 for j in 1:length(seeds)
                     seed = seeds[j]
-                    try
-                        # use_long ? star_str = "long/" : star_str = "short/"
-                        df = CSV.read("results/" * star_str * "/" * n * "/$(kernel_name)/K_$(string(K))/seed_$(seed)/logL.csv")
+                    row_num = findfirst(x->x==parse(Int, seed), df_tot.seed)
+                    if row_num == nothing
+                        println(kernel_name, " ", K, " ", seed, " failed")
+                        failures += 1
+                    else
+                        df = DataFrame(df_tot[row_num, :])
                         if df.L2[1] != 0 && df.L1[1] != 0
                             seed_lrs[j] = (df.L2-df.L1)[1]
                         else
@@ -66,9 +72,6 @@ for star_str in ["long", "short"]
                             println(kernel_name, " ", K, " ", seed, " has weird evidence")
                             e_failures += 1
                         end
-                    catch
-                        println(kernel_name, " ", K, " ", seed, " failed")
-                        failures += 1
                     end
                 end
                 seed_lrs = remove_zeros(seed_lrs)

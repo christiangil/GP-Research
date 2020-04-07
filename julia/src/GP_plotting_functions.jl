@@ -106,9 +106,11 @@ function Jones_line_plots(
     # save_PyPlot_fig("test.png")
 
     if plot_Σ; plot_im(Σ, file = file * "_K_post." * filetype) end
-    L = ridge_chol(Σ).L
-    for i in 1:show
-        show_curves[i,:] = L * randn(n_total_samp_points) + mean_GP
+    if show > 0
+        L = ridge_chol(Σ).L
+        for i in 1:show
+            show_curves[i,:] = L * randn(n_total_samp_points) + mean_GP
+        end
     end
     # if no posterior is being calculated, estimate σ with sampling
     # else

@@ -2,6 +2,8 @@
 include("../all_functions.jl")
 
 # process for se_kernel_base
+# @vars σ δ λ
+# kernel_coder(σ * exp(-δ * δ / (2 * λ * λ)), "se")
 @vars δ λ
 kernel_coder(se_kernel_base(λ, δ), "se")
 
@@ -29,8 +31,6 @@ kernel_coder(se_kernel_base(λ1, δ) + sratio * sratio * se_kernel_base(λ2, δ)
 # kernel_coder(quasi_periodic_kernel_base([se_λ, qp_P, p_λ], δ), "quasi_periodic")
 @vars δ δp se_λ p_amp
 kernel_coder(se_kernel_base(se_λ, δ) * se_kernel_base(1 / p_amp, δp), "qp"; periodic_var="δp")
-
-
 
 #process for rq_kernel_base
 

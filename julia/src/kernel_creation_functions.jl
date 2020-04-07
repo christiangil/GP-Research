@@ -81,11 +81,12 @@ function $kernel_name(
     dorder::Vector{<:Integer}=zeros(Int64, length(hyperparameters) + 2))
 
     @assert length(hyperparameters)==$hyper_amount \"hyperparameters is the wrong length\"
-    @assert length(dorder)==($hyper_amount + 2) \"dorder is the wrong length\"
-    even_time_derivative = powers_of_negative_one(dorder[2])
+    dorder_len = $hyper_amount + 2
+    @assert length(dorder)==dorder_len \"dorder is the wrong length\"
+    dorder2 = dorder[2]
     @assert maximum(dorder) < 3 \"No more than two time derivatives for either t1 or t2 can be calculated\"
 
-    dorder = append!([sum(dorder[1:2])], dorder[3:end])\n\n""")
+    dorder[2] = sum(dorder[1:2])\n\n""")
 
     # map the hyperparameters that will be passed to this function to the symbol names
     for i in 1:(hyper_amount)
@@ -178,13 +179,14 @@ function $kernel_name(
 
             # println(symbolic_kernel_str)
 
-            write(io, "    if dorder==" * string(dorder) * "\n")
+            write(io, "    if view(dorder, 2:dorder_len)==" * string(dorder) * "\n")
             write(io, "        func =" * symbolic_kernel_str * "\n    end\n\n")
         end
 
     end
 
-    write(io, "    return even_time_derivative * float(func)  # correcting for amount of t2 derivatives\n\n")
+    write(io, "    dorder[2] = dorder2  # resetting dorder[2]\n")
+    write(io, "    return  powers_of_negative_one(dorder2) * float(func)  # correcting for amount of t2 derivatives\n\n")
     write(io, "end\n\n\n")
     write(io, "return $kernel_name, $hyper_amount  # the function handle and the number of kernel hyperparameters\n")
     close(io)

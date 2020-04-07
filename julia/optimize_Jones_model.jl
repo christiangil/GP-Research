@@ -13,15 +13,15 @@ initial_hypers = [[30.], [30], [30], [30, 60, 1], [30, 60, 1], [30, 60, 1], [4, 
 
 if called_from_terminal
     kernel_choice = parse(Int, ARGS[1])
-    length(ARGS) > 1 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.3  # m/s
-    length(ARGS) > 2 ? seed = parse(Int, ARGS[2]) : seed = 0  # m/s
+    length(ARGS) > 1 ? seed = parse(Int, ARGS[2]) : seed = 0  # m/s
+    length(ARGS) > 2 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.3  # m/s
     length(ARGS) > 3 ? use_long = Bool(parse(Int, ARGS[4])) : use_long = true
     length(ARGS) > 4 ? sample_size = parse(Int, ARGS[5]) : sample_size = 100
     length(ARGS) > 5 ? n_out = parse(Int, ARGS[5]) : n_out = 3
 else
     kernel_choice = 6
-    K_val = 0.5
     seed = 48
+    K_val = 0.5
     use_long = true
     sample_size = 100
     n_out = 3
@@ -176,7 +176,7 @@ end
 #####################################
 
 # kernel hyper parameters
-time_span = maximum(problem_definition.x_obs) - minimum(problem_definition.x_obs)
+# time_span = maximum(problem_definition.x_obs) - minimum(problem_definition.x_obs)
 coeff_hyperparameters = collect(Iterators.flatten(problem_definition.a0))
 total_hyperparameters = append!(coeff_hyperparameters, initial_hypers[kernel_choice] .* centered_rand(rng, problem_definition.n_kern_hyper; center=1, scale=0.4))
 
@@ -712,4 +712,3 @@ println("evidence for Jones + true planet model: " * string(E3))
 
 saved_likelihoods = [-fit_nlogL1, uE1, E1, -fit_nlogL2, uE2, E2, -fit_nlogL3, uE3, E3]
 save_nlogLs(seed, [time1, time2 + time3, time4] ./ 3600, saved_likelihoods, append!(copy(fit1_total_hyperparameters), fit3_total_hyperparameters), original_ks, full_ks, results_dir)
-# sum([time1, time2 + time3, time4] ./ 3600)
