@@ -3,165 +3,82 @@ include("src/plotting_functions.jl")
 using Statistics
 using CSV, DataFrames
 
-kernel_names = ["pp", "se", "m52", "qp", "m52_m52", "se_se", "zero", "white"]
-nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2", "Two Squared Exponential", "None", "White Noise"]
 
-Ks = [string(round(i, digits=2)) for i in (collect(0:10) / 10)]
+function get_sub_df(tot_df::DataFrame, K::Real, n::Integer, star_str::String)
+    df = tot_df[tot_df.K .== K, :]
+    df = df[df.n .== n, :]
+    return df[df.star .== star_str, :]
+end
+
+quantiles(thing::Vector{<:Real}) = median(thing), quantile(thing, 0.84), quantile(thing, 0.16)
+
+M = 2^13
+F = 0.5
+σ = 0.24
+best_case(n) = σ * sqrt(2 * ((M/F)^(2/(n - 3)) - 1))
+
+
+kernel_names = ["pp", "se", "m52", "qp", "m52_m52", "se_se", "white", "zero", "no_activity"]
+nice_kernel_names = ["Piecewise Polynomial", "Squared Exponential", "Matérn " * L"^5/_2", "Quasi-Periodic", "Two Matérn " * L"^5/_2", "Two Squared Exponential", "White Noise", "None", "Best Case"]
+
+Ks = [round(i, digits=2) for i in (collect(0:10) / 10)]
 seeds_rest = [string(i) for i in 1:50]
 seeds_0 = [string(i) for i in 1:200]
+star_strs = ["long", "short"]
+ns = [100, 300]
 detect_thres = 0.95
-detection = zeros(length(kernel_names), 3)
+detection = zeros(length(kernel_names))
 
-lrs = zeros(length(kernel_names), length(Ks))
-lrs_errs_high = copy(lrs)
-lrs_errs_low = copy(lrs)
-lrs_detection = copy(lrs)
-uers = copy(lrs)
-uers_errs_high = copy(lrs)
-uers_errs_low = copy(lrs)
-uers_detection = copy(lrs)
-ers = copy(lrs)
-ers_errs_high = copy(lrs)
-ers_errs_low = copy(lrs)
-ers_detection = copy(lrs)
+ideal_total = length(star_strs) * length(ns) * ((length(Ks) - 1) * length(seeds_rest) + length(seeds_0))
 
-for star_str in ["long", "short"]
-    for n in ["100", "300"]
-# for star_str in ["long"]
-#     for n in ["100"]
+meds = zeros(length(kernel_names), length(Ks))
+errs_high = copy(meds)
+errs_low = copy(meds)
+ers_detection = copy(meds)
+
+tot_dfs = [CSV.read("saved_csv/$(kernel_name)_results.csv") for kernel_name in kernel_names]
+
+for ii in 1:length(star_strs)
+    star_str = star_strs[ii]
+    for jj in 1:length(ns)
+        n = ns[jj]
         for k in 1:length(kernel_names)
-            failures = 0
-            l_failures = 0
-            ue_failures = 0
-            e_failures = 0
             kernel_name = kernel_names[k]
+            tot_df = tot_dfs[k]
+            non_fail = size(tot_df)[1]
+            tot_df = tot_df[tot_df.no_weirdness .== true, :]
+
+            if ii==1 && jj==1
+                println("$kernel_name failed $(ideal_total - non_fail)/$ideal_total times")
+                println("$kernel_name had weird evidence another $(non_fail - size(tot_df)[1])/$non_fail times")
+            end
+
             for i in 1:length(Ks)
                 K = Ks[i]
-                i==1 ? seeds = seeds_0 : seeds = seeds_rest
-                seed_lrs = zeros(length(seeds))
-                seed_uers = zeros(length(seeds))
-                seed_ers = zeros(length(seeds))
-                df_tot = CSV.read("saved_csv/$(star_str)_$(n)_$(kernel_name)_$(string(K)).csv")
-                for j in 1:length(seeds)
-                    seed = seeds[j]
-                    row_num = findfirst(x->x==parse(Int, seed), df_tot.seed)
-                    if row_num == nothing
-                        println(kernel_name, " ", K, " ", seed, " failed")
-                        failures += 1
-                    else
-                        df = DataFrame(df_tot[row_num, :])
-                        if df.L2[1] != 0 && df.L1[1] != 0
-                            seed_lrs[j] = (df.L2-df.L1)[1]
-                        else
-                            println(kernel_name, " ", K, " ", seed, " has weird likelihoods")
-                            l_failures += 1
-                        end
-                        if df.uE2[1] != 0 && df.uE1[1] != 0
-                            seed_uers[j] = (df.uE2-df.uE1)[1]
-                        else
-                            println(kernel_name, " ", K, " ", seed, " has weird unnormalized evidence")
-                            ue_failures += 1
-                        end
-                        if df.E2[1] != 0 && df.E1[1] != 0
-                            seed_ers[j] = (df.E2-df.E1)[1]
-                        else
-                            println(kernel_name, " ", K, " ", seed, " has weird evidence")
-                            e_failures += 1
-                        end
-                    end
-                end
-                seed_lrs = remove_zeros(seed_lrs)
-                lrs[k, i] = median(seed_lrs)
-                lrs_errs_high[k, i] = quantile(seed_lrs, 0.84)
-                lrs_errs_low[k, i] = quantile(seed_lrs, 0.16)
-                if i==1; detection[k, 1] = quantile(seed_lrs, detect_thres) end
-                lrs_detection[k, i] = sum(seed_lrs .>= detection[k, 1]) / length(seed_lrs)
-
-                seed_uers = remove_zeros(seed_uers)
-                uers[k, i] = median(seed_uers)
-                uers_errs_high[k, i] = quantile(seed_uers, 0.84)
-                uers_errs_low[k, i] = quantile(seed_uers, 0.16)
-                if i==1; detection[k, 2] = quantile(seed_uers, detect_thres) end
-                uers_detection[k, i] = sum(seed_uers .>= detection[k, 2]) / length(seed_uers)
-
-                seed_ers = remove_zeros(seed_ers)
-                ers[k, i] = median(seed_ers)
-                ers_errs_high[k, i] = quantile(seed_ers, 0.84)
-                ers_errs_low[k, i] = quantile(seed_ers, 0.16)
-                if i==1; detection[k, 3] = quantile(seed_ers, detect_thres) end
-                ers_detection[k, i] = sum(seed_ers .>= detection[k, 3]) / length(seed_ers)
-
+                kernel_name == "no_activity" ? df = get_sub_df(tot_df, K, n, "none") : df = get_sub_df(tot_df, K, n, star_str)
+                seed_ers = remove_zeros(df.E2 - df.E1)
+                meds[k, i], errs_high[k, i], errs_low[k, i] = quantiles(seed_ers)
+                if i==1; detection[k] = quantile(seed_ers, detect_thres) end
+                ers_detection[k, i] = sum(seed_ers .>= detection[k]) / length(seed_ers)
             end
-            println(kernel_name, " failed ", failures, " times")
-            println(kernel_name, " had weird likelihoods an additional ", l_failures, " times")
-            println(kernel_name, " had weird unnormalized evidence an additional ", ue_failures, " times")
-            println(kernel_name, " had weird evidence an additional ", e_failures, " times")
         end
-        add_str = star_str * "_" * n
+        add_str = star_str * "_" * string(n)
         # n=100
         # ax.axvline(x=.25*sqrt(50/n) * 10, color="black", linewidth=3)  # should be 0.25?
 
         ax = init_plot()
         for i in 1:length(kernel_names)
-            plot(Ks, lrs[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
-            fill_between(Ks, lrs_errs_high[i,:], lrs_errs_low[i,:], alpha=0.1, color="C$(i-1)")
-            scatter(Ks, lrs[i,:], color="C$(i-1)", zorder=2)
-            ax.axhline(y=detection[i, 1], color="C$(i-1)", linestyle="--", linewidth=1)
+            plot(Ks, meds[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
+            fill_between(Ks, errs_high[i,:], errs_low[i,:], alpha=0.1, color="C$(i-1)")
+            scatter(Ks, meds[i,:], color="C$(i-1)", zorder=2)
+            ax.axhline(y=detection[i], color="C$(i-1)", linestyle="--", linewidth=1)
         end
-        legend(;loc="upper left", fontsize=30)
-        xlabel("K " * L"(^m/_s)")
-        ylabel("Likelihood ratios")
-        title("Likelihood ratios of models fit with\nand without a planet signal", fontsize=45)
-        save_PyPlot_fig("LRs_" * add_str * ".png")
-
-        ax = init_plot()
-        for i in 1:length(kernel_names)
-            plot(Ks, uers[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
-            fill_between(Ks, uers_errs_high[i,:], uers_errs_low[i,:], alpha=0.1, color="C$(i-1)")
-            scatter(Ks, uers[i,:], color="C$(i-1)", zorder=2)
-            ax.axhline(y=detection[i, 2], color="C$(i-1)", linestyle="--", linewidth=1)
-        end
-        legend(;loc="upper left", fontsize=30)
-        xlabel("K " * L"(^m/_s)")
-        ylabel("Unormalized evidence ratios")
-        title("Unormalized evidence ratios of models fit with\nand without a planet signal", fontsize=45)
-        save_PyPlot_fig("uERs_" * add_str * ".png")
-
-        ax = init_plot()
-        for i in 1:length(kernel_names)
-            plot(Ks, ers[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
-            fill_between(Ks, ers_errs_high[i,:], ers_errs_low[i,:], alpha=0.1, color="C$(i-1)")
-            scatter(Ks, ers[i,:], color="C$(i-1)", zorder=2)
-            ax.axhline(y=detection[i, 3], color="C$(i-1)", linestyle="--", linewidth=1)
-        end
-        legend(;loc="upper left", fontsize=30)
-        xlabel("K " * L"(^m/_s)")
+        legend(;loc="upper left", fontsize=15)
+        xlabel("Injected K " * L"(^m/_s)")
         ylabel("Evidence ratios")
         title("Evidence ratios of models fit with\nand without a planet signal", fontsize=45)
+        ylim(minimum(errs_low[1:length(kernel_names)-1,1])-15, maximum(errs_high[1:length(kernel_names)-1,end])+15)
         save_PyPlot_fig("ERs_" * add_str * ".png")
-
-
-        ax = init_plot()
-        for i in 1:length(kernel_names)
-            plot(Ks, lrs_detection[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
-            scatter(Ks, lrs_detection[i,:], color="C$(i-1)", zorder=2)
-        end
-        ax.axhline(y=0.5, color="black", linewidth=3)
-        legend(;loc="lower right", fontsize=30)
-        xlabel("K " * L"(^m/_s)")
-        title("Proportion of likelihood ratios > the " * string(Int(round(detect_thres * 100))) * "th percentile", fontsize=45)
-        save_PyPlot_fig("detections_LRs_" * add_str * ".png")
-
-        ax = init_plot()
-        for i in 1:length(kernel_names)
-            plot(Ks, uers_detection[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
-            scatter(Ks, uers_detection[i,:], color="C$(i-1)", zorder=2)
-        end
-        ax.axhline(y=0.5, color="black", linewidth=3)
-        legend(;loc="lower right", fontsize=30)
-        xlabel("K " * L"(^m/_s)")
-        title("Proportion of unnormalized evidence ratios > the " * string(Int(round(detect_thres * 100))) * "th percentile", fontsize=45)
-        save_PyPlot_fig("detections_uERs_" * add_str * ".png")
 
         ax = init_plot()
         for i in 1:length(kernel_names)
@@ -169,9 +86,108 @@ for star_str in ["long", "short"]
             scatter(Ks, ers_detection[i,:], color="C$(i-1)", zorder=2)
         end
         ax.axhline(y=0.5, color="black", linewidth=3)
-        legend(;loc="lower right", fontsize=30)
-        xlabel("K " * L"(^m/_s)")
+        ax.axvline(x=best_case(n), linestyle="--", color="grey", linewidth=3)
+        legend(;loc="lower right", fontsize=15)
+        xlabel("Injected K " * L"(^m/_s)")
         title("Proportion of evidence ratios > the " * string(Int(round(detect_thres * 100))) * "th percentile", fontsize=45)
         save_PyPlot_fig("detections_ERs_" * add_str * ".png")
+    end
+end
+
+## periods
+
+for star_str in star_strs
+    for n in ns
+        for k in 1:length(kernel_names)
+            kernel_name = kernel_names[k]
+            tot_df = tot_dfs[k]
+            tot_df = tot_df[tot_df.no_weirdness .== true, :]
+            for i in 1:length(Ks)
+                kernel_name == "no_activity" ? df = get_sub_df(tot_df, Ks[i], n, "none") : df = get_sub_df(tot_df, Ks[i], n, star_str)
+                P1 = [parse(Float64, df.P1[i][1:end-2]) for i in 1:size(df)[1]]
+                P2 = [parse(Float64, df.P2[i][1:end-2]) for i in 1:size(df)[1]]
+                desired_quant = (P2 - P1) ./ P1
+                meds[k, i], errs_high[k, i], errs_low[k, i] = quantiles(desired_quant)
+            end
+        end
+        add_str = star_str * "_" * string(n)
+
+        ax = init_plot()
+        for i in 1:length(kernel_names)
+            plot(Ks, meds[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
+            fill_between(Ks, errs_high[i,:], errs_low[i,:], alpha=0.1, color="C$(i-1)")
+            scatter(Ks, meds[i,:], color="C$(i-1)", zorder=2)
+        end
+        ylim(-1,0.5)
+        ax.axhline(y=0, color="black", linewidth=3)
+        legend(;loc="lower right", fontsize=20)
+        xlabel("Injected K " * L"(^m/_s)")
+        ylabel("Fractional error between\ninjected and found periods")
+        title("Period errors of found planets", fontsize=45)
+        save_PyPlot_fig("Ps_" * add_str * ".png")
+    end
+end
+
+## Ks
+for star_str in star_strs
+    for n in ns
+        for k in 1:length(kernel_names)
+            kernel_name = kernel_names[k]
+            tot_df = tot_dfs[k]
+            tot_df = tot_df[tot_df.no_weirdness .== true, :]
+            for i in 1:length(Ks)
+                kernel_name == "no_activity" ? df = get_sub_df(tot_df, Ks[i], n, "none") : df = get_sub_df(tot_df, Ks[i], n, star_str)
+                K1 = [parse(Float64, df.K1[i][1:end-7]) for i in 1:size(df)[1]]
+                K2 = [parse(Float64, df.K2[i][1:end-7]) for i in 1:size(df)[1]]
+                desired_quant = K2 - K1
+                meds[k, i], errs_high[k, i], errs_low[k, i] = quantiles(desired_quant)
+            end
+        end
+        add_str = star_str * "_" * string(n)
+
+        ax = init_plot()
+        for i in 1:length(kernel_names)
+            plot(Ks, meds[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
+            fill_between(Ks, errs_high[i,:], errs_low[i,:], alpha=0.1, color="C$(i-1)")
+            scatter(Ks, meds[i,:], color="C$(i-1)", zorder=2)
+        end
+        ylim(-0.25,0.25)
+        ax.axhline(y=0, color="black", linewidth=3)
+        legend(;loc="lower right", fontsize=20)
+        xlabel("Injected K " * L"(^m/_s)")
+        ylabel("Difference between injected\nand found K " * L"(^m/_s)")
+        title("Velocity semi-amplitude errors of found planets", fontsize=45)
+        save_PyPlot_fig("Ks_" * add_str * ".png")
+    end
+end
+## es
+
+for star_str in star_strs
+    for n in ns
+        for k in 1:length(kernel_names)
+            kernel_name = kernel_names[k]
+            tot_df = tot_dfs[k]
+            tot_df = tot_df[tot_df.no_weirdness .== true, :]
+            for i in 1:length(Ks)
+                kernel_name == "no_activity" ? df = get_sub_df(tot_df, Ks[i], n, "none") : df = get_sub_df(tot_df, Ks[i], n, star_str)
+                desired_quant = df.e2 - df.e1
+                meds[k, i], errs_high[k, i], errs_low[k, i] = quantiles(desired_quant)
+            end
+        end
+        add_str = star_str * "_" * string(n)
+
+        ax = init_plot()
+        for i in 1:length(kernel_names)
+            plot(Ks, meds[i,:], color="C$(i-1)", zorder=2, label=nice_kernel_names[i])
+            fill_between(Ks, errs_high[i,:], errs_low[i,:], alpha=0.1, color="C$(i-1)")
+            scatter(Ks, meds[i,:], color="C$(i-1)", zorder=2)
+        end
+        ylim(0,0.4)
+        ax.axhline(y=0, color="black", linewidth=3)
+        legend(;loc="upper right", fontsize=20)
+        xlabel("Injected K " * L"(^m/_s)")
+        ylabel("Difference between injected\nand found e")
+        title("Eccentricity errors of found planets", fontsize=45)
+        save_PyPlot_fig("es_" * add_str * ".png")
     end
 end

@@ -6,8 +6,8 @@ called_from_terminal = length(ARGS) > 0
 # Loading data and setting kernel #
 ###################################
 
-kernel_names = ["pp", "se", "m52", "qp", "m52_m52", "se_se", "rq", "rm52"]
-initial_hypers = [[30.], [30], [30], [30, 60, 1], [30, 60, 1], [30, 60, 1], [4, 30], [4, 30]]
+kernel_names = ["pp", "se", "m52", "qp", "m52_m52", "se_se", "white"]
+initial_hypers = [[30.], [30], [30], [30, 60, 1], [30, 60, 1], [30, 60, 1], [4, 30], [4, 30], [1]]
 
 # if called from terminal with an argument, use a full dataset. Otherwise, use a smaller testing set
 
@@ -15,18 +15,25 @@ if called_from_terminal
     kernel_choice = parse(Int, ARGS[1])
     length(ARGS) > 1 ? seed = parse(Int, ARGS[2]) : seed = 0  # m/s
     length(ARGS) > 2 ? K_val = parse(Float64, ARGS[3]) : K_val = 0.3  # m/s
-    length(ARGS) > 3 ? use_long = Bool(parse(Int, ARGS[4])) : use_long = true
+    length(ARGS) > 3 ? star_choice = parse(Int, ARGS[4]) : star_choice = 1
     length(ARGS) > 4 ? sample_size = parse(Int, ARGS[5]) : sample_size = 100
     length(ARGS) > 5 ? n_out = parse(Int, ARGS[5]) : n_out = 3
 else
-    kernel_choice = 6
+    kernel_choice = 7
     seed = 48
     K_val = 0.5
-    use_long = true
+    star_choice = 1
     sample_size = 100
-    n_out = 3
+    n_out = 1
 end
 kernel_name = kernel_names[kernel_choice]
+
+if kernel_name == "white"
+    n_out = 1
+    n_dif = 1
+else
+    n_dif=3
+end
 
 # allowing covariance matrix to be calculated in parallel
 if !called_from_terminal
@@ -41,7 +48,7 @@ kernel_function, num_kernel_hyperparameters = include_kernel(kernel_name)
 
 sample_size < 120 ? n_sims_needed = 1 : n_sims_needed = Int(ceil(sample_size/90))
 rng = MersenneTwister(seed)
-if use_long
+if star_choice == 1
     # sim_ids = sample(rng, 6:20, n_sims_needed; replace=false)
     sim_ids = sample(rng, 6:55, n_sims_needed; replace=false)
     fnames = ["res-1000-1years_long_id$sim_id" for sim_id in sim_ids]
@@ -52,24 +59,35 @@ end
 
 println("optimizing on $fnames using the $kernel_name")
 if called_from_terminal
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out, n_dif=n_dif)
 else
-    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out)
-    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out)
-    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, rng=rng, n_out=n_out)
+    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"../../../OneDrive/Desktop/jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out, n_dif=n_dif)
+    problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, on_off=14u"d", rng=rng, n_out=n_out, n_dif=n_dif)
+    # problem_definition = Jones_problem_definition(kernel_function, num_kernel_hyperparameters,"jld2_files/" .* fnames; sub_sample=sample_size, rng=rng, n_out=n_out, n_dif=n_dif)
 end
+if kernel_name == "white"; problem_definition.a0 .= std(problem_definition.y_obs) end
 
 ########################################
 # Adding planet and normalizing scores #
 ########################################
 
+if star_choice == 2
+    new_y = problem_definition.noise .* randn(sample_size)
+    problem_definition.y_obs .= new_y
+    problem_definition.rv .= new_y * problem_definition.rv_unit
+end
+
 # draw over more periods?
 original_ks = kep_signal(K_val * u"m/s", (8 + 1 * randn(rng))u"d", 2 * π * rand(rng), rand(rng) / 5, 2 * π * rand(rng), 0u"m/s")
 add_kepler_to_Jones_problem_definition!(problem_definition, original_ks)
-if use_long
-    results_dir = "results/long/$n_out/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
-else
+if star_choice == 0
     results_dir = "results/short/$n_out/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
+end
+if star_choice == 1
+    results_dir = "results/long/$n_out/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
+end
+if star_choice == 2
+    results_dir = "results/none/$n_out/$sample_size/$(kernel_name)/K_$(string(ustrip(original_ks.K)))/seed_$(seed)/"
 end
 try
     # rm(results_dir, recursive=true)
@@ -154,9 +172,25 @@ elseif kernel_name in ["se_se", "m52_m52"]
         hps[3] *= centered_rand(rng; center=1, scale=0.4)
         return hps
     end
+elseif kernel_name == "white"
+    function nlogprior_kernel_hyperparameters(n_kern_hyper::Integer, total_hyperparameters::Vector{<:Real}, d::Integer)
+        hps = total_hyperparameters[(end - (n_kern_hyper - 1)):end]
+        if d == 0
+            return 0
+        elseif d == 1
+            return zeros(1)
+        elseif d == 2
+            return zeros(length(total_hyperparameters), length(total_hyperparameters))
+        end
+    end
+    function add_kick!(hps::Vector{<:Real})
+        @assert length(hps) == 1
+        hps[1] *= centered_rand(rng; center=1.0, scale=0.4)
+        return hps
+    end
 end
 
-if !(kernel_name in ["qp"])
+if !(kernel_name in ["qp", "white"])
     function nlogprior_kernel_hyperparameters(n_kern_hyper::Integer, total_hyperparameters::Vector{<:Real}, d::Integer)
         hps = total_hyperparameters[(end - (n_kern_hyper - 1)):end]
         if d == 0
@@ -176,9 +210,10 @@ end
 #####################################
 
 # kernel hyper parameters
-# time_span = maximum(problem_definition.x_obs) - minimum(problem_definition.x_obs)
-coeff_hyperparameters = collect(Iterators.flatten(problem_definition.a0))
-total_hyperparameters = append!(coeff_hyperparameters, initial_hypers[kernel_choice] .* centered_rand(rng, problem_definition.n_kern_hyper; center=1, scale=0.4))
+total_hyperparameters = collect(Iterators.flatten(problem_definition.a0))
+if num_kernel_hyperparameters > 0
+    total_hyperparameters = append!(total_hyperparameters, initial_hypers[kernel_choice] .* centered_rand(rng, problem_definition.n_kern_hyper; center=1, scale=0.4))
+end
 
 possible_labels = [
     [L"\lambda_{pp}"],
@@ -187,8 +222,7 @@ possible_labels = [
     [L"\tau_p" L"\lambda_{se}" L"^1/_{\lambda_{p}}"],
     [L"\lambda_{m52_1}" L"\lambda_{m52_2}" L"\sqrt{ratio}"],
     [L"\lambda_{se_1}" L"\lambda_{se_2}" L"\sqrt{ratio}"],
-    [L"\alpha" L"\mu"],
-    [L"\alpha" L"\mu"]]
+    [L"\sigma_{\star}"]]
 
 #######################
 # Jones model fitting #
@@ -362,19 +396,17 @@ println(uE1, "\n")
 # Evaluating GP likelihoods after taking out planets at different periods #
 ###########################################################################
 
-amount_of_periods = 2^13
-
 # sample linearly in frequency space so that we get periods from the 1 / uneven Nyquist
-# frequency to 4 times the total timespan of the data
-freq_grid = linspace(1 / (problem_definition.time[end] - problem_definition.time[1]) / 4, uneven_nyquist_frequency(problem_definition.time), amount_of_periods)
+freq_grid = autofrequency(problem_definition.time; samples_per_peak=11)
 period_grid = 1 ./ reverse(freq_grid)
+amount_of_periods = length(period_grid)
 
 Σ_obs = Σ_observations(problem_definition, fit1_total_hyperparameters)
 
 # making necessary variables local to all workers
 fit1_total_hyperparameters_nz = remove_zeros(fit1_total_hyperparameters)
 nlogprior_kernel = nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit1_total_hyperparameters_nz, 0)
-sendto(workers(), problem_definition=problem_definition, fit1_total_hyperparameters=fit1_total_hyperparameters, Σ_obs=Σ_obs, fit1_total_hyperparameters_nz=fit1_total_hyperparameters_nz, nlogprior_kernel=nlogprior_kernel)
+sendto(workers(), problem_definition=problem_definition, fit1_total_hyperparameters=fit1_total_hyperparameters, Σ_obs=Σ_obs, nlogprior_kernel=nlogprior_kernel)
 @everywhere function fit_kep_hold_P(P::Unitful.Time)  # 40x slower than just epicyclic fit. neither optimized including priors
     ks = fit_kepler(problem_definition, Σ_obs, kep_signal_epicyclic(P=P))
     return fit_kepler(problem_definition, Σ_obs, kep_signal_wright(maximum([0.1u"m/s", ks.K]), ks.P, ks.M0, minimum([ks.e, 0.3]), ks.ω, ks.γ); print_stuff=false, hold_P=true, avoid_saddle=false)
@@ -392,21 +424,10 @@ end
         return [-val, logprior_kepler(ks; use_hk=true) - nlogprior_kernel - val]
     end
 end
-@everywhere function kep_unnormalized_evidence_lin_distributed(P::Unitful.Time)  # 40x slower than just epicyclic fit. neither optimized including priors
-    ks = fit_kepler(problem_definition, Σ_obs, kep_signal_epicyclic(P=P))
-    val = nlogL_Jones(
-        problem_definition,
-        fit1_total_hyperparameters;
-        Σ_obs=Σ_obs,
-        y_obs=remove_kepler(problem_definition, ks))
-    return [-val, logprior_kepler(ks; use_hk=true) - nlogprior_kernel - val]
-end
 
 # parallelize with DistributedArrays
-@everywhere using DistributedArrays
-period_grid_dist = distribute(period_grid)
-
-@time holder = collect(map(kep_unnormalized_evidence_distributed, period_grid_dist))
+pmap(x->kep_unnormalized_evidence_distributed(x), [3.,4] * u"d", batch_size=1)
+@elapsed holder = pmap(x->kep_unnormalized_evidence_distributed(x), period_grid, batch_size=Int(floor(amount_of_periods / nworkers()) + 1))
 likelihoods = [holder[i][1] for i in 1:length(holder)]
 unnorm_evidences = [holder[i][2] for i in 1:length(holder)]
 
@@ -556,11 +577,15 @@ fit_nlogL2 = nlogL_Jones!(workspace, problem_definition, fit3_total_hyperparamet
 uE2 = -fit_nlogL2 - nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit3_total_hyperparameters, 0) + logprior_kepler(full_ks; use_hk=true)
 println(uE2, "\n")
 
-global hp_string = ""
-for i in 1:problem_definition.n_kern_hyper
-    global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit3_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
+if kernel_name == "white"
+    Jones_line_plots(problem_definition, fit3_total_hyperparameters, results_dir * "fit_full"; fit_ks=full_ks, hyper_param_string=possible_labels[kernel_choice][1] * ": $(round(fit3_total_hyperparameters[1] * problem_definition.normals[1] , digits=3)) " * L"^m/_s")
+else
+    global hp_string = ""
+    for i in 1:problem_definition.n_kern_hyper
+        global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit3_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
+    end
+    Jones_line_plots(problem_definition, fit3_total_hyperparameters, results_dir * "fit_full"; fit_ks=full_ks, hyper_param_string=hp_string)
 end
-Jones_line_plots(problem_definition, fit3_total_hyperparameters, results_dir * "fit_full"; fit_ks=full_ks, hyper_param_string=hp_string)
 
 println("best fit keplerian")
 println(kep_parms_str(full_ks))
@@ -597,19 +622,22 @@ if uE1_temp > uE1
     uE1 = uE1_temp
 end
 
-global hp_string = ""
-for i in 1:problem_definition.n_kern_hyper
-    global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit1_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
+if kernel_name == "white"
+    Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fit"; hyper_param_string=possible_labels[kernel_choice][1] * ": $(round(fit1_total_hyperparameters[1] * problem_definition.normals[1] , digits=3)) " * L"^m/_s")
+else
+    global hp_string = ""
+    for i in 1:problem_definition.n_kern_hyper
+        global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit1_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
+    end
+    Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fit"; hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
 end
-
-Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fit"; hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
 
 
 ################
 # Corner plots #
 ################
 
-if called_from_terminal
+if called_from_terminal && (num_kernel_hyperparameters > 0)
 
     actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
 
@@ -648,12 +676,15 @@ fit_nlogL3 = nlogL_Jones!(workspace, problem_definition, fit4_total_hyperparamet
 uE3 = -fit_nlogL3 - nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit4_total_hyperparameters, 0) + logprior_kepler(original_ks; use_hk=true)
 println(fit_nlogL3, "\n")
 
-
-global hp_string = ""
-for i in 1:problem_definition.n_kern_hyper
-    global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit4_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
+if kernel_name == "white"
+    Jones_line_plots(problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks, hyper_param_string=possible_labels[kernel_choice][1] * ": $(round(fit4_total_hyperparameters[1] * problem_definition.normals[1] , digits=3)) " * L"^m/_s")
+else
+    global hp_string = ""
+    for i in 1:problem_definition.n_kern_hyper
+        global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit4_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
+    end
+    Jones_line_plots(problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks, hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
 end
-Jones_line_plots(problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks, hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
 
 ##########################
 # Evidence approximation #
