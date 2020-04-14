@@ -276,7 +276,7 @@ function optim_cb(x::OptimizationState)
     if x.iteration > 0
         println("Iteration:             ", x.iteration)
         println("Time so far:           ", x.metadata["time"], " s")
-        println("Unnormalized evidence: ", x.value)
+        println("Unnormalized posterior: ", x.value)
         println("Gradient Norm:         ", x.g_norm)
         println()
         # update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
@@ -442,7 +442,7 @@ println("found period:    $(ustrip(best_period)) days")
 
 
 function periodogram_plot(vals::Vector{T} where T<:Real; likelihoods::Bool=true, zoom::Bool=false, linear::Bool=true)
-    ax = init_plot()
+    fig, ax = init_plot()
     if zoom
         inds = (minimum([original_ks.P, best_period]) / 1.5).<period_grid.<(1.5 * maximum([original_ks.P, best_period]))
         fig = plot(ustrip.(period_grid[inds]), vals[inds], color="black")
@@ -457,7 +457,7 @@ function periodogram_plot(vals::Vector{T} where T<:Real; likelihoods::Bool=true,
         axhline(y=-fit_nlogL1, color="k")
         ylim(-fit_nlogL1 - 3, maximum(vals) + 3)
     else
-        ylabel("GP log unnormalized evidences")
+        ylabel("GP log unnormalized posteriors")
         axhline(y=uE1, color="k")
     end
     axvline(x=convert_and_strip_units(u"d", best_period), color="red", linestyle="--")
@@ -733,9 +733,9 @@ println("\nlog likelihood for Jones model: " * string(-fit_nlogL1))
 println("log likelihood for Jones + planet model: " * string(-fit_nlogL2))
 println("log likelihood for Jones + true planet model: " * string(-fit_nlogL3))
 
-println("\nunnormalized evidence for Jones model: " * string(uE1))
-println("unnormalized evidence for Jones + planet model: " * string(uE2))
-println("unnormalized evidence for Jones + true planet model: " * string(uE3))
+println("\nunnormalized posterior for Jones model: " * string(uE1))
+println("unnormalized posterior for Jones + planet model: " * string(uE2))
+println("unnormalized posterior for Jones + true planet model: " * string(uE3))
 
 println("\nevidence for Jones model: " * string(E1))
 println("evidence for Jones + planet model: " * string(E2))

@@ -219,13 +219,32 @@ Nyquist frequency is half of the sampling rate of a discrete signal processing s
 (https://en.wikipedia.org/wiki/Nyquist_frequency)
 divide by another factor of 4 for uneven spacing
 """
-function nyquist_frequency(times::Vector{T}; scale::Real=1) where {T<:Union{Real,Quantity}}
+nyquist_frequency(time_span::Union{Real,Quantity}, n_meas::Integer; nyquist_factor::Real=1) = n_meas / time_span / 2 * nyquist_factor
+function nyquist_frequency(times::Vector{T}; nyquist_factor::Real=1) where {T<:Union{Real,Quantity}}
     time_span = times[end] - times[1]
-    return length(times) / time_span / 2 * scale
+    return nyquist_frequency(time_span, length(times), nyquist_factor=nyquist_factor)
 end
+uneven_nyquist_frequency(times; nyquist_factor=5) = nyquist_frequency(times; nyquist_factor=nyquist_factor)
 
-uneven_nyquist_frequency(times; scale=4) = nyquist_frequency(times; scale=scale)
 
+"""
+shamelessly crimped from JuliaAstro.jl
+used to calculate range of frequencies to look at in a periodogram
+"""
+function autofrequency(times::Vector{T} where {T<:Union{Real,Quantity}};
+                       samples_per_peak::Integer=5,
+                       nyquist_factor::Integer=5,
+                       minimum_frequency::Real=NaN,
+                       maximum_frequency::Real=NaN)
+    time_span = maximum(times) - minimum(times)
+    δf = inv(samples_per_peak * time_span)
+    f_min = isfinite(minimum_frequency) ? minimum_frequency : (δf / 2)
+    if isfinite(maximum_frequency)
+        return f_min:δf:maximum_frequency
+    else
+        return f_min:δf:nyquist_frequency(time_span, length(times); nyquist_factor=nyquist_factor)
+    end
+end
 
 import Base.ndims
 ndims(A::Cholesky{T,Matrix{T}}) where {T<:Real} = 2

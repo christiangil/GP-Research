@@ -9,7 +9,7 @@ matplotlib.use("Agg")
 
 
 "set axes and tick label font sizes for PyPlot plots"
-function set_font_sizes(ax; axes::Real=30., ticks::Real=24.)
+function set_font_sizes!(ax; axes::Real=30., ticks::Real=24.)
 
     # this doesn't work. set title size at plot creating
     # setp(ax[:title], fontsize=title)
@@ -31,22 +31,23 @@ end
 
 
 "create a nice, large PyPlot with large text sizes (excluding title)"
-function init_plot(;figsize=(16,9), hspace::Real=-1, wspace::Real=-1)
+function init_plot(;figsize=(16,9), hspace::Real=-1, wspace::Real=-1, axes::Real=30., ticks::Real=24.)
     fig = figure(figsize=figsize)
     ax = subplot(111)
-    set_font_sizes(ax)
+    set_font_sizes!(ax; axes=axes, ticks=ticks)
     if hspace != -1; fig.subplots_adjust(hspace=hspace) end
     if wspace != -1; fig.subplots_adjust(wspace=wspace) end
-    return ax
+    return fig, ax
 end
 
 
 "create a nice, large set of PyPlots with large text sizes (excluding title)"
-function init_subplots(;nrows::Integer=1, ncols::Integer=1, sharex::Bool=false, sharey::Bool=false, figsize=(16,16), hspace::Real=-1)
+function init_subplots(;nrows::Integer=1, ncols::Integer=1, sharex::Union{Bool,String}=false, sharey::Union{Bool,String}=false, figsize=(16,16), hspace::Real=-1, wspace::Real=-1, axes::Real=30., ticks::Real=24.)
     fig, axs = subplots(nrows=nrows, ncols=ncols, sharex=sharex, sharey=sharey, figsize=figsize)
     if hspace != -1; fig.subplots_adjust(hspace=hspace) end
-    for ax in axs; set_font_sizes(ax) end
-    return axs
+    if wspace != -1; fig.subplots_adjust(wspace=wspace) end
+    for ax in axs; set_font_sizes!(ax; axes=axes, ticks=ticks) end
+    return fig, axs
 end
 
 
@@ -58,10 +59,12 @@ function save_PyPlot_fig(filename::AbstractString)
 end
 
 
-function plot_im(A; file::AbstractString="", figsize=(9,9))
+function plot_im(A; file::AbstractString="", figsize=(9,9), clims=[0.,0])
     init_plot(figsize=figsize)
-    fig = imshow(A[:,:], origin="lower")
+    # fig = imshow(A[:,:], origin="lower")
+    fig = imshow(A[:,:])
     colorbar()
+    if clims != [0.,0]; clim(clims[1], clims[2]) end
     # title("Heatmap")
     if file != ""; save_PyPlot_fig(file) end
 end
@@ -85,7 +88,7 @@ function corner_plot(
     @assert length(input_labels) == n
 
     figsize = 16/3 * n
-    axs = init_subplots(nrows=n, ncols=n, figsize=(figsize,figsize))
+    fig, axs = init_subplots(nrows=n, ncols=n, figsize=(figsize,figsize))
 
     for k in 1:n
         for l in 1:n

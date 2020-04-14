@@ -21,7 +21,7 @@ function custom_GP_plot(
 
     if mean_obs == zero(x_obs)
 
-        ax = init_plot()
+        fig, ax = init_plot()
 
         # filling the ±1 σ with a transparent orange
         fill_between(x_samp, mean + σ, mean - σ, alpha=0.5, color="orange")
@@ -42,11 +42,11 @@ function custom_GP_plot(
         init_plot(; hspace=0, wspace=0)
 
         ax1 = subplot2grid((4, 6), (0, 0), rowspan=3, colspan=5)
-        set_font_sizes(ax1)
+        set_font_sizes!(ax1)
         ax2 = subplot2grid((4, 6), (3, 0), colspan=5)
-        set_font_sizes(ax2)
+        set_font_sizes!(ax2)
         ax3 = subplot2grid((4, 6), (3, 5))
-        set_font_sizes(ax3)
+        set_font_sizes!(ax3)
 
         # filling the ±1 σ with a transparent orange
         ax1.fill_between(x_samp, mean + σ, mean - σ, alpha=0.5, color="orange")
