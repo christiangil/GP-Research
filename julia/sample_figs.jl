@@ -68,13 +68,12 @@ filenames = ["long_id10", "full_id1"]
 function abc(name)
     hdf5_filename = "D:/Christian/Downloads/res-1000-1years_" * name * ".h5"
     thing = h5open(hdf5_filename)
-    a = thing["msh_covered"][:] ./ 1e6
+    a = thing["msh_covered"][:] ./ (1e6 * 2)
     b = thing["msh_visible"][:] ./ 1e6
-    c = thing["msh_vis_proj"][:] ./ 1e6
+    c = thing["msh_vis_proj"][:] ./ (1e6 / 4)
     times = ustrip.(convert_SOAP_phases.(u"d", thing["phases"][:]))
     return a, b, c, times
 end
-
 
 inds = 280:340
 
@@ -90,27 +89,27 @@ begin
     ax3 = axs[2,1]
     ax4 = axs[2,2]
 
-    ax1.plot(times, a ./ 2, label="Total star")
-    ax1.plot(times, b, label="Visible hemisphere")
-    ax1.plot(times, c .* 4, label="Visible disk")
+    ax1.plot(times, a)
+    ax1.plot(times, b)
+    ax1.plot(times, c)
 
-    ax2.plot(times[inds], a[inds] ./ 2, label="Total star")
-    ax2.plot(times[inds], b[inds], label="Visible hemisphere")
-    ax2.plot(times[inds], c[inds] .* 4, label="Visible disk")
+    ax2.scatter(times[inds], a[inds])
+    ax2.scatter(times[inds], b[inds])
+    ax2.scatter(times[inds], c[inds])
 
     a, b, c, times = abc(filenames[1])
 
-    ax3.plot(times, a ./ 2, label="Total star")
+    ax3.plot(times, a, label="Total star")
     ax3.plot(times, b, label="Visible hemisphere")
-    ax3.plot(times, c .* 4, label="Visible disk")
+    ax3.plot(times, c, label="Visible disk")
     ax3.legend(;loc="upper left", fontsize=20)
 
-    ax4.plot(times[inds], a[inds] ./ 2, label="Total star")
-    ax4.plot(times[inds], b[inds], label="Visible hemisphere")
-    ax4.plot(times[inds], c[inds] .* 4, label="Visible disk")
+    ax4.scatter(times[inds], a[inds])
+    ax4.scatter(times[inds], b[inds])
+    ax4.scatter(times[inds], c[inds])
 
     fig.text(0.5, 0.02, "Time (days)", ha="center", fontsize=30)
     fig.text(0.04, 0.5, "Proportion covered", va="center", rotation="vertical", fontsize=30)
 
-    save_PyPlot_fig("test.png")
+    save_PyPlot_fig("test2.png")
 end

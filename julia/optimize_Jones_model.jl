@@ -19,12 +19,12 @@ if called_from_terminal
     length(ARGS) > 4 ? sample_size = parse(Int, ARGS[5]) : sample_size = 100
     length(ARGS) > 5 ? n_out = parse(Int, ARGS[5]) : n_out = 3
 else
-    kernel_choice = 7
-    seed = 48
-    K_val = 0.5
+    kernel_choice = 3
+    seed = 50
+    K_val = 0.3
     star_choice = 1
     sample_size = 100
-    n_out = 1
+    n_out = 3
 end
 kernel_name = kernel_names[kernel_choice]
 
@@ -262,6 +262,7 @@ function g!(G::Vector{T}, non_zero_hyper::Vector{T}) where {T<:Real}
     if nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 0) == Inf
         G[:] .= 0
     else
+        global current_hyper[:] = non_zero_hyper
         G[:] = g!_helper(non_zero_hyper) + nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, non_zero_hyper, 1)
     end
 end
@@ -274,12 +275,11 @@ end
 function optim_cb(x::OptimizationState)
     println()
     if x.iteration > 0
-        println("Iteration:             ", x.iteration)
-        println("Time so far:           ", x.metadata["time"], " s")
+        println("Iteration:              ", x.iteration)
+        println("Time so far:            ", x.metadata["time"], " s")
         println("Unnormalized posterior: ", x.value)
-        println("Gradient Norm:         ", x.g_norm)
+        println("Gradient norm:          ", x.g_norm)
         println()
-        # update_optimize_Jones_model_jld2!(kernel_name, non_zero_hyper_param)
     end
     # try
     #     global hp_string = ""
@@ -441,51 +441,6 @@ println("original period: $(ustrip(original_ks.P)) days")
 println("found period:    $(ustrip(best_period)) days")
 
 
-function periodogram_plot(vals::Vector{T} where T<:Real; likelihoods::Bool=true, zoom::Bool=false, linear::Bool=true)
-    fig, ax = init_plot()
-    if zoom
-        inds = (minimum([original_ks.P, best_period]) / 1.5).<period_grid.<(1.5 * maximum([original_ks.P, best_period]))
-        fig = plot(ustrip.(period_grid[inds]), vals[inds], color="black")
-    else
-        fig = plot(ustrip.(period_grid), vals, color="black")
-    end
-    xscale("log")
-    ticklabel_format(style="sci", axis="y", scilimits=(0,0))
-    xlabel("Periods (days)")
-    if likelihoods
-        ylabel("GP log likelihoods")
-        axhline(y=-fit_nlogL1, color="k")
-        ylim(-fit_nlogL1 - 3, maximum(vals) + 3)
-    else
-        ylabel("GP log unnormalized posteriors")
-        axhline(y=uE1, color="k")
-    end
-    axvline(x=convert_and_strip_units(u"d", best_period), color="red", linestyle="--")
-    if original_ks.K != 0u"m/s"
-        axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue", linestyle="--")
-        title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
-        title(title_string, fontsize=30)
-    end
-    file_name_add = ""
-    if linear; file_name_add *= "_lin" end
-    if !likelihoods; file_name_add *= "_ev" end
-    if zoom; file_name_add *= "_zoom" end
-    save_PyPlot_fig(results_dir * "periodogram" * file_name_add * ".png")
-end
-
-periodogram_plot(likelihoods; likelihoods=true, zoom=false, linear=false)
-# periodogram_plot(likelihoods_lin; likelihoods=true, zoom=false, linear=true)
-periodogram_plot(unnorm_evidences; likelihoods=false, zoom=false, linear=false)
-# periodogram_plot(unnorm_evidences_lin; likelihoods=false, zoom=false, linear=true)
-if original_ks.K != 0u"m/s"
-    periodogram_plot(likelihoods; likelihoods=true, zoom=true, linear=false)
-    # periodogram_plot(likelihoods_lin; likelihoods=true, zoom=true, linear=true)
-    periodogram_plot(unnorm_evidences; likelihoods=false, zoom=true, linear=false)
-    # periodogram_plot(unnorm_evidences_lin; likelihoods=false, zoom=true, linear=true)
-end
-
-
-
 ##################################################
 # fitting with first found planet signal removed #
 ##################################################
@@ -560,7 +515,6 @@ end
 println(result)
 
 fit3_total_hyperparameters = reconstruct_total_hyperparameters(problem_definition, result.minimizer)
-
 full_ks = kep_signal(current_ks.K, current_ks.P, current_ks.M0, current_ks.e, current_ks.ω, current_ks.γ)
 
 ###################
@@ -576,16 +530,6 @@ println(fit3_total_hyperparameters)
 fit_nlogL2 = nlogL_Jones!(workspace, problem_definition, fit3_total_hyperparameters; y_obs=current_y)
 uE2 = -fit_nlogL2 - nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit3_total_hyperparameters, 0) + logprior_kepler(full_ks; use_hk=true)
 println(uE2, "\n")
-
-if kernel_name == "white"
-    Jones_line_plots(problem_definition, fit3_total_hyperparameters, results_dir * "fit_full"; fit_ks=full_ks, hyper_param_string=possible_labels[kernel_choice][1] * ": $(round(fit3_total_hyperparameters[1] * problem_definition.normals[1] , digits=3)) " * L"^m/_s")
-else
-    global hp_string = ""
-    for i in 1:problem_definition.n_kern_hyper
-        global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit3_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
-    end
-    Jones_line_plots(problem_definition, fit3_total_hyperparameters, results_dir * "fit_full"; fit_ks=full_ks, hyper_param_string=hp_string)
-end
 
 println("best fit keplerian")
 println(kep_parms_str(full_ks))
@@ -622,33 +566,6 @@ if uE1_temp > uE1
     uE1 = uE1_temp
 end
 
-if kernel_name == "white"
-    Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fit"; hyper_param_string=possible_labels[kernel_choice][1] * ": $(round(fit1_total_hyperparameters[1] * problem_definition.normals[1] , digits=3)) " * L"^m/_s")
-else
-    global hp_string = ""
-    for i in 1:problem_definition.n_kern_hyper
-        global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit1_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
-    end
-    Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fit"; hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
-end
-
-
-################
-# Corner plots #
-################
-
-if called_from_terminal && (num_kernel_hyperparameters > 0)
-
-    actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
-
-    corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), results_dir * "corner.png"; input_labels=actual_labels)
-
-    y_obs = remove_kepler(problem_definition, full_ks)
-    f_no_print_helper(non_zero_hyper::Vector{T} where T<:Real) = nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs)
-    corner_plot(f_no_print, remove_zeros(fit3_total_hyperparameters), results_dir * "corner_planet.png"; input_labels=actual_labels)
-
-end
-
 
 ####################################################
 # fitting with true planet removed (for reference) #
@@ -675,16 +592,6 @@ println(fit4_total_hyperparameters)
 fit_nlogL3 = nlogL_Jones!(workspace, problem_definition, fit4_total_hyperparameters; y_obs=remove_kepler(problem_definition, original_ks))
 uE3 = -fit_nlogL3 - nlogprior_kernel_hyperparameters(problem_definition.n_kern_hyper, fit4_total_hyperparameters, 0) + logprior_kepler(original_ks; use_hk=true)
 println(fit_nlogL3, "\n")
-
-if kernel_name == "white"
-    Jones_line_plots(problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks, hyper_param_string=possible_labels[kernel_choice][1] * ": $(round(fit4_total_hyperparameters[1] * problem_definition.normals[1] , digits=3)) " * L"^m/_s")
-else
-    global hp_string = ""
-    for i in 1:problem_definition.n_kern_hyper
-        global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit4_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
-    end
-    Jones_line_plots(problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks, hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
-end
 
 ##########################
 # Evidence approximation #
@@ -743,3 +650,85 @@ println("evidence for Jones + true planet model: " * string(E3))
 
 saved_likelihoods = [-fit_nlogL1, uE1, E1, -fit_nlogL2, uE2, E2, -fit_nlogL3, uE3, E3]
 save_nlogLs(seed, [time1, time2 + time3, time4] ./ 3600, saved_likelihoods, append!(copy(fit1_total_hyperparameters), fit3_total_hyperparameters), original_ks, full_ks, results_dir)
+
+plot_stuff = !called_from_terminal || E1==0 || E2==0 || !isapprox(original_ks.P, full_ks.P, rtol=1e-1)
+if plot_stuff
+
+    function periodogram_plot(vals::Vector{T} where T<:Real; likelihoods::Bool=true, zoom::Bool=false, linear::Bool=true)
+        fig, ax = init_plot()
+        if zoom
+            inds = (minimum([original_ks.P, best_period]) / 1.5).<period_grid.<(1.5 * maximum([original_ks.P, best_period]))
+            fig = plot(ustrip.(period_grid[inds]), vals[inds], color="black")
+        else
+            fig = plot(ustrip.(period_grid), vals, color="black")
+        end
+        xscale("log")
+        ticklabel_format(style="sci", axis="y", scilimits=(0,0))
+        xlabel("Periods (days)")
+        if likelihoods
+            ylabel("GP log likelihoods")
+            axhline(y=-fit_nlogL1, color="k")
+            ylim(-fit_nlogL1 - 3, maximum(vals) + 3)
+        else
+            ylabel("GP log unnormalized posteriors")
+            axhline(y=uE1, color="k")
+        end
+        axvline(x=convert_and_strip_units(u"d", best_period), color="red", linestyle="--")
+        if original_ks.K != 0u"m/s"
+            axvline(x=convert_and_strip_units(u"d", original_ks.P), color="blue", linestyle="--")
+            title_string = @sprintf "%.1f day, %.2f m/s" convert_and_strip_units(u"d", original_ks.P) convert_and_strip_units(u"m/s",original_ks.K)
+            title(title_string, fontsize=30)
+        end
+        file_name_add = ""
+        if linear; file_name_add *= "_lin" end
+        if !likelihoods; file_name_add *= "_ev" end
+        if zoom; file_name_add *= "_zoom" end
+        save_PyPlot_fig(results_dir * "periodogram" * file_name_add * ".png")
+    end
+
+    periodogram_plot(likelihoods; likelihoods=true, zoom=false, linear=false)
+    # periodogram_plot(likelihoods_lin; likelihoods=true, zoom=false, linear=true)
+    periodogram_plot(unnorm_evidences; likelihoods=false, zoom=false, linear=false)
+    # periodogram_plot(unnorm_evidences_lin; likelihoods=false, zoom=false, linear=true)
+    if original_ks.K != 0u"m/s"
+        periodogram_plot(likelihoods; likelihoods=true, zoom=true, linear=false)
+        # periodogram_plot(likelihoods_lin; likelihoods=true, zoom=true, linear=true)
+        periodogram_plot(unnorm_evidences; likelihoods=false, zoom=true, linear=false)
+        # periodogram_plot(unnorm_evidences_lin; likelihoods=false, zoom=true, linear=true)
+    end
+
+    if kernel_name == "white"
+        Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fit"; hyper_param_string=possible_labels[kernel_choice][1] * ": $(round(fit1_total_hyperparameters[1] * problem_definition.normals[1] , digits=3)) " * L"^m/_s")
+        Jones_line_plots(problem_definition, fit3_total_hyperparameters, results_dir * "fit_full"; fit_ks=full_ks, hyper_param_string=possible_labels[kernel_choice][1] * ": $(round(fit3_total_hyperparameters[1] * problem_definition.normals[1] , digits=3)) " * L"^m/_s")
+        Jones_line_plots(problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks, hyper_param_string=possible_labels[kernel_choice][1] * ": $(round(fit4_total_hyperparameters[1] * problem_definition.normals[1] , digits=3)) " * L"^m/_s")
+    else
+        global hp_string = ""
+        for i in 1:problem_definition.n_kern_hyper
+            global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit1_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
+        end
+        Jones_line_plots(problem_definition, fit1_total_hyperparameters, results_dir * "fit"; hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
+        global hp_string = ""
+        for i in 1:problem_definition.n_kern_hyper
+            global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit3_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
+        end
+        Jones_line_plots(problem_definition, fit3_total_hyperparameters, results_dir * "fit_full"; fit_ks=full_ks, hyper_param_string=hp_string)
+        global hp_string = ""
+        for i in 1:problem_definition.n_kern_hyper
+            global hp_string = hp_string * possible_labels[kernel_choice][i] * ": $(round(fit4_total_hyperparameters[end-problem_definition.n_kern_hyper+i], digits=3))  "
+        end
+        Jones_line_plots(problem_definition, fit4_total_hyperparameters, results_dir * "truth"; fit_ks=original_ks, hyper_param_string=hp_string)  # , plot_Σ=true, plot_Σ_profile=true)
+    end
+
+
+    if called_from_terminal && (num_kernel_hyperparameters > 0)
+
+        actual_labels = append!([L"a_{11}", L"a_{21}", L"a_{12}", L"a_{32}", L"a_{23}"], possible_labels[kernel_choice])
+
+        corner_plot(f_no_print, remove_zeros(fit1_total_hyperparameters), results_dir * "corner.png"; input_labels=actual_labels)
+
+        y_obs = remove_kepler(problem_definition, full_ks)
+        f_no_print_helper(non_zero_hyper::Vector{T} where T<:Real) = nlogL_Jones!(workspace, problem_definition, non_zero_hyper; y_obs=y_obs)
+        corner_plot(f_no_print, remove_zeros(fit3_total_hyperparameters), results_dir * "corner_planet.png"; input_labels=actual_labels)
+
+    end
+end
