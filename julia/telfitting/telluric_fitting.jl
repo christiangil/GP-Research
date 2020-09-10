@@ -9,15 +9,17 @@ const light_speed_nu = ustrip(light_speed)
 
 using NPZ
 
+## Getting precomputed airmasses and observation times
 valid_obs = npzread("telfitting/valid_obs_res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.npy")
 valid_inds = [i for i in 1:length(valid_obs) if valid_obs[i]]
 times = npzread("telfitting/times_res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.npy")[valid_inds] .* 1u"d"
 airmasses = npzread("telfitting/airmasses_res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.npy")[valid_inds]
 
-blackbody = true
+
+## Setup
 photon_noise = true
-stellar_activity = true
-velocity_offset = 14000.0u"m/s"
+stellar_activity = false
+bary_velocity = false
 SNR = 1000
 K = 10u"m/s"
 T = 5700u"K"
@@ -25,6 +27,8 @@ min_wav = 615  # nm
 max_wav = 665  # nm
 obs_resolution = 200000
 
+
+## Reading in O2 and H2O lines from HITRAN
 old_dir = pwd()
 cd(@__DIR__)
 f = open("outputtransitionsdata3.par", "r")
@@ -56,20 +60,21 @@ max_intens_o2_inds = sortperm(intens_o2)[end-1:end][end:-1:1]
 wavelengths_o2[max_intens_o2_inds]
 intens_o2[max_intens_o2_inds]
 
-fid = h5open("D:/Christian/Downloads/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.h5")
-# fid = h5open("C:/Users/chris/Downloads/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.h5")
+## Simulating observations
 
+fid = h5open("D:/Christian/Downloads/res-1000-lambda-3923-6664-1years_1579spots_diffrot_id11.h5")
+
+#######
+# Recreating prep_SOAP_spectra functionality which isn't working for some reason
 # TODO fix no method iterate(::Nothing) MethodError
 # actives, λ, quiet = prep_SOAP_spectra(fid; return_quiet=true)
-########################################################################
-
 
 λ = fid["lambdas"][:]u"nm"/10
 # actives, normalization = normalize_columns_to_first_integral!(fid["active"][:, 1:2] .* planck.(λ, T), ustrip.(λ); return_normalization=true)
 if stellar_activity
-    ys = fid["active"][:, :] .* (planck.(λ, T) .* Int(blackbody))
+    ys = fid["active"][:, :] .* planck.(λ, T)
 else
-    thing = fid["quiet"][:] .* (planck.(λ, T) .* Int(blackbody))
+    thing = fid["quiet"][:] .* planck.(λ, T)
     ys = zeros(length(thing), 730)
     for i in 1:730
         ys[:, i] = thing
@@ -82,10 +87,10 @@ for i in 1:size(ys, 2)
 end
 actives = ys
 normalization = integrated_first
-quiet = fid["quiet"][:] .* (planck.(λ, T) .* Int(blackbody))
+quiet = fid["quiet"][:] .* planck.(λ, T)
 quiet*= integrated_first / trapz(ustrip.(λ), quiet)
 
-########################################################################
+#######
 λ = ustrip.(λ)
 actives = actives[:, valid_inds]
 
@@ -98,11 +103,17 @@ if photon_noise
 else
     active = copy(actives)
 end
-inds = [λ1 > (min_wav - 1) && λ1 < (max_wav + 1) for λ1 in λ]
 
+inds = [λ1 > (min_wav - 1) && λ1 < (max_wav + 1) for λ1 in λ]
 psf_width = 50 / sum(inds) * 6  # 4 for NEID, 8-12 for EXPRESS
 
+## Creating telluric mask
+
 inds2 = [λ1 > 664.3 && λ1 < 664.4 for λ1 in λ]
+# inds2 = [λ1 > 635.8 && λ1 < 635.9 for λ1 in λ]
+# init_plot()
+# plot(λ[inds2], quiet[inds2])
+# save_PyPlot_fig("test.png")
 quiet_line = quiet[inds2]
 quiet_λ = λ[inds2]
 
@@ -134,63 +145,64 @@ end
 function tellurics(airmass::Real; add_rand::Bool=true)
     o2scale = airmass / 2
     h2oscale = airmass / 2 * (0.7 + 0.6*(rand()-0.5)*add_rand)
-    return (o2scale .* o2mask .+ (1 - o2scale)) .* (h2oscale .* h2omask .+ (1 - h2oscale))
+    return (o2mask .^ o2scale) .* (h2omask .^ h2oscale)
 end
 
+
+## Bringing observations into observer frame and multiplying by telluric mask
 
 λ_obs = λ[inds]
-ks = kep_signal(K=K, e_or_h=0.1, P=sqrt(800)u"d")
-rvs_true = ks.(times)
-vs = velocity_offset .+ rvs_true
+planet_ks = kep_signal(K=K, e_or_h=0.1, P=sqrt(800)u"d")
+bary_ks = kep_signal(K=15u"km/s", e_or_h=0.016, P=1u"yr", M0=rand()*2π, ω_or_k=rand()*2π)
+vs = planet_ks.(times) + (Int(bary_velocity) .* bary_ks.(times))
 
 valid_obs = zeros(length(obs_waves), length(valid_inds))
+true_tels = zeros(length(obs_waves), length(valid_inds))
 @time for i in 1:length(valid_inds)
+    true_tels[:, i] = tellurics(airmasses[i])
     valid_obs[:, i] = spectra_interpolate(obs_waves,
         λ_obs .* sqrt((1.0+vs[i]/light_speed)/(1.0-vs[i]/light_speed)),
-        actives[:, i]) .* tellurics(airmasses[i])
+        active[:, i]) .* true_tels[:, i]
 end
 
-# normalize_columns_to_first_integral!(valid_obs, obs_waves)
+## Estimating tellurics
 
 average_spectra = vec(mean(valid_obs, dims=2))
 doppler_comp = calc_doppler_component_RVSKL(obs_waves, average_spectra)
 x, x, x, x, rvs_naive = @time fit_gen_pca_rv_RVSKL(valid_obs, doppler_comp, mu=average_spectra, num_components=1)
 
-mu, M, scores, fracvar = fit_gen_pca(valid_obs; num_components=2)
+log_valid_obs = log.(valid_obs)
+
+mu, M, scores, fracvar = fit_gen_pca(log_valid_obs; num_components=2)
 init_plot()
-plot(obs_waves, -M[:,1], label="PCA Component 1")
-plot(obs_waves, -M[:,2], label="PCA Component 2")
-tels = tellurics(mean(airmasses); add_rand=false) .- 1
-tels /= norm(tels)
-plot(obs_waves, tels, label="Telluric mask")
-plot(obs_waves, doppler_comp ./ norm(doppler_comp), label="Analytical Doppler Component")
+plot(obs_waves, exp.(-M[:,1]), label="e^PCA1", alpha=0.5)
+plot(obs_waves, exp.(-M[:,2]), label="e^PCA2", alpha=0.5)
+plot(obs_waves, tellurics(mean(airmasses); add_rand=false), label="Telluric mask", alpha=0.5)
+# plot(obs_waves, doppler_comp ./ norm(doppler_comp), label="Analytical Doppler Component")
 legend(;fontsize=20)
 save_PyPlot_fig("components_vs_tellurics_SNR$(SNR)_K$(ustrip(K)).png")
 
-tel_spectra = zeros(size(valid_obs))
-# for (j, s) in enumerate(scores[1, :])
-#     tel_spectra[:, j] = (M[:, 1] .* s) + mu
-# end
-# new_spectra = (valid_obs ./ tel_spectra) .* mu
+est_tels = zeros(size(log_valid_obs))
 for (j, s) in enumerate(scores[1, :])
-    tel_spectra[:, j] = M[:, 1] .* s
+    est_tels[:, j] += M[:, 1] .* s
 end
-init_plot()
-plot(obs_waves, tel_spectra[:,150])
-save_PyPlot_fig("test.png")
+# for (j, s) in enumerate(scores[2, :])
+#     est_tels[:, j] += M[:, 2] .* s
+# end
 
-sum(scores[1, :] .< 0)
+## Taking out estimated tellurics?
 
-new_spectra = valid_obs .- tel_spectra
+new_spectra = exp.(log_valid_obs .- est_tels)
 average_spectra = vec(mean(new_spectra, dims=2))
 doppler_comp = calc_doppler_component_RVSKL(obs_waves, average_spectra)
 x, x, x, x, rvs_notel = @time fit_gen_pca_rv_RVSKL(new_spectra, doppler_comp, mu=average_spectra, num_components=1)
 
 init_plot()
-scatter(ustrip.(times .% ks.P), ustrip.(rvs_true) + rvs_activ, label="Planet + Activity")
-scatter(ustrip.(times .% ks.P), -rvs_naive, label="Naive")
-scatter(ustrip.(times .% ks.P), -rvs_notel, label="Tels subtracted")
-scatter(ustrip.(times .% ks.P), ustrip.(rvs_true), label="Input")
+times_mod = ustrip.(times .% ks.P)
+scatter(times_mod, ustrip.(rvs_true) + rvs_activ, label="Planet + Activity")
+scatter(times_mod, -rvs_naive, label="Naive")
+scatter(times_mod, -rvs_notel, label="Tels subtracted")
+scatter(times_mod, ustrip.(rvs_true), label="Input")
 legend(;fontsize=20)
 save_PyPlot_fig("rv_comparison_SNR$(SNR)_K$(ustrip(K)).png")
 
@@ -202,7 +214,12 @@ axhline(color="black")
 legend(;fontsize=20)
 save_PyPlot_fig("rv_comparison_resid_SNR$(SNR)_K$(ustrip(K)).png")
 
-
-print("RVs from activity:                       ", std(rvs_activ))
-print("Estimated RVs:                           ", std(ustrip.(rvs_true) + rvs_naive))
-print("Estimated RVs (trying to take out tels): ", std(ustrip.(rvs_true) + rvs_notel))
+println("RVs from activity:                       ", std(rvs_activ))
+println("Estimated RVs:                           ", std(ustrip.(rvs_true) + rvs_naive))
+println("Estimated RVs (trying to take out tels): ", std(ustrip.(rvs_true) + rvs_notel))
+# 
+# init_plot()
+# plot(obs_waves, true_tels[:, 5], label = "true")
+# plot(obs_waves, exp.(est_tels[:, 5]), label = "est")
+# legend(;fontsize=20)
+# save_PyPlot_fig("test.png")
