@@ -1,8 +1,8 @@
 # functions related to calculating the PCA scores of time series spectra
-using JLD2, FileIO
-using HDF5
+# using JLD2, FileIO
+# using HDF5
 using Distributions
-
+light_speed_nu = ustrip(uconvert(u"m/s", 1u"c"))
 
 """
 modified code shamelessly stolen from RvSpectraKitLearn.jl/src/deriv_spectra_simple.jl
@@ -104,6 +104,34 @@ function fit_gen_pca_rv_RVSKL(X::Matrix{T}, fixed_comp::Vector{T}; mu::Vector{T}
 	rvs = light_speed_nu * scores[1, :]  # c * z
 
 	return (mu, M, scores, fracvar, rvs)
+end
+
+
+
+function fit_gen_pca(X::Matrix{T}; mu::Vector{T}=vec(mean(X, dims=2)), num_components::Integer=4, tol::Float64=1e-12, max_it::Int64=20) where {T<:Real}
+
+	# initializing relevant quantities
+	num_lambda = size(X, 1)
+    num_spectra = size(X, 2)
+    M = rand(T, (num_lambda, num_components))  # random initialization is part of algorithm (i.e., not zeros)
+    s = zeros(T, num_lambda)  # pre-allocated memory for compute_pca_component
+    scores = zeros(num_components, num_spectra)
+	fracvar = zeros(num_components)
+
+    Xtmp = X .- mu  # perform PCA after subtracting off mean
+    totalvar = sum(abs2, Xtmp)
+	# remaining component calculations
+    for j in 1:num_components
+        compute_pca_component_RVSKL!(Xtmp, view(M, :, j), s, tol=tol, max_it=max_it)
+	    for i in 1:num_spectra
+			scores[j, i] = dot(view(Xtmp, :, i), view(M, :, j)) #/sum(abs2,view(M,:,j-1))
+			Xtmp[:,i] .-= scores[j, i] * view(M, :, j)
+		end
+		fracvar[j] = sum(abs2,Xtmp)/totalvar
+		# println("# j = ", j, " sum(abs2, Xtmp) = ", sum(abs2,Xtmp), " frac_var_remain= ", fracvar[j] )
+	end
+
+	return (mu, M, scores, fracvar)
 end
 
 

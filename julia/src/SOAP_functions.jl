@@ -6,25 +6,44 @@ using UnitfulAstro
 Get flat, active SOAP spectra time series from HDF5 file, impose a Planck
 distribution, and normalize so that the brightness stays the same.
 """
-function prep_SOAP_spectra(fid::HDF5File)
+function prep_SOAP_spectra(fid::HDF5File; return_quiet::Bool=false, T::Unitful.Temperature=5700u"K")
 	λs = fid["lambdas"][:]u"nm"/10
-	return normalize_columns_to_first_integral!(fid["active"][:, :] .* planck.(λs, 5700u"K"), ustrip.(λs)), λs
+	actives, normalization = normalize_columns_to_first_integral!(fid["active"][:, :] .* planck.(λs, T), ustrip.(λs); return_normalization=true)
+	if return_quiet
+		return actives, λs, fid["quiet"][:] .* planck.(λs, T) ./ normalization
+	else
+		return actives, λs
+	end
 end
 
 
-function make_noisy_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vector{T}; SNR::Real=100, sampling::Integer=1) where {T<:Real}
+function spectra_noise_levels(time_series_spectrum::Vector{T} ; photons::Real = ustrip.(u"h" * uconvert(u"m / s", 1u"c") ./ ((λ_nu[mask])u"m" / (10 ^ 10)))) where {T<:Real}
+
+function make_noisy_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vector{T}; SNR::Real=100, sampling::Integer=1, return_noise::Bool=false) where {T<:Real}
 	per_pixel_SNR = SNR / sqrt(sampling)
 	noisy_spectra = zero(time_series_spectra)
-	photons = ustrip.(u"h" * uconvert(u"m / s", 1u"c") ./ ((λs)u"m" / 10 ^ 10))
-	mask = findall(!iszero, time_series_spectra[:, 1])
+
+	# a point 1e-300 in size was sneaking through with findall!(!iszero, ...)
+	mask = time_series_spectra[:, 1] .> 1e-100
+
+	photons = ustrip.(u"h" * uconvert(u"m / s", 1u"c") ./ ((λs[mask])u"m" / (10 ^ 10)))
+	ratios = zeros(sum(mask))
 	for i in 1:size(time_series_spectra, 2)
-		noises = sqrt.(time_series_spectra[:, i] ./ photons)
-	    normalization = mean(noises[mask] ./ time_series_spectra[mask, i])
-	    ratios = noises[mask] ./ time_series_spectra[mask, i] / (normalization * per_pixel_SNR)
-	    noisy_spectra[mask, i] = time_series_spectra[mask, i] .* (1 .+ (ratios .* randn(length(mask))))
+		time_series_spectrum = time_series_spectra[mask, i]
+		noises = sqrt.(time_series_spectrum ./ photons)
+		normalization = mean(noises ./ time_series_spectra[mask, i])
+		ratios[:] = noises ./ time_series_spectrum ./ (normalization * per_pixel_SNR)
+		noisy_spectra[mask, i] = time_series_spectrum .* (1 .+ (ratios .* randn(sum(mask))))
 	end
-	return noisy_spectra
+	if return_noise
+		noise = zeros(size(time_series_spectra, 1))
+		noise[mask] = ratios
+		return noisy_spectra, noise
+	else
+		return noisy_spectra
+	end
 end
+
 
 
 """
@@ -52,52 +71,52 @@ function noisy_scores_from_SOAP_spectra(time_series_spectra::Matrix{T}, λs::Vec
 end
 
 
-"bootstrapping for errors in PCA scores. Takes ~28s per bootstrap on my computer"
-function bootstrap_SOAP_errors(
-	time_series_spectra::Matrix{T},
-	λs::Vector{T},
-	hdf5_filename::AbstractString;
-	boot_amount::Integer=10
-	) where {T<:Real}
-
-    @load hdf5_filename * "_rv_data.jld2" M scores
-
-	scores_mean = copy(scores)  # saved to ensure that the scores are paired with the proper rv_data
-
-    num_lambda = size(time_series_spectra, 1)
-    num_spectra = size(time_series_spectra, 2)
-
-    num_components = size(M, 2)
-    scores_tot_new = zeros(boot_amount, num_components, num_spectra)
-
-    for k in 1:boot_amount
-        scores = noisy_scores_from_SOAP_spectra(time_series_spectra, λs, M)
-        scores_tot_new[k, :, :] = scores
-    end
-
-	close(fid)
-
-	save_filename = hdf5_filename * "_bootstrap.jld2"
-
-    if isfile(save_filename)
-        @load save_filename scores_tot
-        scores_tot = vcat(scores_tot, scores_tot_new)
-    else
-        scores_tot = scores_tot_new
-    end
-
-    error_ests = zeros(num_components, num_spectra)
-
-	# est_point_error(a) = fit_mle(Normal, a).σ
-    # std_uncorr(a) = std(a; corrected=false)
-
-    for i in 1:num_components
-		# # produce same results
-        # error_ests[i, :] = mapslices(est_point_error, scores_tot[:, i, :]; dims=1)
-        # error_ests[i,:] = mapslices(std_uncorr, scores_tot[:, i, :]; dims=1)
-
-        error_ests[i,:] = mapslices(std, scores_tot[:, i, :]; dims=1)
-    end
-
-    @save save_filename scores_mean scores_tot error_ests
-end
+# "bootstrapping for errors in PCA scores. Takes ~28s per bootstrap on my computer"
+# function bootstrap_SOAP_errors(
+# 	time_series_spectra::Matrix{T},
+# 	λs::Vector{T},
+# 	hdf5_filename::AbstractString;
+# 	boot_amount::Integer=10
+# 	) where {T<:Real}
+#
+#     @load hdf5_filename * "_rv_data.jld2" M scores
+#
+# 	scores_mean = copy(scores)  # saved to ensure that the scores are paired with the proper rv_data
+#
+#     num_lambda = size(time_series_spectra, 1)
+#     num_spectra = size(time_series_spectra, 2)
+#
+#     num_components = size(M, 2)
+#     scores_tot_new = zeros(boot_amount, num_components, num_spectra)
+#
+#     for k in 1:boot_amount
+#         scores = noisy_scores_from_SOAP_spectra(time_series_spectra, λs, M)
+#         scores_tot_new[k, :, :] = scores
+#     end
+#
+# 	close(fid)
+#
+# 	save_filename = hdf5_filename * "_bootstrap.jld2"
+#
+#     if isfile(save_filename)
+#         @load save_filename scores_tot
+#         scores_tot = vcat(scores_tot, scores_tot_new)
+#     else
+#         scores_tot = scores_tot_new
+#     end
+#
+#     error_ests = zeros(num_components, num_spectra)
+#
+# 	# est_point_error(a) = fit_mle(Normal, a).σ
+#     # std_uncorr(a) = std(a; corrected=false)
+#
+#     for i in 1:num_components
+# 		# # produce same results
+#         # error_ests[i, :] = mapslices(est_point_error, scores_tot[:, i, :]; dims=1)
+#         # error_ests[i,:] = mapslices(std_uncorr, scores_tot[:, i, :]; dims=1)
+#
+#         error_ests[i,:] = mapslices(std, scores_tot[:, i, :]; dims=1)
+#     end
+#
+#     @save save_filename scores_mean scores_tot error_ests
+# end

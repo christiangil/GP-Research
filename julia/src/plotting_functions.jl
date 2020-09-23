@@ -2,14 +2,14 @@
 # https://github.com/JuliaPy/PyPlot.jl
 
 using PyPlot
-
+using PyCall
 
 # make it so that plot windows don't appear
 matplotlib.use("Agg")
 
 
 "set axes and tick label font sizes for PyPlot plots"
-function set_font_sizes!(ax; axes::Real=30., ticks::Real=24.)
+function set_font_sizes!(ax::PyCall.PyObject; axes::Real=30., ticks::Real=24.)
 
     # this doesn't work. set title size at plot creating
     # setp(ax[:title], fontsize=title)
@@ -29,6 +29,11 @@ function set_font_sizes!(ax; axes::Real=30., ticks::Real=24.)
 
 end
 
+function set_font_sizes!(axs::Vector{<:PyCall.PyObject}; axes::Real=30., ticks::Real=24.)
+    for ax in axs
+        set_font_sizes!(ax)
+    end
+end
 
 "create a nice, large PyPlot with large text sizes (excluding title)"
 function init_plot(;figsize=(16,9), hspace::Real=-1, wspace::Real=-1, axes::Real=30., ticks::Real=24.)

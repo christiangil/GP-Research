@@ -2,7 +2,6 @@
 # radial velocity or GP calculations
 using LinearAlgebra
 using Distributed
-using IterativeSolvers
 using Printf  # for formatting print statements
 using Unitful
 
@@ -48,28 +47,6 @@ end
 function symmetrize_A(A::Union{Matrix{T},Symmetric{T,Matrix{T}}}) where {T<:Real}
     return Symmetric((A + transpose(A)) / 2)
 end
-
-
-"if needed, adds a ridge based on the smallest eignevalue to make a Cholesky factorization possible"
-function ridge_chol(A::Union{Matrix{T},Symmetric{T,Matrix{T}}}) where {T<:Real}
-
-    # only add a small ridge (based on the smallest eigenvalue) if necessary
-    try
-        return cholesky(A)
-    catch
-        smallest_eigen = IterativeSolvers.lobpcg(A, false, 1).λ[1]
-        ridge = 1.10 * abs(smallest_eigen)
-        @warn "added a ridge"
-        println("ridge size:          10^$(log10(ridge))")
-        println("max value of array:  10^$(log10(maximum(abs.(A))))")
-        return cholesky(A + UniformScaling(ridge))
-    end
-
-end
-
-"dont do anything if an array that is already factorized is passed"
-ridge_chol(A::Cholesky{T,Matrix{T}}) where {T<:Real} = A
-
 
 """
 gets the coefficients and differentiation orders necessary for two multiplied
@@ -162,36 +139,6 @@ function reconstruct_array(non_zero_entries, template_array::Matrix{T}) where {T
 end
 
 
-"""
-Solve a linear system of equations (optionally with variance values at each point or covariance array)
-see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
-"""
-function general_lst_sq(
-    dm::Matrix{T},
-    data::Vector;
-    Σ::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},Matrix{T},Vector{T}}=ones(1),
-    return_ϵ_inv::Bool=false) where {T<:Real}
-    @assert ndims(Σ) < 3 "the Σ variable needs to be a 1D or 2D array"
-
-    # if Σ == ones(1)
-    #     return dm \ data
-    # else
-    if ndims(Σ) == 1
-        Σ = Diagonal(Σ)
-    else
-        Σ = ridge_chol(Σ)
-    end
-    if return_ϵ_inv
-        ϵ_int = Σ \ dm
-        ϵ_inv = dm' * ϵ_int
-        return ϵ_inv \ (dm' * (Σ \ data)), ϵ_int, ϵ_inv
-    else
-        return (dm' * (Σ \ dm)) \ (dm' * (Σ \ data))
-    end
-    # end
-end
-
-
 "Return an amount of indices of local maxima of a data array"
 function find_modes(data::Vector{T}; amount::Integer=3) where {T<:Real}
 
@@ -245,9 +192,6 @@ function autofrequency(times::Vector{T} where {T<:Union{Real,Quantity}};
         return f_min:δf:nyquist_frequency(time_span, length(times); nyquist_factor=nyquist_factor)
     end
 end
-
-import Base.ndims
-ndims(A::Cholesky{T,Matrix{T}}) where {T<:Real} = 2
 
 
 "an empty function, so that a function that requires another function to be passed can use this as a default"
@@ -342,7 +286,7 @@ end
 
 function planck(λ::Unitful.Length, T::Unitful.Temperature)
     λ = uconvert(u"m", λ)
-    c = light_speed
+    c = 1u"c"
     # W·sr−1·m−3
     return ustrip.(2 * u"h" * c ^ 2 / λ^5 / (exp(u"h" * c / (λ * u"k" * uconvert(u"K", T))) - 1))
 end
@@ -364,12 +308,16 @@ end
 
 
 "Normalize all of the columns (second index number) integrate to the same value"
-function normalize_columns_to_first_integral!(ys::Matrix{T}, x::Vector{T}) where {T<:Real}
+function normalize_columns_to_first_integral!(ys::Matrix{T}, x::Vector{T}; return_normalization::Bool=false) where {T<:Real}
     integrated_first = trapz(x, ys[:, 1])
     for i in 1:size(ys, 2)
         ys[:, i] *= integrated_first / trapz(x, ys[:, i])
     end
-    return ys
+    if return
+        return ys
+    else
+        return ys, integrated_first
+    end
 end
 
 
